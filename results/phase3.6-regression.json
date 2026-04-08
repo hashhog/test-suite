@@ -1,0 +1,107 @@
+{
+  "test": "phase3.6-regression",
+  "timestamp": "2026-04-08T22:08:00Z",
+  "description": "Regression tests after Phase 3.6 bug fixes: ouroboros prevhash validation, rustoshi getblockhash height index",
+  "core_height": 203,
+  "fixes_tested": {
+    "ouroboros": "df3543f - fix: validate block prevhash against chain tip before connecting",
+    "rustoshi": "e3d8b75 - fix: populate height-to-hash index during submitblock"
+  },
+  "consensus_tests": {
+    "description": "Submitted 200 blocks from Core to both nodes, verified block hashes match",
+    "blocks_submitted": 200,
+    "ouroboros": {
+      "getbestblockhash_match": true,
+      "getblockcount": 200,
+      "getblockhash_checks": {
+        "height_0": true,
+        "height_1": true,
+        "height_50": true,
+        "height_100": true,
+        "height_150": true,
+        "height_200": true
+      },
+      "verdict": "PASS"
+    },
+    "rustoshi": {
+      "getbestblockhash_match": true,
+      "getblockcount": 200,
+      "getblockhash_checks": {
+        "height_0": true,
+        "height_1": true,
+        "height_50": true,
+        "height_100": true,
+        "height_150": true,
+        "height_200": true
+      },
+      "verdict": "PASS - height index now populated correctly during submitblock"
+    }
+  },
+  "invalid_block_tests": {
+    "bad_pow_flipped_nonce": {
+      "description": "Block with nonce flipped to 0xffffffff",
+      "ouroboros": {
+        "result": "null (accepted)",
+        "expected": "rejected",
+        "verdict": "FAIL - PoW validation not enforced"
+      },
+      "rustoshi": {
+        "result": "bad proof of work",
+        "expected": "rejected",
+        "verdict": "PASS"
+      }
+    },
+    "bad_merkle_root": {
+      "description": "Block with first 3 bytes of merkle root set to 0xff",
+      "ouroboros": {
+        "result": "Invalid merkle root: header=... computed=...",
+        "expected": "rejected",
+        "verdict": "PASS"
+      },
+      "rustoshi": {
+        "result": "bad proof of work",
+        "expected": "rejected",
+        "verdict": "PASS (rejected for PoW since merkle change invalidates hash)"
+      }
+    },
+    "bad_prevhash": {
+      "description": "Block with first 3 bytes of prevhash set to 0xff",
+      "ouroboros": {
+        "result": "Block prev_hash ... does not match chain tip ...",
+        "expected": "rejected",
+        "verdict": "PASS - prevhash validation working correctly"
+      },
+      "rustoshi": {
+        "result": "previous block not found: ...",
+        "expected": "rejected",
+        "verdict": "PASS"
+      }
+    },
+    "out_of_order_block": {
+      "description": "Submit block 203 before block 202 has been received",
+      "ouroboros": {
+        "result": "Block prev_hash ... does not match chain tip ...",
+        "expected": "rejected",
+        "verdict": "PASS - prevhash validation catches out-of-order blocks"
+      },
+      "rustoshi": {
+        "result": "previous block not found: ...",
+        "expected": "rejected",
+        "verdict": "PASS"
+      }
+    }
+  },
+  "new_issues_found": {
+    "ouroboros_pow_validation": {
+      "severity": "CRITICAL",
+      "description": "ouroboros accepts blocks with invalid proof-of-work. A block with nonce flipped to 0xffffffff was accepted and connected to the chain. This allows trivially forged blocks to be accepted.",
+      "reproduction": "Submit any block with an invalid nonce via submitblock RPC - it will be accepted and connected."
+    }
+  },
+  "overall_summary": {
+    "ouroboros_prevhash_fix": "VERIFIED - prevhash validation working correctly for both corrupt prevhash and out-of-order blocks",
+    "rustoshi_height_index_fix": "VERIFIED - getblockhash returns correct hashes for all heights after submitblock",
+    "ouroboros_pow_bug": "NEW ISSUE - blocks with invalid PoW are accepted (CRITICAL)",
+    "consensus_200_blocks": "PASS for both nodes (before invalid block tests)"
+  }
+}

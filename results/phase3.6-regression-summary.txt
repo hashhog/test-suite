@@ -1,0 +1,60 @@
+Phase 3.6 Regression Test Summary
+===================================
+Date: 2026-04-08
+Network: regtest
+Core height: 203 blocks
+
+Fixes Under Test:
+  ouroboros: df3543f - validate block prevhash against chain tip before connecting
+  rustoshi: e3d8b75 - populate height-to-hash index during submitblock
+
+CONSENSUS TESTS (200 blocks submitted via submitblock)
+------------------------------------------------------
+  ouroboros:
+    - getbestblockhash matches Core: YES
+    - getblockcount = 200: YES
+    - getblockhash at heights 0,1,50,100,150,200: ALL MATCH
+    - Verdict: PASS
+
+  rustoshi:
+    - getbestblockhash matches Core: YES
+    - getblockcount = 200: YES
+    - getblockhash at heights 0,1,50,100,150,200: ALL MATCH
+    - Verdict: PASS (height index fix confirmed working)
+
+INVALID BLOCK TESTS
+--------------------
+  1. Bad PoW (flipped nonce):
+     ouroboros: FAIL - accepted invalid block (null response, chain advanced)
+     rustoshi: PASS - rejected with "bad proof of work"
+
+  2. Bad merkle root (corrupted bytes):
+     ouroboros: PASS - rejected with "Invalid merkle root"
+     rustoshi: PASS - rejected with "bad proof of work"
+
+  3. Bad prevhash (corrupted bytes):
+     ouroboros: PASS - rejected with "prev_hash does not match chain tip"
+     rustoshi: PASS - rejected with "previous block not found"
+
+  4. Out-of-order block (block 203 submitted before 202):
+     ouroboros: PASS - rejected with "prev_hash does not match chain tip"
+     rustoshi: PASS - rejected with "previous block not found"
+
+FIX VERIFICATION
+----------------
+  ouroboros prevhash validation: VERIFIED
+    - Corrupt prevhash correctly rejected
+    - Out-of-order blocks correctly rejected
+    - Fix is working as intended
+
+  rustoshi height-to-hash index: VERIFIED
+    - getblockhash returns correct hash for all tested heights (0-200)
+    - Previously returned "Block height N out of range" for submitted blocks
+    - Fix is working as intended
+
+NEW ISSUES FOUND
+-----------------
+  [CRITICAL] ouroboros: PoW validation not enforced during submitblock
+    - Blocks with invalid proof-of-work are accepted and connected
+    - This allows trivially forged blocks to advance the chain
+    - Needs immediate fix before mainnet deployment
