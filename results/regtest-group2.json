@@ -1,0 +1,463 @@
+{
+  "group": 2,
+  "timestamp": "2026-04-08T20:41:20Z",
+  "reference": "bitcoin-core",
+  "nodes_tested": [
+    "hotbuns",
+    "blockbrew",
+    "lunarblock",
+    "ouroboros",
+    "camlcoin"
+  ],
+  "nodes_skipped": [],
+  "tests": [
+    {
+      "name": "chain_tip_agreement",
+      "passed": false,
+      "expected_height": 200,
+      "node_results": {
+        "hotbuns": {
+          "passed": true,
+          "height": 200,
+          "hash": "27fe5f1d019ea59513baa28b90ff96d32f29c45714407fbd0293818ef3a39a68",
+          "height_match": true,
+          "hash_match": true
+        },
+        "blockbrew": {
+          "passed": true,
+          "height": 200,
+          "hash": "27fe5f1d019ea59513baa28b90ff96d32f29c45714407fbd0293818ef3a39a68",
+          "height_match": true,
+          "hash_match": true
+        },
+        "lunarblock": {
+          "passed": true,
+          "height": 200,
+          "hash": "27fe5f1d019ea59513baa28b90ff96d32f29c45714407fbd0293818ef3a39a68",
+          "height_match": true,
+          "hash_match": true
+        },
+        "ouroboros": {
+          "passed": true,
+          "height": 200,
+          "hash": "27fe5f1d019ea59513baa28b90ff96d32f29c45714407fbd0293818ef3a39a68",
+          "height_match": true,
+          "hash_match": true
+        },
+        "camlcoin": {
+          "passed": false,
+          "height": 1,
+          "hash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+          "height_match": false,
+          "hash_match": false
+        }
+      },
+      "expected_hash": "27fe5f1d019ea59513baa28b90ff96d32f29c45714407fbd0293818ef3a39a68"
+    },
+    {
+      "name": "block_data_comparison",
+      "passed": false,
+      "heights_checked": [
+        0,
+        1,
+        2,
+        50,
+        100,
+        149,
+        150,
+        151,
+        199,
+        200
+      ],
+      "node_results": {
+        "hotbuns": {
+          "passed": false,
+          "diffs": [
+            {
+              "height": 0,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 1,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 2,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 50,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 100,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 149,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 150,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 151,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 199,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            },
+            {
+              "height": 200,
+              "error": "hotbuns RPC getblock error: {'code': -5, 'message': 'Block not found'}"
+            }
+          ],
+          "informational_diffs": []
+        },
+        "blockbrew": {
+          "passed": true,
+          "diffs": [],
+          "informational_diffs": [
+            {
+              "height": 0,
+              "field": "weight",
+              "expected": 1140,
+              "got": 1136
+            },
+            {
+              "height": 1,
+              "field": "weight",
+              "expected": 800,
+              "got": 796
+            },
+            {
+              "height": 2,
+              "field": "weight",
+              "expected": 800,
+              "got": 796
+            },
+            {
+              "height": 50,
+              "field": "weight",
+              "expected": 800,
+              "got": 796
+            },
+            {
+              "height": 100,
+              "field": "weight",
+              "expected": 800,
+              "got": 796
+            },
+            {
+              "height": 149,
+              "field": "weight",
+              "expected": 804,
+              "got": 800
+            },
+            {
+              "height": 150,
+              "field": "weight",
+              "expected": 804,
+              "got": 800
+            },
+            {
+              "height": 151,
+              "field": "weight",
+              "expected": 844,
+              "got": 840
+            },
+            {
+              "height": 199,
+              "field": "weight",
+              "expected": 844,
+              "got": 840
+            },
+            {
+              "height": 200,
+              "field": "weight",
+              "expected": 844,
+              "got": 840
+            }
+          ]
+        },
+        "lunarblock": {
+          "passed": true,
+          "diffs": [],
+          "informational_diffs": []
+        },
+        "ouroboros": {
+          "passed": false,
+          "diffs": [
+            {
+              "height": 0,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 1,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 2,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 50,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 100,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 149,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 150,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 151,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 199,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            },
+            {
+              "height": 200,
+              "error": "ouroboros RPC getblock error: {'code': -32603, 'message': 'Block not found'}"
+            }
+          ],
+          "informational_diffs": []
+        }
+      }
+    },
+    {
+      "name": "utxo_spot_check",
+      "passed": false,
+      "queries": 4,
+      "node_results": {
+        "hotbuns": {
+          "passed": true,
+          "diffs": [],
+          "errors": [
+            "gettxout 62b4c394920d5188...:0: hotbuns RPC gettxout error: {'code': -32601, 'message': \"Method 'gettxout' not found\"}",
+            "gettxout 51158233c5509b22...:0: hotbuns RPC gettxout error: {'code': -32601, 'message': \"Method 'gettxout' not found\"}",
+            "gettxout 3f8d2b0c1d0b7b27...:0: hotbuns RPC gettxout error: {'code': -32601, 'message': \"Method 'gettxout' not found\"}",
+            "gettxout 833c34d0a077a8fd...:0: hotbuns RPC gettxout error: {'code': -32601, 'message': \"Method 'gettxout' not found\"}"
+          ]
+        },
+        "blockbrew": {
+          "passed": true,
+          "diffs": [],
+          "errors": []
+        },
+        "lunarblock": {
+          "passed": true,
+          "diffs": [],
+          "errors": [
+            "gettxout 62b4c394920d5188...:0: lunarblock RPC gettxout error: {'message': 'Method not found: gettxout', 'code': -32601}",
+            "gettxout 51158233c5509b22...:0: lunarblock RPC gettxout error: {'message': 'Method not found: gettxout', 'code': -32601}",
+            "gettxout 3f8d2b0c1d0b7b27...:0: lunarblock RPC gettxout error: {'message': 'Method not found: gettxout', 'code': -32601}",
+            "gettxout 833c34d0a077a8fd...:0: lunarblock RPC gettxout error: {'message': 'Method not found: gettxout', 'code': -32601}"
+          ]
+        },
+        "ouroboros": {
+          "passed": false,
+          "diffs": [
+            {
+              "txid": "62b4c394920d5188103941a46ff4f628f30e2e251185fdf9b9b5d4a15a86d8e1",
+              "vout": 0,
+              "issue": "Core has UTXO but node does not"
+            },
+            {
+              "txid": "51158233c5509b2203a82dcd8d921e5f196184af35267723b840de46e903a989",
+              "vout": 0,
+              "issue": "Core has UTXO but node does not"
+            },
+            {
+              "txid": "3f8d2b0c1d0b7b27acb44e7bbebde0d848e26ccbf2b61027d954105db7aaae34",
+              "vout": 0,
+              "issue": "Core has UTXO but node does not"
+            },
+            {
+              "txid": "833c34d0a077a8fdf25c341bf2293c01cf3e218832e348a82be7068214cf1e9c",
+              "vout": 0,
+              "issue": "Core has UTXO but node does not"
+            }
+          ],
+          "errors": []
+        }
+      }
+    },
+    {
+      "name": "invalid_block_rejection",
+      "passed": false,
+      "node_results": {
+        "hotbuns": {
+          "passed": true,
+          "rejection": "duplicate"
+        },
+        "blockbrew": {
+          "passed": true,
+          "rejection": "RPC error (block rejected)"
+        },
+        "lunarblock": {
+          "passed": true,
+          "rejection": "./lunarblock/validation.lua:1169: merkle root mismatch"
+        },
+        "ouroboros": {
+          "passed": false,
+          "error": "CRITICAL: Node accepted corrupted block! Height went from 200 to 201"
+        },
+        "camlcoin": {
+          "passed": true,
+          "rejection": "RPC error (block rejected)"
+        }
+      }
+    }
+  ],
+  "submission_report": {
+    "phase1": {
+      "hotbuns": {
+        "accepted": 150,
+        "rejected": 0,
+        "errors": [],
+        "submitblock_errors": []
+      },
+      "blockbrew": {
+        "accepted": 150,
+        "rejected": 0,
+        "errors": [],
+        "submitblock_errors": []
+      },
+      "lunarblock": {
+        "accepted": 150,
+        "rejected": 0,
+        "errors": [],
+        "submitblock_errors": []
+      },
+      "ouroboros": {
+        "accepted": 0,
+        "rejected": 150,
+        "errors": [
+          "h=1: object of type 'Mempool' has no len()",
+          "h=2: object of type 'Mempool' has no len()",
+          "h=3: object of type 'Mempool' has no len()",
+          "h=4: object of type 'Mempool' has no len()",
+          "h=5: object of type 'Mempool' has no len()"
+        ],
+        "submitblock_errors": []
+      },
+      "camlcoin": {
+        "accepted": 1,
+        "rejected": 149,
+        "errors": [
+          "h=2: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=3: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=4: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=5: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=6: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}"
+        ],
+        "submitblock_errors": [
+          "h=2: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=3: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=4: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=5: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=6: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}"
+        ]
+      }
+    },
+    "phase2": {
+      "hotbuns": {
+        "accepted": 50,
+        "rejected": 0,
+        "errors": []
+      },
+      "blockbrew": {
+        "accepted": 50,
+        "rejected": 0,
+        "errors": []
+      },
+      "lunarblock": {
+        "accepted": 50,
+        "rejected": 0,
+        "errors": []
+      },
+      "ouroboros": {
+        "accepted": 0,
+        "rejected": 50,
+        "errors": [
+          "h=151: object of type 'Mempool' has no len()",
+          "h=152: object of type 'Mempool' has no len()",
+          "h=153: object of type 'Mempool' has no len()",
+          "h=154: object of type 'Mempool' has no len()",
+          "h=155: object of type 'Mempool' has no len()"
+        ]
+      },
+      "camlcoin": {
+        "accepted": 0,
+        "rejected": 50,
+        "errors": [
+          "h=151: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=152: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=153: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=154: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}",
+          "h=155: camlcoin RPC submitblock error: {'code': -26, 'message': 'No validated tip found (blocks_synced=0 or missing header)'}"
+        ]
+      }
+    }
+  },
+  "summary": {
+    "total_tests": 4,
+    "passed": 0,
+    "failed": 4,
+    "nodes_tested": 5,
+    "nodes_skipped": 0,
+    "nodes_at_tip": [
+      "hotbuns",
+      "blockbrew",
+      "lunarblock",
+      "ouroboros"
+    ],
+    "nodes_behind": {
+      "camlcoin": 1
+    },
+    "per_node": {
+      "hotbuns": {
+        "passed": 3,
+        "failed": 1,
+        "errors": [
+          "block_data_comparison: 10 diffs"
+        ]
+      },
+      "blockbrew": {
+        "passed": 4,
+        "failed": 0,
+        "errors": []
+      },
+      "lunarblock": {
+        "passed": 4,
+        "failed": 0,
+        "errors": []
+      },
+      "ouroboros": {
+        "passed": 1,
+        "failed": 3,
+        "errors": [
+          "block_data_comparison: 10 diffs",
+          "utxo_spot_check: 4 diffs",
+          "invalid_block_rejection: CRITICAL: Node accepted corrupted block! Height went from 200 to 201"
+        ]
+      },
+      "camlcoin": {
+        "passed": 3,
+        "failed": 1,
+        "errors": []
+      }
+    }
+  }
+}
