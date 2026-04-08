@@ -1,0 +1,124 @@
+Phase 3 Test Suite Summary — 2026-04-08
+
+========================================================================
+RPC Conformance (Mainnet, Nodes at Tip)
+========================================================================
+Tested: 5 nodes (beamchain, blockbrew, haskoin, hotbuns, rustoshi)
+Reference: Bitcoin Core v28.x (port 8332)
+Tests: 10 RPC methods, 48 assertions per node
+
+Test                          | beamchain | blockbrew | haskoin | hotbuns | rustoshi
+getblockchaininfo             | FAIL(3)   | FAIL(1)   | FAIL(2) | PASS    | FAIL(1)
+getblockhash (15 heights)     | PASS      | FAIL(9)   | PASS    | FAIL(1) | PASS
+getblockheader                | FAIL(9)   | FAIL(13)  | FAIL(9) | FAIL(9) | FAIL(9)
+getblock_v1                   | FAIL(4)   | FAIL(5)   | FAIL(4) | FAIL(5) | FAIL(4)
+getrawtransaction             | PASS      | PASS      | PASS    | PASS    | PASS
+gettxout                      | FAIL(2)   | FAIL(3)   | FAIL(2) | FAIL(2) | FAIL(2)
+getmempoolinfo                | PASS      | PASS      | PASS    | PASS    | PASS
+getpeerinfo                   | PASS      | PASS      | PASS    | PASS    | PASS
+estimatesmartfee              | PASS      | PASS      | PASS    | PASS    | PASS
+validateaddress               | FAIL      | FAIL      | FAIL    | FAIL    | FAIL
+                              |  25/48    |   9/48    |  24/48  |  23/48  |  23/48
+
+Key findings:
+- confirmations field varies by ±1-3 (expected, race condition with tip)
+- mediantime differs in haskoin, rustoshi (computation off by 1 block)
+- blockbrew reports chain="mainnet" instead of "main"
+- blockbrew getblockhash fails for heights >200K (block index incomplete during IBD)
+- hotbuns/beamchain missing block headers for some heights
+- validateaddress: most nodes missing some fields vs Core
+
+========================================================================
+Regtest Consensus Tests — Group 1
+========================================================================
+Nodes: core, rustoshi, haskoin, nimrod, beamchain, clearbit
+Blocks mined: 180 (basic txs, script types, timelocks, edge cases)
+
+                    | rustoshi | haskoin | nimrod  | beamchain | clearbit
+Startup             | OK       | OK      | OK      | FAIL      | OK
+Tip agreement       | FAIL(0)  | FAIL(0) | PASS    | N/A       | PASS
+Invalid PoW reject  | FAIL     | OK      | OK      | N/A       | OK
+Block data match    | N/A      | N/A     | PASS    | N/A       | PASS
+
+CRITICAL BUGS FOUND:
+1. rustoshi: submitblock in regtest accepts blocks but chain tip stays at genesis
+2. rustoshi: accepts blocks with invalid proof-of-work (corrupt nonce)
+3. haskoin: BIP-34 coinbase height parsing rejects valid blocks using OP_1..OP_16
+4. beamchain: fails to start in regtest mode (startup blocker)
+5. clearbit: getblockhash returns "Block height out of range" for valid heights
+
+Passing: nimrod (all tests), clearbit (consensus pass, RPC minor issue)
+
+========================================================================
+Regtest Consensus Tests — Group 2
+========================================================================
+Nodes: core, hotbuns, blockbrew, lunarblock, ouroboros, camlcoin
+Tests: 4 categories (chain tip, block submission, block data, UTXO)
+
+                    | hotbuns  | blockbrew | lunarblock | ouroboros | camlcoin
+Chain tip           | PASS     | PASS      | PASS       | PASS      | FAIL
+Block submission    | PASS     | PASS      | PASS       | PASS      | PASS
+Block data          | FAIL(10) | FAIL(10)  | PASS       | FAIL(10)  | FAIL(10)
+UTXO spot-check     | PASS     | PASS      | PASS       | FAIL(4)   | FAIL(4)
+
+Key issues:
+- hotbuns/blockbrew/ouroboros/camlcoin: block data comparison shows 10 diffs (likely field naming/format)
+- ouroboros/camlcoin: UTXO spot-check diffs (value format or missing fields)
+- lunarblock: PASS on all tests — cleanest result in group 2
+- camlcoin: chain tip didn't match (may still be catching up)
+
+========================================================================
+Test Vector Validation
+========================================================================
+Source: Bitcoin Core src/test/data/
+Nodes tested: rustoshi, blockbrew, beamchain, haskoin (nodes at tip)
+
+decodescript: 1222 vectors, 578 tested
+  (Most nodes don't implement decodescript or return different format)
+
+Combined summary (decodescript + decoderawtransaction):
+  haskoin:   640 pass / 152 fail (81% agreement)
+  blockbrew: 609 pass / 183 fail (77% agreement)
+  rustoshi:  328 pass / 464 fail (41% agreement)
+  beamchain: 205 pass / 587 fail (26% agreement)
+
+Key findings:
+- haskoin has best RPC compatibility with Core
+- blockbrew strong on transaction decoding
+- rustoshi/beamchain: many decodescript/decoderawtransaction fields differ or missing
+
+========================================================================
+CRITICAL ISSUES (must fix before mainnet full validation)
+========================================================================
+1. rustoshi: submitblock not processing blocks in regtest mode
+2. rustoshi: accepts blocks with invalid PoW
+3. haskoin: BIP-34 coinbase height parsing too strict
+4. beamchain: regtest mode not functional
+
+========================================================================
+WARNINGS (should investigate)
+========================================================================
+1. blockbrew: reports chain="mainnet" instead of "main" in getblockchaininfo
+2. hotbuns/beamchain: block header lookup fails for some heights
+3. rustoshi/haskoin: mediantime computation differs from Core
+4. Most nodes: validateaddress missing fields compared to Core
+5. ouroboros/camlcoin: UTXO value format differences in regtest
+6. Multiple nodes: decodescript/decoderawtransaction field naming varies
+
+========================================================================
+TEST INFRASTRUCTURE
+========================================================================
+Files:
+  framework.py          — RPC client, node registry, comparison engine
+  test_rpc.py           — 10 RPC conformance tests
+  regtest_group1_test.py — Regtest consensus (group 1)
+  regtest_group2.py     — Regtest consensus (group 2)
+  regtest_miner.py      — Regtest block generation helper
+  test_vectors.py       — Bitcoin Core test vector validation
+
+Results: test-suite/results/
+  rpc-conformance.json + rpc-conformance-summary.txt
+  regtest-group1.json
+  regtest-group2.json
+  test-vectors.json
+  phase3-summary.txt (this file)
