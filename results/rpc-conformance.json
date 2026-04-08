@@ -1,0 +1,3232 @@
+{
+  "timestamp": "2026-04-08T20:26:38Z",
+  "total_tests": 10,
+  "passed": 4,
+  "failed": 6,
+  "tests": [
+    {
+      "name": "getblockchaininfo",
+      "passed": false,
+      "error": null,
+      "duration": 3.69,
+      "details": [
+        {
+          "method": "getblockchaininfo",
+          "params": [],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chain": {
+                  "expected": "main",
+                  "got": "mainnet"
+                },
+                "mediantime": {
+                  "expected": 1775675151,
+                  "got": 1775674597
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "mediantime": {
+                  "expected": 1775675151,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "blocks": {
+                  "expected": 944234,
+                  "got": 944228
+                },
+                "headers": {
+                  "expected": 944234,
+                  "got": 944228
+                },
+                "bestblockhash": {
+                  "expected": "00000000000000000000a1fb00daffc4fd8d905e38b63972c11101ff9dd98a06",
+                  "got": "0000000000000000000066f2cf4256d98fd0fdbf49621d55e04daa8bd63cb3b7"
+                },
+                "mediantime": {
+                  "expected": 1775675151,
+                  "got": 1775671939
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chain": {
+                  "expected": "main",
+                  "got": "mainnet"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "getblockhash",
+      "passed": false,
+      "error": null,
+      "duration": 60.61,
+      "details": [
+        {
+          "method": "getblockhash",
+          "params": [
+            0
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -32603: Block hash not found for height",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            1
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            100
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            1000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            100000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            200000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            300000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            400000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            481824
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            500000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            600000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            709632
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            800000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            900000
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblockhash",
+          "params": [
+            944224
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "getblockheader",
+      "passed": false,
+      "error": null,
+      "duration": 28.63,
+      "details": [
+        {
+          "method": "getblockheader",
+          "params": [
+            "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 944235,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000001",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1231006505,
+                  "got": null
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000000100010001",
+                  "got": "100010001"
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000000100010001",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 944235,
+                  "got": 944229
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000000100010001",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 944234,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000001",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1231469665,
+                  "got": null
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000000200020002",
+                  "got": "200020002"
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "height": {
+                  "expected": 1,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1231469665,
+                  "got": 0
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000000200020002",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 944234,
+                  "got": 944228
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000000200020002",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "000000007bc154e0fa7ea32218a72fe2c1bb9f86cf8c9ebf9a715ed27fdb229a",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 944135,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000001",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1231656204,
+                  "got": null
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000006500650065",
+                  "got": "6500650065"
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 944135,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 100,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1231656204,
+                  "got": 0
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000006500650065",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 944135,
+                  "got": 944129
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000000006500650065",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 943235,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000001",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1232344831,
+                  "got": null
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000000000000003e903e903e9",
+                  "got": "3e903e903e9"
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 943235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 1000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1232344831,
+                  "got": 0
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000000000000003e903e903e9",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 943235,
+                  "got": 943229
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000000000000003e903e903e9",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 844235,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000001",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1293622620,
+                  "got": null
+                },
+                "difficulty": {
+                  "expected": 14484.1623612254,
+                  "got": 14484.162361225399
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000644cb7f5234089e",
+                  "got": "644cb7f5234089e"
+                },
+                "nTx": {
+                  "expected": 4,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 844235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 100000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1293622620,
+                  "got": 0
+                },
+                "difficulty": {
+                  "expected": 14484.1623612254,
+                  "got": 14484.162361225399
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000644cb7f5234089e",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 4,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 844235,
+                  "got": 844229
+                },
+                "difficulty": {
+                  "expected": 14484.1623612254,
+                  "got": 14484.162361225399
+                },
+                "nTx": {
+                  "expected": 4,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "difficulty": {
+                  "expected": 14484.1623612254,
+                  "got": 14484.162361225399
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000000000000644cb7f5234089e",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 4,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "000000000000034a7dedef4a161fa058a2d67a173a90155f3a2fe6fc132e0ebf",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 744235,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000002",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1348307828,
+                  "got": null
+                },
+                "difficulty": {
+                  "expected": 2864140.507810974,
+                  "got": 2864140.5078109736
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000000000001ac073536b8dbae81c",
+                  "got": "1ac073536b8dbae81c"
+                },
+                "nTx": {
+                  "expected": 388,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 744235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 200000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1348307828,
+                  "got": 0
+                },
+                "difficulty": {
+                  "expected": 2864140.507810974,
+                  "got": 2864140.5078109736
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000000000001ac073536b8dbae81c",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 388,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 744235,
+                  "got": 744229
+                },
+                "difficulty": {
+                  "expected": 2864140.507810974,
+                  "got": 2864140.5078109736
+                },
+                "nTx": {
+                  "expected": 388,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "difficulty": {
+                  "expected": 2864140.507810974,
+                  "got": 2864140.5078109736
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000000000001ac073536b8dbae81c",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 388,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "000000000000000082ccf8f1557c5d40b21edabb18d2d691cfbf87118bac7254",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 644235,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000002",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1399701278,
+                  "got": null
+                },
+                "difficulty": {
+                  "expected": 8000872135.968163,
+                  "got": 8000872135.9681635
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000005a7b3c42ea8b844374e9",
+                  "got": "5a7b3c42ea8b844374e9"
+                },
+                "nTx": {
+                  "expected": 237,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 644235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 300000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1399701278,
+                  "got": 0
+                },
+                "difficulty": {
+                  "expected": 8000872135.968163,
+                  "got": 8000872135.9681635
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000005a7b3c42ea8b844374e9",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 237,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 644235,
+                  "got": 644229
+                },
+                "difficulty": {
+                  "expected": 8000872135.968163,
+                  "got": 8000872135.9681635
+                },
+                "nTx": {
+                  "expected": 237,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "difficulty": {
+                  "expected": 8000872135.968163,
+                  "got": 8000872135.9681635
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000005a7b3c42ea8b844374e9",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 237,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "000000000000000004ec466ce4732fe6f1ed1cddc2ed4b328fff5224276e3f6f",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 544235,
+                  "got": 1
+                },
+                "versionHex": {
+                  "expected": "00000004",
+                  "got": null
+                },
+                "mediantime": {
+                  "expected": 1456415577,
+                  "got": null
+                },
+                "difficulty": {
+                  "expected": 163491654908.9593,
+                  "got": 163491654908.95926
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000122a24b77c62cd76004cde",
+                  "got": "122a24b77c62cd76004cde"
+                },
+                "nTx": {
+                  "expected": 1660,
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 544235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 400000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1456415577,
+                  "got": 0
+                },
+                "difficulty": {
+                  "expected": 163491654908.9593,
+                  "got": 163491654908.95926
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000122a24b77c62cd76004cde",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 1660,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 544235,
+                  "got": 544229
+                },
+                "difficulty": {
+                  "expected": 163491654908.9593,
+                  "got": 163491654908.95926
+                },
+                "nTx": {
+                  "expected": 1660,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "difficulty": {
+                  "expected": 163491654908.9593,
+                  "got": 163491654908.95926
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000122a24b77c62cd76004cde",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1660,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 462411,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 481824,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1503536701,
+                  "got": 0
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000007eb6a652531c5ad6a4b8e9",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 1866,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 462411,
+                  "got": 462405
+                },
+                "nTx": {
+                  "expected": 1866,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000007eb6a652531c5ad6a4b8e9",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1866,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "00000000000000000024fb37364cbf81fd49cc2d51c09c75c35433c3a1945d04",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 444235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 500000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1513620886,
+                  "got": 0
+                },
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000cda532266f9147b519e933",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 2701,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 444235,
+                  "got": 444229
+                },
+                "nTx": {
+                  "expected": 2701,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "000000000000000000000000000000000000000000cda532266f9147b519e933",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 2701,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "00000000000000000007316856900e76b4f7a9139cfbfba89842c8d196cd5f91",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 344235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 600000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1571440177,
+                  "got": 0
+                },
+                "difficulty": {
+                  "expected": 13008091666971.9,
+                  "got": 13008091666971.898
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000000962281c680c87bdb11f440b",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 1925,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 344235,
+                  "got": 344229
+                },
+                "difficulty": {
+                  "expected": 13008091666971.9,
+                  "got": 13008091666971.898
+                },
+                "nTx": {
+                  "expected": 1925,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "difficulty": {
+                  "expected": 13008091666971.9,
+                  "got": 13008091666971.898
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000000962281c680c87bdb11f440b",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1925,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "0000000000000000000687bca986194dc2c1f949318629b44bb54ec0a94d8244",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 234603,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 709632,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1636861723,
+                  "got": 0
+                },
+                "difficulty": {
+                  "expected": 22674148233453.11,
+                  "got": 22674148233453.105
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000002415f8061a78804e45529427",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 2043,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 234603,
+                  "got": 234597
+                },
+                "difficulty": {
+                  "expected": 22674148233453.11,
+                  "got": 22674148233453.105
+                },
+                "nTx": {
+                  "expected": 2043,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "difficulty": {
+                  "expected": 22674148233453.11,
+                  "got": 22674148233453.105
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000002415f8061a78804e45529427",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 2043,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 144235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 800000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1690165851,
+                  "got": 0
+                },
+                "difficulty": {
+                  "expected": 53911173001054.59,
+                  "got": 53911173001054.586
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000004fc85ab3390629e495bf13d5",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 3721,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 144235,
+                  "got": 144229
+                },
+                "difficulty": {
+                  "expected": 53911173001054.59,
+                  "got": 53911173001054.586
+                },
+                "nTx": {
+                  "expected": 3721,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "difficulty": {
+                  "expected": 53911173001054.59,
+                  "got": 53911173001054.586
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000004fc85ab3390629e495bf13d5",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 3721,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "000000000000000000010538edbfd2d5b809a33dd83f284aeea41c6d0d96968a",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 44235,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 900000,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1749187351,
+                  "got": 0
+                },
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000c8bbeae4127a204b0317861c",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 1562,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 44235,
+                  "got": 44229
+                },
+                "nTx": {
+                  "expected": 1562,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "0000000000000000000000000000000000000000c8bbeae4127a204b0317861c",
+                  "got": null
+                },
+                "nTx": {
+                  "expected": 1562,
+                  "got": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "method": "getblockheader",
+          "params": [
+            "00000000000000000000b731809b2e0c1e47eb39e78fc22dd8834157f3b56171",
+            true
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 11,
+                  "got": 944235
+                },
+                "height": {
+                  "expected": 944224,
+                  "got": 0
+                },
+                "mediantime": {
+                  "expected": 1775670048,
+                  "got": 0
+                },
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000011dfac82454478738a6913868",
+                  "got": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                "nTx": {
+                  "expected": 3919,
+                  "got": 0
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 11,
+                  "got": 5
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block header not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "chainwork": {
+                  "expected": "00000000000000000000000000000000000000011dfac82454478738a6913868",
+                  "got": null
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "getblock_v1",
+      "passed": false,
+      "error": null,
+      "duration": 8.56,
+      "details": [
+        {
+          "method": "getblock",
+          "params": [
+            "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+            1
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblock",
+          "params": [
+            "00000000d1145790a8694403d4063f323d499e655c83426834d4ce2f8dd4a2ee",
+            1
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblock",
+          "params": [
+            "0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893",
+            1
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblock",
+          "params": [
+            "0000000000000000000687bca986194dc2c1f949318629b44bb54ec0a94d8244",
+            1
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "getblock",
+          "params": [
+            "00000000000000000000590561271b7d339fca1ecd1f10f16ac8b76fcb51efb8",
+            1
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": "RPC error -1: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -5: Block not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "getrawtransaction",
+      "passed": true,
+      "error": null,
+      "duration": 1.01,
+      "details": [
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "b1fea52486ce0c62bb442b530a3f0132b826c74e473d1f2c220bfa78111c5082",
+            false
+          ],
+          "reference_error": "RPC error -5: No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions.",
+          "node_results": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+            false
+          ],
+          "reference_error": "RPC error -5: No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions.",
+          "node_results": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "da917699942e4a96272401b534381a75512eeebe8403084500bd637bd47168b3",
+            false
+          ],
+          "reference_error": "RPC error -5: No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions.",
+          "node_results": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "6f1ae81e64bd0c29c22ed8d13a0317eeaea5409901f2e62c0c56829589e5520e",
+            false
+          ],
+          "reference_error": "RPC error -5: No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions.",
+          "node_results": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "3e1005f68bf7b18a58f1ef260283f0f19e1efb45c37b9ea94599a893021a0b78",
+            false
+          ],
+          "reference_error": "RPC error -5: No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions.",
+          "node_results": []
+        },
+        {
+          "method": "getrawtransaction",
+          "params": [
+            "ee221eb37575d9c8d1329528fc4718e33c9aae6754082bc138a672691cfcecf1",
+            false
+          ],
+          "reference_error": "RPC error -5: No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions.",
+          "node_results": []
+        }
+      ]
+    },
+    {
+      "name": "gettxout",
+      "passed": false,
+      "error": null,
+      "duration": 4.16,
+      "details": [
+        {
+          "method": "gettxout",
+          "params": [
+            "8041bfe88ba03610ecf1eb9b4dfd32e73522f757576e2be67b48ab2dfb4fa187",
+            0
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "value": {
+                  "expected": "non-null",
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "value": {
+                  "expected": "non-null",
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 201,
+                  "got": 195
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -32601: Method 'gettxout' not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "b9aab8a18c59d77eedb6a653ae42b1416d732fcb69d4dcdad695732666caa247",
+            0
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "value": {
+                  "expected": "non-null",
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "value": {
+                  "expected": "non-null",
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 301,
+                  "got": 295
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -32601: Method 'gettxout' not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "d17414ed73bc6b33ad475cda1012fb9a290cbd639ca29e09aa20143014243522",
+            0
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 401,
+                  "got": 1
+                }
+              }
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "value": {
+                  "expected": "non-null",
+                  "got": null
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "confirmations": {
+                  "expected": 401,
+                  "got": 395
+                }
+              }
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -32601: Method 'gettxout' not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "gettxout",
+          "params": [
+            "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+            0
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": false,
+              "error": "RPC error -32601: Method 'gettxout' not found",
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "getmempoolinfo",
+      "passed": true,
+      "error": null,
+      "duration": 1.21,
+      "details": [
+        {
+          "method": "getmempoolinfo",
+          "params": [],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "getpeerinfo",
+      "passed": true,
+      "error": null,
+      "duration": 1.34,
+      "details": [
+        {
+          "method": "getpeerinfo",
+          "params": [],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "estimatesmartfee",
+      "passed": true,
+      "error": null,
+      "duration": 4.78,
+      "details": [
+        {
+          "method": "estimatesmartfee",
+          "params": [
+            6
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "validateaddress",
+      "passed": false,
+      "error": null,
+      "duration": 1.05,
+      "details": [
+        {
+          "method": "validateaddress",
+          "params": [
+            "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -32601: Method not found: validateaddress",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "validateaddress",
+          "params": [
+            "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -32601: Method not found: validateaddress",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "validateaddress",
+          "params": [
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -32601: Method not found: validateaddress",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "validateaddress",
+          "params": [
+            "bc1p5cyxnuxmeuwuvkwfem96lqzszee2457nljwv3lvd7mxhqx0e7xqshh0uh8"
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "isvalid": {
+                  "expected": false,
+                  "got": true
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -32601: Method not found: validateaddress",
+              "diffs": {}
+            }
+          ]
+        },
+        {
+          "method": "validateaddress",
+          "params": [
+            "1InvalidAddressxxxxxxxxxxxxxxxxx"
+          ],
+          "reference_error": null,
+          "node_results": [
+            {
+              "node": "core",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "haskoin",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "rustoshi",
+              "passed": false,
+              "error": null,
+              "diffs": {
+                "isvalid": {
+                  "expected": false,
+                  "got": true
+                }
+              }
+            },
+            {
+              "node": "beamchain",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "hotbuns",
+              "passed": true,
+              "error": null,
+              "diffs": {}
+            },
+            {
+              "node": "blockbrew",
+              "passed": false,
+              "error": "RPC error -32601: Method not found: validateaddress",
+              "diffs": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

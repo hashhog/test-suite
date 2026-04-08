@@ -1,0 +1,87 @@
+========================================================================
+RPC Conformance Test Results
+========================================================================
+Timestamp: 2026-04-08 20:26:38 UTC
+
+Test                                Result     Time
+----------------------------------------------------
+getblockchaininfo                   FAIL       3.7s
+getblockhash                        FAIL      60.6s
+getblockheader                      FAIL      28.6s
+getblock_v1                         FAIL       8.6s
+getrawtransaction                   PASS       1.0s
+gettxout                            FAIL       4.2s
+getmempoolinfo                      PASS       1.2s
+getpeerinfo                         PASS       1.3s
+estimatesmartfee                    PASS       4.8s
+validateaddress                     FAIL       1.0s
+----------------------------------------------------
+Total: 4/10 passed
+
+Node              Pass   Fail  Total
+------------------------------------
+beamchain           25     23     48
+blockbrew            9     39     48
+haskoin             24     24     48
+hotbuns             23     25     48
+rustoshi            23     25     48
+
+Failure Details:
+------------------------------------------------------------------------
+  beamchain:
+    - getblockchaininfo/getblockchaininfo: diff in ['blocks', 'headers', 'bestblockhash']
+    - getblockheader/getblockheader: diff in ['confirmations']
+    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
+    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
+    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
+    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
+  blockbrew:
+    - getblockchaininfo/getblockchaininfo: diff in ['chain']
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+    - getblockhash: RPC error -5: Block not found
+  haskoin:
+    - getblockchaininfo/getblockchaininfo: diff in ['chain', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
+    - getblockheader: RPC error -1: Block header not found
+  hotbuns:
+    - getblockhash: RPC error -32603: Block hash not found for height
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+    - getblockheader: RPC error -5: Block header not found
+  rustoshi:
+    - getblockchaininfo/getblockchaininfo: diff in ['mediantime']
+    - getblockheader/getblockheader: diff in ['chainwork']
+    - getblockheader/getblockheader: diff in ['height', 'mediantime', 'chainwork']
+    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+
+========================================================================
