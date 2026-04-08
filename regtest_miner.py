@@ -4,7 +4,6 @@
 import json
 import struct
 import hashlib
-import time
 import sys
 import urllib.request
 import urllib.error
@@ -13,7 +12,6 @@ import base64
 
 
 def rpc_call(url, user, password, method, params=None):
-    """Make a JSON-RPC call."""
     if params is None:
         params = []
     payload = json.dumps({
@@ -45,176 +43,213 @@ def sha256d(data):
     return hashlib.sha256(hashlib.sha256(data).digest()).digest()
 
 
-def build_coinbase_tx(template, extra_data=b"", op_return_data=None):
-    """Build a coinbase transaction from template data."""
+def compact_size(n):
+    if n < 0xfd:
+        return bytes([n])
+    elif n <= 0xffff:
+        return b"\xfd" + struct.pack("<H", n)
+    elif n <= 0xffffffff:
+        return b"\xfe" + struct.pack("<I", n)
+    else:
+        return b"\xff" + struct.pack("<Q", n)
+
+
+def encode_coinbase_height(n):
+    """Encode block height for coinbase script (CScript << int64_t).
+
+    Bitcoin Core uses push_int64 which maps:
+      0 -> OP_0 (0x00)
+      1..16 -> OP_1..OP_16 (0x51..0x60)
+      -1 -> OP_1NEGATE (0x4f)
+      otherwise -> CScriptNum push (length-prefixed little-endian)
+    """
+    if n == 0:
+        return b"\x00"  # OP_0
+    if n == -1:
+        return b"\x4f"  # OP_1NEGATE
+    if 1 <= n <= 16:
+        return bytes([0x50 + n])  # OP_1 through OP_16
+    # For larger values, use CScriptNum encoding
+    negative = n < 0
+    absval = abs(n)
+    result = []
+    while absval > 0:
+        result.append(absval & 0xff)
+        absval >>= 8
+    if result[-1] & 0x80:
+        result.append(0x80 if negative else 0x00)
+    elif negative:
+        result[-1] |= 0x80
+    return bytes([len(result)] + result)
+
+
+def bits_to_target(bits_hex):
+    bits = int(bits_hex, 16)
+    exp = bits >> 24
+    mant = bits & 0x7fffff
+    if exp <= 3:
+        target = mant >> (8 * (3 - exp))
+    else:
+        target = mant << (8 * (exp - 3))
+    return target
+
+
+def build_coinbase_tx(template, extra_data=b""):
+    """Build a segwit coinbase transaction."""
     height = template["height"]
     coinbase_value = template["coinbasevalue"]
 
-    # Serialize height for coinbase script (BIP34)
-    if height == 0:
-        height_script = b"\x00"
-    elif height <= 0xff:
-        height_script = b"\x02" + struct.pack("<H", height)
-    elif height <= 0xffff:
-        height_script = b"\x03" + struct.pack("<I", height)[:3]
-    elif height <= 0xffffff:
-        height_script = b"\x03" + struct.pack("<I", height)[:3]
-    else:
-        height_script = b"\x04" + struct.pack("<I", height)
-
+    # BIP34 height in coinbase
+    height_script = encode_coinbase_height(height)
+    # Coinbase scriptSig must be 2-100 bytes; pad with OP_0 if needed
     coinbase_script = height_script + extra_data
+    if len(coinbase_script) < 2:
+        coinbase_script += b"\x00"  # OP_0 padding
 
-    # Build the transaction
-    tx = b""
-    # Version
-    tx += struct.pack("<I", 1)
-    # Marker + flag for segwit
-    tx_segwit = tx + b"\x00\x01"
+    # --- Non-witness serialization (for txid) ---
+    tx_nosw = b""
+    tx_nosw += struct.pack("<i", 2)  # version 2
 
-    # Input count
-    input_part = b"\x01"
-    # Previous output (null for coinbase)
-    input_part += b"\x00" * 32  # txid
-    input_part += struct.pack("<I", 0xFFFFFFFF)  # vout
-    # Coinbase script
-    input_part += bytes([len(coinbase_script)]) + coinbase_script
-    # Sequence
-    input_part += struct.pack("<I", 0xFFFFFFFF)
+    # 1 input (coinbase)
+    tx_nosw += b"\x01"
+    tx_nosw += b"\x00" * 32  # null prev txid
+    tx_nosw += struct.pack("<I", 0xFFFFFFFF)  # null prev vout
+    tx_nosw += compact_size(len(coinbase_script)) + coinbase_script
+    tx_nosw += struct.pack("<I", 0xFFFFFFFF)  # sequence
 
     # Outputs
-    outputs = b""
-    num_outputs = 1
+    outputs_data = b""
+    num_outputs = 0
 
-    # Main output - pay to OP_TRUE (anyone can spend, fine for regtest)
-    # Using P2WSH OP_TRUE for segwit compatibility
-    # scriptPubKey: OP_0 <32-byte-hash>  (P2WSH of OP_TRUE)
-    op_true_hash = sha256d(b"\x51")[:32]  # SHA256 of OP_TRUE
-    op_true_sha256 = hashlib.sha256(b"\x51").digest()
-    spk = b"\x00\x20" + op_true_sha256  # witness v0 + 32 bytes
+    # Output 0: coinbase value to anyone-can-spend (OP_TRUE)
+    num_outputs += 1
+    spk = b"\x51"  # OP_TRUE
+    outputs_data += struct.pack("<q", coinbase_value)
+    outputs_data += compact_size(len(spk)) + spk
 
-    remaining_value = coinbase_value
-
-    if op_return_data is not None:
+    # Witness commitment output (required for segwit)
+    dwc = template.get("default_witness_commitment")
+    if dwc:
         num_outputs += 1
-        op_return_spk = b"\x6a" + bytes([len(op_return_data)]) + op_return_data
-        outputs += struct.pack("<q", 0)  # 0 value for OP_RETURN
-        outputs += bytes([len(op_return_spk)]) + op_return_spk
+        wc_script = binascii.unhexlify(dwc)
+        outputs_data += struct.pack("<q", 0)
+        outputs_data += compact_size(len(wc_script)) + wc_script
 
-    outputs += struct.pack("<q", remaining_value)
-    outputs += bytes([len(spk)]) + spk
-
-    # Default witness commitment
-    witness_commitment = None
-    if "default_witness_commitment" in template:
-        witness_commitment = binascii.unhexlify(template["default_witness_commitment"])
-        num_outputs += 1
-        outputs += struct.pack("<q", 0)
-        outputs += bytes([len(witness_commitment)]) + witness_commitment
-
-    tx_no_witness = tx + bytes([num_outputs]) if False else b""
-
-    # Build non-segwit serialization for txid
-    tx_nosw = struct.pack("<I", 1)  # version
-    tx_nosw += input_part
-    tx_nosw += bytes([num_outputs]) + outputs
+    tx_nosw += compact_size(num_outputs) + outputs_data
     tx_nosw += struct.pack("<I", 0)  # locktime
 
-    # Build segwit serialization
-    tx_sw = struct.pack("<I", 1)  # version
-    tx_sw += b"\x00\x01"  # segwit marker+flag
-    tx_sw += input_part
-    tx_sw += bytes([num_outputs]) + outputs
-    # Witness for coinbase: single stack item (witness nonce)
-    tx_sw += b"\x01\x20" + b"\x00" * 32
+    txid = sha256d(tx_nosw)[::-1].hex()
+
+    # --- Witness serialization ---
+    tx_sw = b""
+    tx_sw += struct.pack("<i", 2)  # version 2
+    tx_sw += b"\x00\x01"  # segwit marker + flag
+
+    # Same input
+    tx_sw += b"\x01"
+    tx_sw += b"\x00" * 32
+    tx_sw += struct.pack("<I", 0xFFFFFFFF)
+    tx_sw += compact_size(len(coinbase_script)) + coinbase_script
+    tx_sw += struct.pack("<I", 0xFFFFFFFF)
+
+    # Same outputs
+    tx_sw += compact_size(num_outputs) + outputs_data
+
+    # Witness: 1 item, 32-byte zero nonce
+    tx_sw += b"\x01"  # 1 witness field
+    tx_sw += b"\x20" + b"\x00" * 32  # 32 zero bytes
+
     tx_sw += struct.pack("<I", 0)  # locktime
 
-    txid = sha256d(tx_nosw)[::-1].hex()
     return tx_sw.hex(), tx_nosw.hex(), txid
 
 
-def build_block(template, coinbase_hex_nosw, coinbase_hex_sw, txids_hex):
-    """Build a block from template + coinbase + transactions."""
-    version = template["version"]
-    prev_hash = template["previousblockhash"]
-    bits = template["bits"]
-    curtime = template["curtime"]
+def build_block_header(template, merkle_root, nonce):
+    header = struct.pack("<i", template["version"])
+    header += binascii.unhexlify(template["previousblockhash"])[::-1]
+    header += merkle_root
+    header += struct.pack("<I", template["curtime"])
+    header += binascii.unhexlify(template["bits"])[::-1]
+    header += struct.pack("<I", nonce)
+    return header
 
-    # Compute merkle root
-    # txids: coinbase txid first, then transaction txids
-    all_txids = txids_hex
-    hashes = [binascii.unhexlify(txid)[::-1] for txid in all_txids]
 
+def compute_merkle_root(txids_le):
+    """Compute merkle root from list of txid bytes (little-endian)."""
+    hashes = list(txids_le)
+    if not hashes:
+        return b"\x00" * 32
     while len(hashes) > 1:
         if len(hashes) % 2 != 0:
             hashes.append(hashes[-1])
-        new_hashes = []
+        new = []
         for i in range(0, len(hashes), 2):
-            new_hashes.append(sha256d(hashes[i] + hashes[i + 1]))
-        hashes = new_hashes
-
-    merkle_root = hashes[0]
-
-    # Build header
-    header = struct.pack("<I", version)
-    header += binascii.unhexlify(prev_hash)[::-1]
-    header += merkle_root
-    header += struct.pack("<I", curtime)
-    header += binascii.unhexlify(bits)[::-1]
-
-    # Mine (find nonce) - regtest difficulty is 1, should be instant
-    for nonce in range(0, 0xFFFFFFFF):
-        candidate = header + struct.pack("<I", nonce)
-        block_hash = sha256d(candidate)
-        if block_hash[-4:] == b"\x00\x00\x00\x00":  # regtest target
-            # Build full block
-            txs = coinbase_hex_sw
-            for tx_hex in template.get("transactions", []):
-                txs += tx_hex["data"]
-
-            # Transaction count as varint
-            ntx = 1 + len(template.get("transactions", []))
-            if ntx < 0xfd:
-                txcount = bytes([ntx]).hex()
-            else:
-                txcount = "fd" + struct.pack("<H", ntx).hex()
-
-            block_hex = candidate.hex() + txcount + txs
-            return block_hex, block_hash[::-1].hex(), nonce
-    return None, None, None
+            new.append(sha256d(hashes[i] + hashes[i + 1]))
+        hashes = new
+    return hashes[0]
 
 
 def mine_blocks(rpc_url, user, password, count, extra_data=b""):
     """Mine count blocks and return their hashes."""
     hashes = []
     for i in range(count):
-        template, err = rpc_call(rpc_url, user, password, "getblocktemplate", [{"rules": ["segwit"]}])
+        template, err = rpc_call(rpc_url, user, password, "getblocktemplate",
+                                 [{"rules": ["segwit"]}])
         if err:
-            print(f"  getblocktemplate error: {err}")
+            print(f"  getblocktemplate error: {err}", file=sys.stderr)
             return hashes
 
-        coinbase_sw, coinbase_nosw, coinbase_txid = build_coinbase_tx(template, extra_data)
+        target = bits_to_target(template["bits"])
 
-        # Collect all txids (coinbase first)
-        all_txids = [coinbase_txid]
+        coinbase_sw, coinbase_nosw, coinbase_txid = build_coinbase_tx(
+            template, extra_data)
+
+        # All txids in little-endian bytes
+        all_txids_le = [binascii.unhexlify(coinbase_txid)[::-1]]
+        tx_data = ""
         for tx in template.get("transactions", []):
-            all_txids.append(tx["txid"])
+            all_txids_le.append(binascii.unhexlify(tx["txid"])[::-1])
+            tx_data += tx["data"]
 
-        block_hex, block_hash, nonce = build_block(template, coinbase_nosw, coinbase_sw, all_txids)
-        if block_hex is None:
-            print(f"  Failed to mine block {template['height']}")
+        merkle_root = compute_merkle_root(all_txids_le)
+
+        # Mine (find valid nonce)
+        found = False
+        for nonce in range(0, 0xFFFFFFFF):
+            header = build_block_header(template, merkle_root, nonce)
+            block_hash = sha256d(header)
+            # Compare as 256-bit LE integer
+            hash_int = int.from_bytes(block_hash, 'little')
+            if hash_int <= target:
+                # Assemble full block
+                ntx = 1 + len(template.get("transactions", []))
+                block_hex = (header.hex() +
+                             compact_size(ntx).hex() +
+                             coinbase_sw +
+                             tx_data)
+
+                result, err = rpc_call(rpc_url, user, password,
+                                       "submitblock", [block_hex])
+                if err:
+                    print(f"  submitblock error at height {template['height']}: {err}",
+                          file=sys.stderr)
+                    return hashes
+                if result is not None and result != "" and result is not None:
+                    print(f"  submitblock rejected at height {template['height']}: {result}",
+                          file=sys.stderr)
+                    return hashes
+
+                block_hash_hex = block_hash[::-1].hex()
+                hashes.append(block_hash_hex)
+                found = True
+                break
+
+        if not found:
+            print(f"  Failed to mine block {template['height']}", file=sys.stderr)
             return hashes
 
-        result, err = rpc_call(rpc_url, user, password, "submitblock", [block_hex])
-        if err:
-            print(f"  submitblock error at height {template['height']}: {err}")
-            return hashes
-        if result is not None and result != "":
-            print(f"  submitblock rejected at height {template['height']}: {result}")
-            return hashes
-
-        hashes.append(block_hash)
-        if (i + 1) % 10 == 0:
-            print(f"  Mined {i + 1}/{count} blocks")
+        if (i + 1) % 10 == 0 or i == count - 1:
+            print(f"  Mined {i + 1}/{count} blocks (height {template['height']})")
 
     return hashes
 

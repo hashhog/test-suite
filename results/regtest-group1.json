@@ -1,0 +1,769 @@
+{
+  "test": "regtest-group1",
+  "timestamp": "2026-04-08T20:44:01Z",
+  "nodes": {
+    "core": {
+      "started": true
+    },
+    "rustoshi": {
+      "started": true,
+      "blocks_accepted": 180,
+      "blocks_rejected": 0,
+      "first_error": null,
+      "first_error_height": null,
+      "verdict": "FAIL",
+      "fail_reason": "chain tip mismatch"
+    },
+    "haskoin": {
+      "started": true,
+      "blocks_accepted": 0,
+      "blocks_rejected": 180,
+      "first_error": "Block validation failed: Coinbase missing height (BIP-34)",
+      "first_error_height": 1,
+      "verdict": "FAIL",
+      "fail_reason": "180 blocks rejected"
+    },
+    "nimrod": {
+      "started": true,
+      "blocks_accepted": 180,
+      "blocks_rejected": 0,
+      "first_error": null,
+      "first_error_height": null,
+      "verdict": "PASS"
+    },
+    "beamchain": {
+      "started": false,
+      "verdict": "FAIL",
+      "fail_reason": "failed to start"
+    },
+    "clearbit": {
+      "started": true,
+      "blocks_accepted": 180,
+      "blocks_rejected": 0,
+      "first_error": null,
+      "first_error_height": null,
+      "verdict": "PASS"
+    }
+  },
+  "blocks_mined": 180,
+  "test_batches": [
+    {
+      "name": "initial_blocks",
+      "range": [
+        1,
+        10
+      ],
+      "nodes": {
+        "rustoshi": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 1,
+              "error": "{'code': -32602, 'message': 'Block height 1 out of range'}"
+            },
+            {
+              "height": 2,
+              "error": "{'code': -32602, 'message': 'Block height 2 out of range'}"
+            },
+            {
+              "height": 3,
+              "error": "{'code': -32602, 'message': 'Block height 3 out of range'}"
+            },
+            {
+              "height": 4,
+              "error": "{'code': -32602, 'message': 'Block height 4 out of range'}"
+            },
+            {
+              "height": 5,
+              "error": "{'code': -32602, 'message': 'Block height 5 out of range'}"
+            },
+            {
+              "height": 6,
+              "error": "{'code': -32602, 'message': 'Block height 6 out of range'}"
+            },
+            {
+              "height": 7,
+              "error": "{'code': -32602, 'message': 'Block height 7 out of range'}"
+            },
+            {
+              "height": 8,
+              "error": "{'code': -32602, 'message': 'Block height 8 out of range'}"
+            },
+            {
+              "height": 9,
+              "error": "{'code': -32602, 'message': 'Block height 9 out of range'}"
+            },
+            {
+              "height": 10,
+              "error": "{'code': -32602, 'message': 'Block height 10 out of range'}"
+            }
+          ]
+        },
+        "haskoin": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 1,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 2,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 3,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 4,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 5,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 6,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 7,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 8,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 9,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 10,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            }
+          ]
+        },
+        "nimrod": {
+          "hash_matches": 10,
+          "hash_mismatches": 0,
+          "errors": 0,
+          "details": []
+        },
+        "clearbit": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 1,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 2,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 3,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 4,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 5,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 6,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 7,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 8,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 9,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 10,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "batch1_basic",
+      "range": [
+        151,
+        160
+      ],
+      "nodes": {
+        "rustoshi": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 151,
+              "error": "{'code': -32602, 'message': 'Block height 151 out of range'}"
+            },
+            {
+              "height": 152,
+              "error": "{'code': -32602, 'message': 'Block height 152 out of range'}"
+            },
+            {
+              "height": 153,
+              "error": "{'code': -32602, 'message': 'Block height 153 out of range'}"
+            },
+            {
+              "height": 154,
+              "error": "{'code': -32602, 'message': 'Block height 154 out of range'}"
+            },
+            {
+              "height": 155,
+              "error": "{'code': -32602, 'message': 'Block height 155 out of range'}"
+            },
+            {
+              "height": 156,
+              "error": "{'code': -32602, 'message': 'Block height 156 out of range'}"
+            },
+            {
+              "height": 157,
+              "error": "{'code': -32602, 'message': 'Block height 157 out of range'}"
+            },
+            {
+              "height": 158,
+              "error": "{'code': -32602, 'message': 'Block height 158 out of range'}"
+            },
+            {
+              "height": 159,
+              "error": "{'code': -32602, 'message': 'Block height 159 out of range'}"
+            },
+            {
+              "height": 160,
+              "error": "{'code': -32602, 'message': 'Block height 160 out of range'}"
+            }
+          ]
+        },
+        "haskoin": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 151,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 152,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 153,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 154,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 155,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 156,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 157,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 158,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 159,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 160,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            }
+          ]
+        },
+        "nimrod": {
+          "hash_matches": 10,
+          "hash_mismatches": 0,
+          "errors": 0,
+          "details": []
+        },
+        "clearbit": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 151,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 152,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 153,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 154,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 155,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 156,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 157,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 158,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 159,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 160,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "batch2_scripts",
+      "range": [
+        161,
+        170
+      ],
+      "nodes": {
+        "rustoshi": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 161,
+              "error": "{'code': -32602, 'message': 'Block height 161 out of range'}"
+            },
+            {
+              "height": 162,
+              "error": "{'code': -32602, 'message': 'Block height 162 out of range'}"
+            },
+            {
+              "height": 163,
+              "error": "{'code': -32602, 'message': 'Block height 163 out of range'}"
+            },
+            {
+              "height": 164,
+              "error": "{'code': -32602, 'message': 'Block height 164 out of range'}"
+            },
+            {
+              "height": 165,
+              "error": "{'code': -32602, 'message': 'Block height 165 out of range'}"
+            },
+            {
+              "height": 166,
+              "error": "{'code': -32602, 'message': 'Block height 166 out of range'}"
+            },
+            {
+              "height": 167,
+              "error": "{'code': -32602, 'message': 'Block height 167 out of range'}"
+            },
+            {
+              "height": 168,
+              "error": "{'code': -32602, 'message': 'Block height 168 out of range'}"
+            },
+            {
+              "height": 169,
+              "error": "{'code': -32602, 'message': 'Block height 169 out of range'}"
+            },
+            {
+              "height": 170,
+              "error": "{'code': -32602, 'message': 'Block height 170 out of range'}"
+            }
+          ]
+        },
+        "haskoin": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 161,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 162,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 163,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 164,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 165,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 166,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 167,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 168,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 169,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 170,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            }
+          ]
+        },
+        "nimrod": {
+          "hash_matches": 10,
+          "hash_mismatches": 0,
+          "errors": 0,
+          "details": []
+        },
+        "clearbit": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 161,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 162,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 163,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 164,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 165,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 166,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 167,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 168,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 169,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 170,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "batch3_edge_cases",
+      "range": [
+        171,
+        180
+      ],
+      "nodes": {
+        "rustoshi": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 171,
+              "error": "{'code': -32602, 'message': 'Block height 171 out of range'}"
+            },
+            {
+              "height": 172,
+              "error": "{'code': -32602, 'message': 'Block height 172 out of range'}"
+            },
+            {
+              "height": 173,
+              "error": "{'code': -32602, 'message': 'Block height 173 out of range'}"
+            },
+            {
+              "height": 174,
+              "error": "{'code': -32602, 'message': 'Block height 174 out of range'}"
+            },
+            {
+              "height": 175,
+              "error": "{'code': -32602, 'message': 'Block height 175 out of range'}"
+            },
+            {
+              "height": 176,
+              "error": "{'code': -32602, 'message': 'Block height 176 out of range'}"
+            },
+            {
+              "height": 177,
+              "error": "{'code': -32602, 'message': 'Block height 177 out of range'}"
+            },
+            {
+              "height": 178,
+              "error": "{'code': -32602, 'message': 'Block height 178 out of range'}"
+            },
+            {
+              "height": 179,
+              "error": "{'code': -32602, 'message': 'Block height 179 out of range'}"
+            },
+            {
+              "height": 180,
+              "error": "{'code': -32602, 'message': 'Block height 180 out of range'}"
+            }
+          ]
+        },
+        "haskoin": {
+          "hash_matches": 0,
+          "hash_mismatches": 0,
+          "errors": 10,
+          "details": [
+            {
+              "height": 171,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 172,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 173,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 174,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 175,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 176,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 177,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 178,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 179,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 180,
+              "error": "{'code': -1, 'message': 'Block height out of range'}"
+            }
+          ]
+        },
+        "nimrod": {
+          "hash_matches": 10,
+          "hash_mismatches": 0,
+          "errors": 0,
+          "details": []
+        },
+        "clearbit": {
+          "hash_matches": 1,
+          "hash_mismatches": 0,
+          "errors": 9,
+          "details": [
+            {
+              "height": 171,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 172,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 173,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 174,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 175,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 176,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 177,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 178,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            },
+            {
+              "height": 179,
+              "error": "{'code': -8, 'message': 'Block height out of range'}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "consensus_check": {
+    "tips": {
+      "rustoshi": {
+        "height": 0,
+        "hash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+        "core_height": 180,
+        "core_hash": "1ef4dc9a333ce2e21b0bdef7b335bc574485e00e059ea0dcd733786d999a76da",
+        "hash_matches": false
+      },
+      "haskoin": {
+        "height": 0,
+        "hash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+        "core_height": 180,
+        "core_hash": "1ef4dc9a333ce2e21b0bdef7b335bc574485e00e059ea0dcd733786d999a76da",
+        "hash_matches": false
+      },
+      "nimrod": {
+        "height": 180,
+        "hash": "1ef4dc9a333ce2e21b0bdef7b335bc574485e00e059ea0dcd733786d999a76da",
+        "core_height": 180,
+        "core_hash": "1ef4dc9a333ce2e21b0bdef7b335bc574485e00e059ea0dcd733786d999a76da",
+        "hash_matches": true
+      },
+      "clearbit": {
+        "height": 180,
+        "hash": "1ef4dc9a333ce2e21b0bdef7b335bc574485e00e059ea0dcd733786d999a76da",
+        "core_height": 180,
+        "core_hash": "1ef4dc9a333ce2e21b0bdef7b335bc574485e00e059ea0dcd733786d999a76da",
+        "hash_matches": true
+      }
+    }
+  },
+  "invalid_block_tests": {
+    "rustoshi": {
+      "corrupt_nonce": {
+        "correctly_rejected": false,
+        "error": null
+      }
+    },
+    "haskoin": {
+      "corrupt_nonce": {
+        "correctly_rejected": true,
+        "error": "Block validation failed: Coinbase height mismatch"
+      }
+    },
+    "nimrod": {
+      "corrupt_nonce": {
+        "correctly_rejected": true,
+        "error": "block hash exceeds target"
+      }
+    },
+    "clearbit": {
+      "corrupt_nonce": {
+        "correctly_rejected": true,
+        "error": "{'code': -26, 'message': 'high-hash'}"
+      }
+    }
+  },
+  "bugs_found": [
+    {
+      "node": "beamchain",
+      "category": "startup",
+      "description": "beamchain failed to start in regtest mode",
+      "severity": "blocker"
+    },
+    {
+      "node": "rustoshi",
+      "category": "submitblock",
+      "description": "rustoshi: submitblock RPC accepts blocks but does not process them (chain tip stays at genesis)",
+      "severity": "critical"
+    },
+    {
+      "node": "rustoshi",
+      "category": "validation",
+      "description": "rustoshi: accepts blocks with invalid PoW (corrupt nonce)",
+      "severity": "critical"
+    },
+    {
+      "node": "haskoin",
+      "category": "validation",
+      "description": "haskoin: BIP-34 coinbase height parsing rejects valid blocks with OP_1..OP_16 height encoding",
+      "severity": "critical",
+      "detail": "Block validation failed: Coinbase missing height (BIP-34)"
+    },
+    {
+      "node": "clearbit",
+      "category": "rpc",
+      "description": "clearbit: getblockhash RPC returns error for valid heights (\"Block height out of range\") even when blocks are present and chain tip is correct",
+      "severity": "moderate"
+    }
+  ],
+  "summary": {
+    "total_nodes": 5,
+    "passing": 2,
+    "failing": 3,
+    "core_height": 180,
+    "bugs_found": 5
+  }
+}
