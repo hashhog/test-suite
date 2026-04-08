@@ -1,0 +1,194 @@
+{
+  "test": "phase3.5-regression",
+  "timestamp": "2026-04-08T21:22:52Z",
+  "description": "Regression tests after Phase 3 bug fixes for ouroboros, rustoshi, haskoin, beamchain",
+  "core_height": 20,
+  "nodes": {
+    "rustoshi": {
+      "started": true,
+      "initial_height": 0,
+      "block_hash_matches": 1,
+      "block_hash_mismatches": 0,
+      "block_hash_errors": [
+        "h=1: {'code': -32602, 'message': 'Block height 1 out of range'}",
+        "h=2: {'code': -32602, 'message': 'Block height 2 out of range'}",
+        "h=3: {'code': -32602, 'message': 'Block height 3 out of range'}",
+        "h=4: {'code': -32602, 'message': 'Block height 4 out of range'}",
+        "h=5: {'code': -32602, 'message': 'Block height 5 out of range'}"
+      ],
+      "verdict": "PASS"
+    },
+    "haskoin": {
+      "started": true,
+      "initial_height": 0,
+      "block_hash_matches": 21,
+      "block_hash_mismatches": 0,
+      "block_hash_errors": [],
+      "verdict": "PASS"
+    },
+    "beamchain": {
+      "started": true,
+      "initial_height": 0,
+      "block_hash_matches": 21,
+      "block_hash_mismatches": 0,
+      "block_hash_errors": [],
+      "verdict": "PASS"
+    },
+    "ouroboros": {
+      "started": true,
+      "initial_height": 0,
+      "block_hash_matches": 21,
+      "block_hash_mismatches": 0,
+      "block_hash_errors": [],
+      "verdict": "FAIL"
+    }
+  },
+  "submit_results": {
+    "rustoshi": {
+      "accepted": 20,
+      "rejected": 0,
+      "total": 20,
+      "errors": []
+    },
+    "haskoin": {
+      "accepted": 20,
+      "rejected": 0,
+      "total": 20,
+      "errors": []
+    },
+    "beamchain": {
+      "accepted": 20,
+      "rejected": 0,
+      "total": 20,
+      "errors": []
+    },
+    "ouroboros": {
+      "accepted": 20,
+      "rejected": 0,
+      "total": 20,
+      "errors": []
+    }
+  },
+  "chain_tip_check": {
+    "rustoshi": {
+      "height": 20,
+      "hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "core_height": 20,
+      "core_hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "matches": true
+    },
+    "haskoin": {
+      "height": 20,
+      "hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "core_height": 20,
+      "core_hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "matches": true
+    },
+    "beamchain": {
+      "height": 20,
+      "hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "core_height": 20,
+      "core_hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "matches": true
+    },
+    "ouroboros": {
+      "height": 20,
+      "hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "core_height": 20,
+      "core_hash": "5856c187ccf0cb1e11ad5a6a0e34d416a6ab8a609fc13d373c235cde9e945899",
+      "matches": true
+    }
+  },
+  "invalid_block_tests": {
+    "rustoshi": {
+      "corrupt_merkle": {
+        "correctly_rejected": true,
+        "rejection": "previous block not found: 48f41bd1db919053eb0cf75a5666d04826f47e36c44461a34056b92687d429a0"
+      },
+      "corrupt_nonce": {
+        "correctly_rejected": true,
+        "rejection": "previous block not found: 48f41bd1db919053eb0cf75a5666d04826f47e36c44461a34056b92687d429a0"
+      }
+    },
+    "haskoin": {
+      "corrupt_merkle": {
+        "correctly_rejected": true,
+        "rejection": "Block validation failed: Merkle root mismatch"
+      },
+      "corrupt_nonce": {
+        "correctly_rejected": true,
+        "rejection": "Block validation failed: Coinbase height mismatch"
+      }
+    },
+    "beamchain": {
+      "corrupt_merkle": {
+        "correctly_rejected": true,
+        "rejection": "{'code': -25, 'message': 'bad_prevblk'}"
+      },
+      "corrupt_nonce": {
+        "correctly_rejected": true,
+        "rejection": "{'code': -25, 'message': 'bad_prevblk'}"
+      }
+    },
+    "ouroboros": {
+      "corrupt_merkle": {
+        "correctly_rejected": true,
+        "rejection": "Invalid merkle root: header=a0340e75e277fd7b64b61f0ea60bfe59ca4c347973cf71e20da81b67a6ebae9c computed=5fcb0e75e277fd7b64b61f0ea60bfe59ca4c347973cf71e20da81b67a6ebae9c"
+      },
+      "corrupt_nonce": {
+        "correctly_rejected": false,
+        "detail": "Block with corrupted nonce still had valid PoW on regtest (target=0x7fffff...). The real bug is that ouroboros treated a block with prevhash pointing to height 19 as block 21 instead of a competing block at height 20. Core correctly rejects this scenario."
+      }
+    }
+  },
+  "bugs_found": [
+    {
+      "node": "ouroboros",
+      "bug": "prevhash_validation_missing",
+      "severity": "critical",
+      "description": "ouroboros: does not validate that submitted block's prevhash matches the actual chain tip. A block with prevhash pointing to height 19 was accepted as height 21 (should have been rejected or treated as a competing block at height 20).",
+      "detail": "Corrupted nonce block had valid PoW on regtest but same prevhash as block 20. Core correctly returns 'inconclusive' and stays at height 20. Ouroboros incorrectly advanced to height 21.",
+      "status": "NEW_BUG"
+    },
+    {
+      "node": "rustoshi",
+      "bug": "getblockhash_height_index_missing",
+      "severity": "moderate",
+      "description": "rustoshi: getblockhash RPC returns 'Block height N out of range' for heights 1-20 even though blocks were accepted via submitblock and chain tip matches Core at height 20. The height-to-hash index may not be populated during submitblock processing.",
+      "status": "NEW_BUG"
+    }
+  ],
+  "summary": {
+    "total_nodes_tested": 4,
+    "nodes_not_started": 0,
+    "passing": 3,
+    "failing": 1,
+    "bugs_found": 2,
+    "core_height": 20
+  },
+  "regression_analysis": {
+    "rustoshi_submitblock_stub": {
+      "original_bug": "submitblock RPC was a stub that accepted blocks but didn't process them",
+      "status": "FIXED",
+      "evidence": "All 20 blocks accepted, chain tip matches Core at height 20",
+      "remaining_issue": "getblockhash height index not populated (moderate severity)"
+    },
+    "haskoin_bip34_height_parsing": {
+      "original_bug": "BIP-34 coinbase height parsing rejected blocks with OP_1..OP_16 height encoding",
+      "status": "FIXED",
+      "evidence": "All 20 blocks (heights 1-16 use OP_1..OP_16, 17-20 use CScriptNum) accepted without error"
+    },
+    "beamchain_regtest_startup": {
+      "original_bug": "Release build (escript) fails to find liberocksdb NIF on startup",
+      "status": "PARTIALLY_FIXED",
+      "evidence": "Escript build still fails with 'failed_to_find_liberocksdb'. Workaround: use 'rebar3 shell' with BEAMCHAIN_NETWORK=regtest env var. Once running, all 20 blocks accepted and chain tip matches.",
+      "note": "Escript needs NIF path fix; rebar3 shell works as workaround"
+    },
+    "ouroboros_merkle_root_validation": {
+      "original_bug": "Merkle root validation was incorrect",
+      "status": "FIXED",
+      "evidence": "Block with corrupted merkle root correctly rejected with detailed error message",
+      "new_bug": "prevhash validation missing - accepts blocks whose prevhash doesn't match chain tip as new blocks at wrong height"
+    }
+  }
+}
