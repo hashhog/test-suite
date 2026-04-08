@@ -1,0 +1,260 @@
+{
+  "test_suite": "chain-reorganization",
+  "timestamp": "2026-04-08T23:03:33Z",
+  "nodes_tested": [
+    "rustoshi",
+    "nimrod",
+    "blockbrew",
+    "lunarblock"
+  ],
+  "nodes_failed_start": [],
+  "tests": [
+    {
+      "name": "1-block reorg",
+      "passed": false,
+      "node_results": {
+        "rustoshi": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a",
+          "expected_height": 152,
+          "note": "reorg not supported via submitblock"
+        },
+        "nimrod": {
+          "passed": true,
+          "height": 153,
+          "hash": "076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a",
+          "expected_hash": "076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a",
+          "expected_height": 152
+        },
+        "blockbrew": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a",
+          "expected_height": 152,
+          "note": "reorg not supported via submitblock"
+        },
+        "lunarblock": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a",
+          "expected_height": 152,
+          "note": "reorg not supported via submitblock"
+        }
+      }
+    },
+    {
+      "name": "6-block deep reorg",
+      "passed": false,
+      "node_results": {
+        "rustoshi": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746",
+          "expected_height": 159,
+          "note": "unexpected tip at height 151"
+        },
+        "nimrod": {
+          "passed": true,
+          "height": 166,
+          "hash": "43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746",
+          "expected_hash": "43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746",
+          "expected_height": 159
+        },
+        "blockbrew": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746",
+          "expected_height": 159,
+          "note": "unexpected tip at height 151"
+        },
+        "lunarblock": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746",
+          "expected_height": 159,
+          "note": "unexpected tip at height 151"
+        }
+      }
+    },
+    {
+      "name": "conflicting tx reorg",
+      "passed": false,
+      "node_results": {
+        "rustoshi": {
+          "tip_matches": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1",
+          "expected_height": 161,
+          "coinbase_txid_a": "c20078f916c1b31678315bc3aa2971d4405b677f148b8e6872d6380ee39993ef",
+          "coinbase_txid_b": "5c33937e5a2db1185c7864a6c114aafa84a91b2348218f91eec17543483c2c90",
+          "passed": false,
+          "note": "reorg not supported via submitblock"
+        },
+        "nimrod": {
+          "tip_matches": true,
+          "height": 169,
+          "hash": "1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1",
+          "expected_hash": "1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1",
+          "expected_height": 161,
+          "coinbase_txid_a": "c20078f916c1b31678315bc3aa2971d4405b677f148b8e6872d6380ee39993ef",
+          "coinbase_txid_b": "5c33937e5a2db1185c7864a6c114aafa84a91b2348218f91eec17543483c2c90",
+          "utxo_check": "gettxout not supported or error",
+          "passed": true
+        },
+        "blockbrew": {
+          "tip_matches": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1",
+          "expected_height": 161,
+          "coinbase_txid_a": "c20078f916c1b31678315bc3aa2971d4405b677f148b8e6872d6380ee39993ef",
+          "coinbase_txid_b": "5c33937e5a2db1185c7864a6c114aafa84a91b2348218f91eec17543483c2c90",
+          "passed": false,
+          "note": "reorg not supported via submitblock"
+        },
+        "lunarblock": {
+          "tip_matches": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1",
+          "expected_height": 161,
+          "coinbase_txid_a": "c20078f916c1b31678315bc3aa2971d4405b677f148b8e6872d6380ee39993ef",
+          "coinbase_txid_b": "5c33937e5a2db1185c7864a6c114aafa84a91b2348218f91eec17543483c2c90",
+          "passed": false,
+          "note": "reorg not supported via submitblock"
+        }
+      },
+      "notes": []
+    },
+    {
+      "name": "shorter chain rejection",
+      "passed": false,
+      "node_results": {
+        "rustoshi": {
+          "passed": true,
+          "tip_before": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "tip_after": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "height_before": 151,
+          "height_after": 151,
+          "submit_result": "previous block not found: 3944f45c96429bdea9b331725d20bb6f7271e1801b91a2db7f2d61b58dac8878"
+        },
+        "nimrod": {
+          "passed": false,
+          "tip_before": "1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1",
+          "tip_after": "5bad02305b041552db620de9da9f1996844eb7018c12fd4a7dbabea00989f41b",
+          "height_before": 169,
+          "height_after": 170,
+          "submit_result": "ok",
+          "note": "switched to shorter chain (BUG)"
+        },
+        "blockbrew": {
+          "passed": true,
+          "tip_before": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "tip_after": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "height_before": 151,
+          "height_after": 151,
+          "submit_result": "{'code': -25, 'message': 'Block connection failed: block does not connect to tip during IBD (prev=3944f45c96429bde, tip=3c48002ea9d6ca01, height=159)'}"
+        },
+        "lunarblock": {
+          "passed": true,
+          "tip_before": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "tip_after": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "height_before": 151,
+          "height_after": 151,
+          "submit_result": "prev-blk-not-found"
+        }
+      }
+    },
+    {
+      "name": "rapid successive reorgs",
+      "passed": false,
+      "node_results": {
+        "rustoshi": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670",
+          "expected_height": 166,
+          "note": "reorg not supported via submitblock"
+        },
+        "nimrod": {
+          "passed": true,
+          "height": 182,
+          "hash": "0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670",
+          "expected_hash": "0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670",
+          "expected_height": 166
+        },
+        "blockbrew": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670",
+          "expected_height": 166,
+          "note": "reorg not supported via submitblock"
+        },
+        "lunarblock": {
+          "passed": false,
+          "height": 151,
+          "hash": "3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788",
+          "expected_hash": "0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670",
+          "expected_height": 166,
+          "note": "reorg not supported via submitblock"
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_tests": 5,
+    "passed": 0,
+    "failed": 5,
+    "nodes_tested": 4,
+    "nodes_failed_start": [],
+    "per_node": {
+      "rustoshi": {
+        "tests_passed": 1,
+        "tests_failed": 4,
+        "notes": [
+          "1-block reorg: reorg not supported via submitblock",
+          "6-block deep reorg: unexpected tip at height 151",
+          "conflicting tx reorg: reorg not supported via submitblock",
+          "rapid successive reorgs: reorg not supported via submitblock"
+        ]
+      },
+      "nimrod": {
+        "tests_passed": 4,
+        "tests_failed": 1,
+        "notes": [
+          "shorter chain rejection: switched to shorter chain (BUG)"
+        ]
+      },
+      "blockbrew": {
+        "tests_passed": 1,
+        "tests_failed": 4,
+        "notes": [
+          "1-block reorg: reorg not supported via submitblock",
+          "6-block deep reorg: unexpected tip at height 151",
+          "conflicting tx reorg: reorg not supported via submitblock",
+          "rapid successive reorgs: reorg not supported via submitblock"
+        ]
+      },
+      "lunarblock": {
+        "tests_passed": 1,
+        "tests_failed": 4,
+        "notes": [
+          "1-block reorg: reorg not supported via submitblock",
+          "6-block deep reorg: unexpected tip at height 151",
+          "conflicting tx reorg: reorg not supported via submitblock",
+          "rapid successive reorgs: reorg not supported via submitblock"
+        ]
+      }
+    }
+  }
+}

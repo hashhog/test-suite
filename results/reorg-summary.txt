@@ -1,0 +1,94 @@
+========================================================================
+Chain Reorganization Test Results
+Timestamp: 2026-04-08T23:03:33Z
+========================================================================
+
+Tests: 0/5 passed
+Nodes tested: 4
+
+Test                           Result    
+------------------------------------------
+1-block reorg                  FAIL      
+6-block deep reorg             FAIL      
+conflicting tx reorg           FAIL      
+shorter chain rejection        FAIL      
+rapid successive reorgs        FAIL      
+
+Node              Passed   Failed
+---------------------------------
+rustoshi               1        4
+  - 1-block reorg: reorg not supported via submitblock
+  - 6-block deep reorg: unexpected tip at height 151
+  - conflicting tx reorg: reorg not supported via submitblock
+  - rapid successive reorgs: reorg not supported via submitblock
+nimrod                 4        1
+  - shorter chain rejection: switched to shorter chain (BUG)
+blockbrew              1        4
+  - 1-block reorg: reorg not supported via submitblock
+  - 6-block deep reorg: unexpected tip at height 151
+  - conflicting tx reorg: reorg not supported via submitblock
+  - rapid successive reorgs: reorg not supported via submitblock
+lunarblock             1        4
+  - 1-block reorg: reorg not supported via submitblock
+  - 6-block deep reorg: unexpected tip at height 151
+  - conflicting tx reorg: reorg not supported via submitblock
+  - rapid successive reorgs: reorg not supported via submitblock
+
+Detailed Results:
+------------------------------------------------------------------------
+
+1-block reorg:
+  rustoshi        FAIL (reorg not supported via submitblock)
+    expected: 076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  nimrod          PASS
+  blockbrew       FAIL (reorg not supported via submitblock)
+    expected: 076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  lunarblock      FAIL (reorg not supported via submitblock)
+    expected: 076962ac8db3c420bad864bb0eb973cdf9acaaccd4abb25dd24036e4734a779a
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+
+6-block deep reorg:
+  rustoshi        FAIL (unexpected tip at height 151)
+    expected: 43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  nimrod          PASS
+  blockbrew       FAIL (unexpected tip at height 151)
+    expected: 43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  lunarblock      FAIL (unexpected tip at height 151)
+    expected: 43d596edc878c29bba9bdceb05a36c96a6e6031406847fff258ab5402b350746
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+
+conflicting tx reorg:
+  rustoshi        FAIL (reorg not supported via submitblock)
+    expected: 1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  nimrod          PASS
+  blockbrew       FAIL (reorg not supported via submitblock)
+    expected: 1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  lunarblock      FAIL (reorg not supported via submitblock)
+    expected: 1fb6233fa83339ccbdb0997d3ef1bc71a988636e22a4ca2d692563421849e5f1
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+
+shorter chain rejection:
+  rustoshi        PASS
+  nimrod          FAIL (switched to shorter chain (BUG))
+  blockbrew       PASS
+  lunarblock      PASS
+
+rapid successive reorgs:
+  rustoshi        FAIL (reorg not supported via submitblock)
+    expected: 0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  nimrod          PASS
+  blockbrew       FAIL (reorg not supported via submitblock)
+    expected: 0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+  lunarblock      FAIL (reorg not supported via submitblock)
+    expected: 0617e95a43d73be08da405fd9c6c02451ac0021bcf602fe4afd3c66bcb75f670
+    got:      3c48002ea9d6ca01f555a082dd57d4ce86cd3b2a5823fdb91013ed205fa44788
+
+========================================================================
