@@ -1,0 +1,73 @@
+{
+  "test": "phase3.9-refuzz",
+  "description": "Re-fuzz after nimrod validation fix and blockbrew crash fix",
+  "timestamp": "2026-04-08T23:32:55Z",
+  "duration_seconds": 114.1,
+  "iterations": 75000,
+  "seed_blocks": 100,
+  "nodes_tested": [
+    "nimrod",
+    "blockbrew",
+    "clearbit"
+  ],
+  "mutations_by_type": {
+    "header_flip": 11222,
+    "truncate": 7633,
+    "huge_txcount": 2928,
+    "max_field": 6032,
+    "flip_bits": 11231,
+    "version_extreme": 3039,
+    "random_garbage": 3679,
+    "zero_field": 6049,
+    "not_hex": 2275,
+    "very_short": 1495,
+    "empty_body": 3015,
+    "insert_random": 6004,
+    "remove_tx": 5878,
+    "empty_hex": 2249,
+    "duplicate_block": 2271
+  },
+  "stats": {
+    "rejections_expected": 225000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": [],
+  "chain_selection_tests": [
+    {
+      "test": "shorter_fork",
+      "result": "PASS",
+      "nimrod_height": 106,
+      "nimrod_tip": "25dec591326ca9455d91762fa7e0cb7b55071967a81d1a18892e615aa5985b04",
+      "core_tip": "25dec591326ca9455d91762fa7e0cb7b55071967a81d1a18892e615aa5985b04"
+    },
+    {
+      "test": "longer_fork",
+      "result": "PASS",
+      "nimrod_height": 109,
+      "core_height": 109
+    }
+  ],
+  "errors": [],
+  "final_tips": {
+    "core": {
+      "tip": "3824435b2506d014333a41025ce841d14e4b70d9d14cc60babd3e52599ef4fb5",
+      "height": 109
+    },
+    "nimrod": {
+      "tip": "3824435b2506d014333a41025ce841d14e4b70d9d14cc60babd3e52599ef4fb5",
+      "height": 109
+    },
+    "blockbrew": {
+      "tip": "3fda818d73df606f1a6e6359071c9b4abf952e1a2b1467c6b968cf328556d553",
+      "height": 105
+    },
+    "clearbit": {
+      "tip": "3fda818d73df606f1a6e6359071c9b4abf952e1a2b1467c6b968cf328556d553",
+      "height": 105
+    }
+  }
+}

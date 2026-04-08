@@ -1,0 +1,52 @@
+========================================================================
+PHASE 3.9 RE-FUZZ TESTING SUMMARY
+Verify nimrod validation fix + blockbrew crash fix
+========================================================================
+Date:       2026-04-08 23:32:55 UTC
+Duration:   114.1s
+Iterations: 75000
+Seed blocks: 100
+
+Nodes tested:
+  core         alive        height=109
+  nimrod       alive        height=109
+  blockbrew    alive        height=105
+  clearbit     alive        height=105
+
+Mutation distribution:
+  flip_bits             11231
+  header_flip           11222
+  truncate               7633
+  zero_field             6049
+  max_field              6032
+  insert_random          6004
+  remove_tx              5878
+  random_garbage         3679
+  version_extreme        3039
+  empty_body             3015
+  huge_txcount           2928
+  not_hex                2275
+  duplicate_block        2271
+  empty_hex              2249
+  very_short             1495
+
+Expected rejections:    225000
+Unexpected rejections:  0
+Expected accepts:       0
+Unexpected accepts:     0
+
+CRASHES:     0
+HANGS:       0
+DIVERGENCES: 0
+
+CHAIN SELECTION TESTS (nimrod):
+  shorter_fork: PASS
+  longer_fork: PASS
+
+PER-NODE VERDICTS:
+  nimrod:    PASS (crashes=0, divergences=0, chain_selection=PASS)
+  blockbrew: PASS (crashes=0, divergences=0)
+  clearbit:  PASS (control) (crashes=0, divergences=0)
+
+OVERALL VERDICT: PASS - All fixes verified, no regressions
+========================================================================
