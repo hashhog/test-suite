@@ -1,0 +1,161 @@
+{
+  "timestamp": "2026-04-08T22:55:27Z",
+  "nodes": {
+    "beamchain": {
+      "total_peers": 10,
+      "outbound": 10,
+      "inbound": 0,
+      "outbound_full_relay": 10,
+      "outbound_block_relay": 0,
+      "unique_subnets": 10,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 10
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "blockbrew": {
+      "total_peers": 9,
+      "outbound": 9,
+      "inbound": 0,
+      "outbound_full_relay": 0,
+      "outbound_block_relay": 0,
+      "unique_subnets": 9,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 9
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "camlcoin": {
+      "total_peers": 8,
+      "outbound": 8,
+      "inbound": 0,
+      "outbound_full_relay": 0,
+      "outbound_block_relay": 0,
+      "unique_subnets": 8,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 8
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "clearbit": {
+      "total_peers": 0,
+      "outbound": 0,
+      "inbound": 0,
+      "outbound_full_relay": 0,
+      "outbound_block_relay": 0,
+      "unique_subnets": 0,
+      "listening": false,
+      "protocol_versions": {},
+      "status": "NO_PEERS",
+      "error": null
+    },
+    "core": {
+      "total_peers": 10,
+      "outbound": 10,
+      "inbound": 0,
+      "outbound_full_relay": 8,
+      "outbound_block_relay": 2,
+      "unique_subnets": 10,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 10
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "haskoin": {
+      "total_peers": 6,
+      "outbound": 6,
+      "inbound": 0,
+      "outbound_full_relay": 0,
+      "outbound_block_relay": 0,
+      "unique_subnets": 6,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 6
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "hotbuns": {
+      "total_peers": 3,
+      "outbound": 3,
+      "inbound": 0,
+      "outbound_full_relay": 3,
+      "outbound_block_relay": 0,
+      "unique_subnets": 3,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 3
+      },
+      "status": "LOW_DIVERSITY",
+      "error": null
+    },
+    "lunarblock": {
+      "total_peers": 8,
+      "outbound": 8,
+      "inbound": 0,
+      "outbound_full_relay": 0,
+      "outbound_block_relay": 0,
+      "unique_subnets": 8,
+      "listening": false,
+      "protocol_versions": {
+        "0": 8
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "nimrod": {
+      "total_peers": 9,
+      "outbound": 9,
+      "inbound": 0,
+      "outbound_full_relay": 9,
+      "outbound_block_relay": 0,
+      "unique_subnets": 9,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 9
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "ouroboros": {
+      "total_peers": 8,
+      "outbound": 8,
+      "inbound": 0,
+      "outbound_full_relay": 8,
+      "outbound_block_relay": 0,
+      "unique_subnets": 8,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 8
+      },
+      "status": "GOOD",
+      "error": null
+    },
+    "rustoshi": {
+      "total_peers": 8,
+      "outbound": 8,
+      "inbound": 0,
+      "outbound_full_relay": 8,
+      "outbound_block_relay": 0,
+      "unique_subnets": 8,
+      "listening": true,
+      "protocol_versions": {
+        "70016": 8
+      },
+      "status": "GOOD",
+      "error": null
+    }
+  },
+  "recommendations": [
+    "clearbit: has 0 peers and addnode failed - may need manual intervention",
+    "hotbuns: low subnet diversity (3 unique /16s) - peers may be clustered"
+  ]
+}
