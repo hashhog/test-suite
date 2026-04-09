@@ -1,0 +1,27 @@
+========================================================================
+Mempool & Fee Estimation Test Results
+========================================================================
+Timestamp: 2026-04-09T10:31:51Z
+Alive nodes: rustoshi, clearbit, haskoin
+
+Test                                     Core     rustoshi     clearbit     haskoin     
+---------------------------------------------------------------------------------
+test_tx_accepted_to_mempool              PASS     PASS         PASS         PASS        
+test_double_spend_rejected               PASS     PASS         PASS         PASS        
+test_rbf_replacement                     PASS     PASS         PASS         PASS        
+test_mempool_eviction                    PASS     PASS         PASS         PASS        
+test_mempool_cleared_on_block            PASS     PASS         PASS         PASS        
+test_sendrawtransaction                  PASS     PASS         PASS         PASS        
+test_sendrawtransaction_invalid          PASS     PASS         PASS         PASS        
+test_getmempoolinfo_accuracy             PASS     PASS         PASS         PASS        
+test_fee_estimation_ordering             PASS     PASS         PASS         PASS        
+test_getpeerinfo_format                  PASS     PASS         SKIP         PASS        
+test_getnetworkinfo_format               PASS     PASS         PASS         PASS        
+test_feefilter_respected                 PASS     PASS         PASS         PASS        
+---------------------------------------------------------------------------------
+Core: 12 PASS, 0 FAIL, 0 SKIP
+rustoshi: 12 PASS, 0 FAIL, 0 SKIP
+clearbit: 11 PASS, 0 FAIL, 1 SKIP
+haskoin: 12 PASS, 0 FAIL, 0 SKIP
+
+========================================================================

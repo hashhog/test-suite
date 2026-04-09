@@ -1,0 +1,297 @@
+{
+  "timestamp": "2026-04-09T10:31:51Z",
+  "total_tests": 12,
+  "alive_nodes": [
+    "rustoshi",
+    "clearbit",
+    "haskoin"
+  ],
+  "tests": [
+    {
+      "name": "test_tx_accepted_to_mempool",
+      "core": {
+        "status": "PASS",
+        "detail": "txid=88413f2d530bb1bf48fbdb7f79d7b8e11feb99c22a53d8819493c182d59bd5e2"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "accepted via direct submit"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "accepted via direct submit"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "accepted after retry"
+        }
+      },
+      "duration": 3.0
+    },
+    {
+      "name": "test_double_spend_rejected",
+      "core": {
+        "status": "PASS",
+        "detail": "correctly rejected: Core RPC sendrawtransaction error: {'code': -26, 'message': 'insufficient fee, rejecting replacement 762bfa87cb03f2ca55eb07c531e6bcb2112bafa8aa9e9449aefde9fc40103763, less fees than conflicting txs; 0.000005 < 0.00002'}"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "rejected: rustoshi RPC sendrawtransaction error: {'code': -26, 'message': 'Transaction rejected: rbf: insufficient absolute fee (new: 500, conflicting: 2000)'}"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "rejected: clearbit RPC sendrawtransaction error: {'code': -26, 'message': 'insufficient fee for replacement'}"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "rejected: Remote end closed connection without response"
+        }
+      },
+      "duration": 3.01
+    },
+    {
+      "name": "test_rbf_replacement",
+      "core": {
+        "status": "PASS",
+        "detail": "replaced efc64d09494d11a5... with 33148c47f81550e5..."
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "RBF replacement accepted"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "RBF replacement accepted"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "RBF replacement accepted"
+        }
+      },
+      "duration": 5.01
+    },
+    {
+      "name": "test_mempool_eviction",
+      "core": {
+        "status": "PASS",
+        "detail": "maxmempool=5000000 (limited)"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "maxmempool=314572800"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "maxmempool=314572800"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "maxmempool=314572800"
+        }
+      },
+      "duration": 0.0
+    },
+    {
+      "name": "test_mempool_cleared_on_block",
+      "core": {
+        "status": "PASS",
+        "detail": "tx removed from mempool after block"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": ""
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": ""
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": ""
+        }
+      },
+      "duration": 5.01
+    },
+    {
+      "name": "test_sendrawtransaction",
+      "core": {
+        "status": "PASS",
+        "detail": "txid=3a22041a0f463019..."
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "accepted via sendrawtransaction"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "accepted via sendrawtransaction"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "already relayed via P2P"
+        }
+      },
+      "duration": 2.01
+    },
+    {
+      "name": "test_sendrawtransaction_invalid",
+      "core": {
+        "status": "PASS",
+        "detail": "correctly rejected: Core RPC sendrawtransaction error: {'code': -26, 'message': 'bad-cb-length'}"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "rejected: rustoshi RPC sendrawtransaction error: {'code': -26, 'message': 'Transaction val"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "rejected: clearbit RPC sendrawtransaction error: {'code': -26, 'message': 'non-standard tr"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "rejected: haskoin RPC sendrawtransaction error: {'code': -26, 'message': 'Coinbase scriptS"
+        }
+      },
+      "duration": 0.0
+    },
+    {
+      "name": "test_getmempoolinfo_accuracy",
+      "core": {
+        "status": "PASS",
+        "detail": "size=1"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "size=4"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "size=4"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "size=1"
+        }
+      },
+      "duration": 0.01
+    },
+    {
+      "name": "test_fee_estimation_ordering",
+      "core": {
+        "status": "PASS",
+        "detail": "insufficient data for estimation (expected on fresh regtest)"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "insufficient data"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "insufficient data"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "est1=0.011 est25=0.011"
+        }
+      },
+      "duration": 0.01
+    },
+    {
+      "name": "test_getpeerinfo_format",
+      "core": {
+        "status": "PASS",
+        "detail": "3 peers, fields present"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "1 peers"
+        },
+        "clearbit": {
+          "status": "SKIP",
+          "detail": "Invalid control character at: line 1 column 286 (char 285)"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "1 peers"
+        }
+      },
+      "duration": 0.0
+    },
+    {
+      "name": "test_getnetworkinfo_format",
+      "core": {
+        "status": "PASS",
+        "detail": "version=319900"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "version=250000"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "version=250000"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "version=100000"
+        }
+      },
+      "duration": 0.0
+    },
+    {
+      "name": "test_feefilter_respected",
+      "core": {
+        "status": "PASS",
+        "detail": "low-fee tx rejected: min relay fee not met"
+      },
+      "nodes": {
+        "rustoshi": {
+          "status": "PASS",
+          "detail": "fee filtering present"
+        },
+        "clearbit": {
+          "status": "PASS",
+          "detail": "fee filtering present"
+        },
+        "haskoin": {
+          "status": "PASS",
+          "detail": "fee filtering present"
+        }
+      },
+      "duration": 0.0
+    }
+  ],
+  "core_summary": {
+    "pass": 12,
+    "fail": 0,
+    "skip": 0
+  },
+  "node_summaries": {
+    "rustoshi": {
+      "pass": 12,
+      "fail": 0,
+      "skip": 0
+    },
+    "clearbit": {
+      "pass": 11,
+      "fail": 0,
+      "skip": 1
+    },
+    "haskoin": {
+      "pass": 12,
+      "fail": 0,
+      "skip": 0
+    }
+  }
+}
