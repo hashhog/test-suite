@@ -1,0 +1,42 @@
+{
+  "test": "fuzz-confirmation-100k-blockbrew",
+  "timestamp": "2026-04-09T00:02:35Z",
+  "duration_seconds": 80.5,
+  "iterations": 100000,
+  "seed_blocks": 100,
+  "nodes_tested": [
+    "core",
+    "blockbrew"
+  ],
+  "mutations_by_type": {
+    "random_garbage": 5068,
+    "header_flip": 20110,
+    "remove_tx": 10067,
+    "flip_bits": 19979,
+    "insert_random": 9976,
+    "max_field": 9891,
+    "zero_field": 9926,
+    "duplicate_block": 5045,
+    "truncate": 9938
+  },
+  "stats": {
+    "rejections_expected": 100000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": [],
+  "final_tips": {
+    "core": {
+      "tip": "22518784234cd3225d5611b5c23354e01bd8d013324f68827929cada008de043",
+      "height": 100
+    },
+    "blockbrew": {
+      "tip": "22518784234cd3225d5611b5c23354e01bd8d013324f68827929cada008de043",
+      "height": 100
+    }
+  },
+  "verdict": "PASS"
+}

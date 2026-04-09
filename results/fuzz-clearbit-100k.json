@@ -1,0 +1,42 @@
+{
+  "test": "fuzz-confirmation-100k-clearbit",
+  "timestamp": "2026-04-08T23:59:50Z",
+  "duration_seconds": 70.0,
+  "iterations": 100000,
+  "seed_blocks": 100,
+  "nodes_tested": [
+    "core",
+    "clearbit"
+  ],
+  "mutations_by_type": {
+    "truncate": 9804,
+    "zero_field": 10080,
+    "insert_random": 9915,
+    "flip_bits": 20138,
+    "random_garbage": 4960,
+    "remove_tx": 9953,
+    "duplicate_block": 5067,
+    "header_flip": 20008,
+    "max_field": 10075
+  },
+  "stats": {
+    "rejections_expected": 100000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": [],
+  "final_tips": {
+    "core": {
+      "tip": "22518784234cd3225d5611b5c23354e01bd8d013324f68827929cada008de043",
+      "height": 100
+    },
+    "clearbit": {
+      "tip": "22518784234cd3225d5611b5c23354e01bd8d013324f68827929cada008de043",
+      "height": 100
+    }
+  },
+  "verdict": "PASS"
+}

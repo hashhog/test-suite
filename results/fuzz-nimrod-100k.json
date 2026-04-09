@@ -1,0 +1,42 @@
+{
+  "test": "fuzz-confirmation-100k-nimrod",
+  "timestamp": "2026-04-09T00:01:12Z",
+  "duration_seconds": 74.9,
+  "iterations": 100000,
+  "seed_blocks": 100,
+  "nodes_tested": [
+    "core",
+    "nimrod"
+  ],
+  "mutations_by_type": {
+    "zero_field": 9857,
+    "flip_bits": 19922,
+    "max_field": 10096,
+    "header_flip": 19999,
+    "insert_random": 10107,
+    "remove_tx": 10165,
+    "random_garbage": 4982,
+    "duplicate_block": 4905,
+    "truncate": 9967
+  },
+  "stats": {
+    "rejections_expected": 100000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": [],
+  "final_tips": {
+    "core": {
+      "tip": "22518784234cd3225d5611b5c23354e01bd8d013324f68827929cada008de043",
+      "height": 100
+    },
+    "nimrod": {
+      "tip": "22518784234cd3225d5611b5c23354e01bd8d013324f68827929cada008de043",
+      "height": 100
+    }
+  },
+  "verdict": "PASS"
+}
