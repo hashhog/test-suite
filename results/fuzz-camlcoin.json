@@ -1,0 +1,40 @@
+{
+  "test": "fuzz-camlcoin",
+  "node": "camlcoin",
+  "timestamp": "2026-04-09T00:04:46Z",
+  "duration_seconds": 74.0,
+  "iterations": 100000,
+  "seed_blocks": 100,
+  "mutations_by_type": {
+    "truncate": 10075,
+    "random_garbage": 4881,
+    "max_field": 10067,
+    "flip_bits": 19920,
+    "insert_random": 10175,
+    "remove_tx": 9886,
+    "header_flip": 19953,
+    "zero_field": 10168,
+    "duplicate_block": 4875
+  },
+  "stats": {
+    "rejections_expected": 100000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": [],
+  "unhandled_exceptions": [],
+  "final_tips": {
+    "core": {
+      "tip": "63300852a7839fdac96653855a968b0fde711e9474969a6387ddd77ecd780fe5",
+      "height": 100
+    },
+    "camlcoin": {
+      "tip": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+      "height": 1
+    }
+  },
+  "verdict": "PASS"
+}

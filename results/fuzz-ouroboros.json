@@ -1,0 +1,40 @@
+{
+  "test": "fuzz-ouroboros",
+  "node": "ouroboros",
+  "timestamp": "2026-04-09T00:03:32Z",
+  "duration_seconds": 100.5,
+  "iterations": 100000,
+  "seed_blocks": 100,
+  "mutations_by_type": {
+    "header_flip": 19892,
+    "random_garbage": 5023,
+    "remove_tx": 9837,
+    "insert_random": 10127,
+    "duplicate_block": 5013,
+    "zero_field": 10082,
+    "max_field": 10019,
+    "flip_bits": 20026,
+    "truncate": 9981
+  },
+  "stats": {
+    "rejections_expected": 100000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": [],
+  "unhandled_exceptions": [],
+  "final_tips": {
+    "core": {
+      "tip": "63300852a7839fdac96653855a968b0fde711e9474969a6387ddd77ecd780fe5",
+      "height": 100
+    },
+    "ouroboros": {
+      "tip": "63300852a7839fdac96653855a968b0fde711e9474969a6387ddd77ecd780fe5",
+      "height": 100
+    }
+  },
+  "verdict": "PASS"
+}
