@@ -1,0 +1,18 @@
+=====================================================================================
+FULL FUZZ TESTING SUMMARY — ALL 10 NODES
+=====================================================================================
+Node         Iterations   Crashes    Divergences   Accepted   Verdict 
+-------------------------------------------------------------------------------------
+haskoin      100000       0          0             0          PASS    
+rustoshi     100000       5          0             0          FAIL    
+nimrod       100000       0          0             0          PASS    
+beamchain    100000       0          0             0          PASS    
+hotbuns      100000       0          0             0          PASS    
+clearbit     100000       0          0             0          PASS    
+blockbrew    100000       0          0             0          PASS    
+lunarblock   100000       0          0             0          PASS    
+ouroboros    100000       0          0             0          PASS    
+camlcoin     100000       0          0             0          PASS    
+
+9/10 PASS, 1 FAIL
+rustoshi: 5 crashes during fuzz testing (needs investigation)
