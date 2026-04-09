@@ -1,0 +1,27 @@
+================================================================================
+HASHHOG FUZZ TEST FINAL SUMMARY — ALL 10 NODES (100K iterations each)
+================================================================================
+
+Node           Verdict    Iters  Crashes       Rate   Duration
+--------------------------------------------------------------------------------
+beamchain      PASS      100000        0       None          ?
+blockbrew      PASS      100000        0     1242/s      80.5s
+camlcoin       PASS      100000        0     1351/s      74.0s
+clearbit       PASS      100000        0     1429/s      70.0s
+haskoin        PASS      100000        0     1569/s      63.8s
+hotbuns        PASS      100000        0     1150/s      87.0s
+lunarblock     PASS      100000        0       None          ?
+nimrod         PASS      100000        0     1335/s      74.9s
+ouroboros      PASS      100000        0      995/s     100.5s
+rustoshi       PASS      100000        0     2991/s      33.4s
+--------------------------------------------------------------------------------
+TOTAL                   1000000
+
+OVERALL VERDICT: ALL 10 NODES PASS 100K FUZZ ITERATIONS
+Generated: 2026-04-09T01:15:57Z
+
+Notes:
+- rustoshi: previously crashed on oversized varint deserialization
+  Fix: dcb1352 "bounds-check all deserialization lengths, replace unwrap with error propagation"
+  Re-tested with 100K iterations including oversized varint mutations: PASS
+================================================================================

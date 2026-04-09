@@ -1,0 +1,83 @@
+{
+  "test": "rustoshi-fuzz-post-fix",
+  "commit": "dcb1352c84b160747648b778f977029a210e7689",
+  "commit_message": "dcb1352 fix: bounds-check all deserialization lengths, replace unwrap with error propagation",
+  "timestamp": "2026-04-09T01:15:19Z",
+  "total_iterations": 100000,
+  "duration_seconds": 33.4,
+  "iterations_per_second": 2991.2,
+  "total_crashes": 0,
+  "fatal_crashes": 0,
+  "node_alive_after_test": true,
+  "final_height": 100,
+  "strategy_stats": {
+    "bit_flip": {
+      "total": 15139,
+      "rejected": 15139,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "byte_replace": {
+      "total": 14924,
+      "rejected": 14924,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "truncate": {
+      "total": 9957,
+      "rejected": 9957,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "extend": {
+      "total": 5013,
+      "rejected": 5013,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "insert": {
+      "total": 5027,
+      "rejected": 5027,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "oversized_varint": {
+      "total": 14998,
+      "rejected": 14998,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "varint_in_tx": {
+      "total": 10042,
+      "rejected": 10042,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "header_fields": {
+      "total": 10002,
+      "rejected": 10002,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "zero_fill": {
+      "total": 4991,
+      "rejected": 4991,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "duplicate_section": {
+      "total": 5095,
+      "rejected": 5095,
+      "errors": 0,
+      "timeouts": 0
+    },
+    "max_values": {
+      "total": 4812,
+      "rejected": 4812,
+      "errors": 0,
+      "timeouts": 0
+    }
+  },
+  "crashes": [],
+  "verdict": "PASS"
+}
