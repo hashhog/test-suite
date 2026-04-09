@@ -1,0 +1,32 @@
+========================================================================
+P2P Integration Test Results
+Timestamp: 2026-04-09 01:58:25 UTC
+========================================================================
+
+Test                                             core     rustoshi
+------------------------------------------------------------------
+test_version_handshake                           PASS         PASS 
+test_stale_tip_detection                         PASS         PASS 
+test_invalid_block_disconnect                    PASS         PASS 
+test_periodic_headers                            PASS         FAIL 
+test_sendcmpct_handshake                         PASS         FAIL 
+test_addr_relay                                  PASS         PASS 
+test_feefilter                                   PASS         FAIL 
+test_getblockhash_after_submitblock              PASS         FAIL 
+------------------------------------------------------------------
+
+Per-node summary:
+Node              PASS   FAIL   SKIP  Total
+------------------------------------------
+core                 8      0      0      8
+rustoshi             4      4      0      8
+
+Failures:
+------------------------------------------------------------------------
+  rustoshi/test_periodic_headers: No getheaders/getblocks received within 20s of handshake
+  rustoshi/test_sendcmpct_handshake: No sendcmpct message received after handshake
+  rustoshi/test_feefilter: No feefilter message received within 15s
+  rustoshi/test_getblockhash_after_submitblock: getblockhash(12) error: {'code': -32602, 'message': 'Block height 12 out of range'}
+
+Overall: 12 PASS, 4 FAIL, 0 SKIP (out of 16 total)
+========================================================================

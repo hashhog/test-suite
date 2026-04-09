@@ -1,0 +1,117 @@
+{
+  "timestamp": "2026-04-09T01:58:25Z",
+  "total_tests": 16,
+  "total_pass": 12,
+  "total_fail": 4,
+  "total_skip": 0,
+  "node_stats": {
+    "core": {
+      "pass": 8,
+      "fail": 0,
+      "skip": 0
+    },
+    "rustoshi": {
+      "pass": 4,
+      "fail": 4,
+      "skip": 0
+    }
+  },
+  "tests": {
+    "test_version_handshake": {
+      "core": {
+        "status": "PASS",
+        "message": "Handshake OK, version=70016, user_agent=/Satoshi:31.99.0/",
+        "duration": 0.05
+      },
+      "rustoshi": {
+        "status": "PASS",
+        "message": "Handshake OK, version=70016, user_agent=/Rustoshi:0.1.0/",
+        "duration": 0.05
+      }
+    },
+    "test_stale_tip_detection": {
+      "core": {
+        "status": "PASS",
+        "message": "Node detected stale tip and sent getheaders",
+        "duration": 0.1
+      },
+      "rustoshi": {
+        "status": "PASS",
+        "message": "Node detected stale tip and sent getheaders",
+        "duration": 0.1
+      }
+    },
+    "test_invalid_block_disconnect": {
+      "core": {
+        "status": "PASS",
+        "message": "Node disconnected us after invalid PoW block (correct behavior)",
+        "duration": 3.05
+      },
+      "rustoshi": {
+        "status": "PASS",
+        "message": "Node silently rejected invalid PoW block (tip unchanged)",
+        "duration": 3.06
+      }
+    },
+    "test_periodic_headers": {
+      "core": {
+        "status": "PASS",
+        "message": "Node sent getheaders after handshake",
+        "duration": 0.1
+      },
+      "rustoshi": {
+        "status": "FAIL",
+        "message": "No getheaders/getblocks received within 20s of handshake",
+        "duration": 20.1
+      }
+    },
+    "test_sendcmpct_handshake": {
+      "core": {
+        "status": "PASS",
+        "message": "sendcmpct received: version=2, announce=False",
+        "duration": 0.1
+      },
+      "rustoshi": {
+        "status": "FAIL",
+        "message": "No sendcmpct message received after handshake",
+        "duration": 10.07
+      }
+    },
+    "test_addr_relay": {
+      "core": {
+        "status": "PASS",
+        "message": "addr message accepted, node still operational",
+        "duration": 4.06
+      },
+      "rustoshi": {
+        "status": "PASS",
+        "message": "addr message accepted, node still operational",
+        "duration": 4.06
+      }
+    },
+    "test_feefilter": {
+      "core": {
+        "status": "PASS",
+        "message": "feefilter received: feerate=100 sat/kB",
+        "duration": 0.1
+      },
+      "rustoshi": {
+        "status": "FAIL",
+        "message": "No feefilter message received within 15s",
+        "duration": 15.09
+      }
+    },
+    "test_getblockhash_after_submitblock": {
+      "core": {
+        "status": "PASS",
+        "message": "getblockhash(11) = 7059fd0d069cd3af... (correct)",
+        "duration": 0.51
+      },
+      "rustoshi": {
+        "status": "FAIL",
+        "message": "getblockhash(12) error: {'code': -32602, 'message': 'Block height 12 out of range'}",
+        "duration": 0.5
+      }
+    }
+  }
+}
