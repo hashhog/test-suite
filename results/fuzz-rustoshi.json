@@ -1,0 +1,45 @@
+{
+  "node": "rustoshi",
+  "iterations": 100000,
+  "crashes": [
+    {
+      "iteration": 73,
+      "mutation": "garbage",
+      "block_hex_prefix": "000000200e5d19dca96b78a240a899c3743d843b6299db38adfa3347f960a5fa7de0381877cc2c507adca08b00cc772bf91deeff1efcb3519ec26b0c023f0916640d193a91ecd669ffff7f20000000000102000000000101000000000000000000000000",
+      "error": "<urlopen error [Errno 111] Connection refused>"
+    },
+    {
+      "iteration": 74,
+      "mutation": "corrupt_nonce",
+      "block_hex_prefix": "000000207bd7e477248273b8ecdcafb60916e14f645d14acf29e6cb0b35f00f645a76261be2c095948e81f947bb6b41f6eb42faca623bfb3792fd9a785b9a46f2490cd449becd669ffff7f20e880f9f80102000000000101000000000000000000000000",
+      "error": "<urlopen error [Errno 111] Connection refused>"
+    },
+    {
+      "iteration": 75,
+      "mutation": "truncate",
+      "block_hex_prefix": "000000205dbe9bc3bf8a52be34edf68abfefed3180e0cbcb8e72d6db8482cd02ea23537e65dad7578a545db57c6eb71a79e09034e1f29978705b43814e0d74d0f52c9c6998ecd669ffff7f20000000000102000000000101000000000000000000000000",
+      "error": "<urlopen error [Errno 111] Connection refused>"
+    },
+    {
+      "iteration": 76,
+      "mutation": "garbage",
+      "block_hex_prefix": "000000202a3c518bfa2cab03f224aefc9badbe486b558c06c38d15d3d8d27449653a333a9b522e0bd4e069560e0243e2650571dfbb02d105b44ba1823ff4d2014b34a0049decd669ffff7f20000000000102000000000101000000000000000000000000",
+      "error": "<urlopen error [Errno 111] Connection refused>"
+    },
+    {
+      "iteration": 77,
+      "mutation": "oversize",
+      "block_hex_prefix": "00000020ac7a105b2c897fa443010435588f25d21fb6192bc3c614684278bbca3d315659ddaff47b7a5f43261a0f59b869619f7ba7c9e0b5cfca4d7cbb06fac621a470d89fecd669ffff7f20030000000102000000000101000000000000000000000000",
+      "error": "<urlopen error [Errno 111] Connection refused>"
+    }
+  ],
+  "divergences": [],
+  "accepted_mutations": [],
+  "hangs": [],
+  "verdict": "FAIL",
+  "start_time": "2026-04-09T00:04:21Z",
+  "end_time": "2026-04-09T00:04:26Z",
+  "elapsed_seconds": 5.0,
+  "iterations_per_second": 19843.2,
+  "final_height": null
+}

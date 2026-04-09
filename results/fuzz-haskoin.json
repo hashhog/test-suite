@@ -1,0 +1,15 @@
+{
+  "node": "haskoin",
+  "iterations": 100000,
+  "crashes": [],
+  "divergences": [],
+  "accepted_mutations": [],
+  "hangs": [],
+  "verdict": "PASS",
+  "start_time": "2026-04-09T00:04:26Z",
+  "end_time": "2026-04-09T00:05:29Z",
+  "elapsed_seconds": 63.8,
+  "iterations_per_second": 1568.6,
+  "final_height": 100,
+  "final_hash": "367d4375afbabebe80660ed7644a7a57fcd24eb56db496f2e154041f788423e0"
+}
