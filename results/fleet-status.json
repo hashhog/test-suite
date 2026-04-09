@@ -1,0 +1,135 @@
+{
+  "timestamp": "2026-04-09T01:52:51Z",
+  "core_height": 944272,
+  "node_count": 11,
+  "rpc_ok_count": 9,
+  "alert_count": 3,
+  "alerts": [
+    "BEHIND: nimrod at 512314, Core at 944272 (behind by 431958)",
+    "DOWN: clearbit \u2014 RPC not responding",
+    "DOWN: blockbrew \u2014 RPC not responding"
+  ],
+  "nodes": [
+    {
+      "name": "core",
+      "port": 8332,
+      "rpc_ok": true,
+      "height": 944272,
+      "best_hash": "00000000000000000001db0097100bb7a3f6f6b98865a8371bb7dd96b2561814",
+      "peers": 10,
+      "rss_kb": 3826856,
+      "ibd": false,
+      "error": null
+    },
+    {
+      "name": "haskoin",
+      "port": 8354,
+      "rpc_ok": true,
+      "height": 944272,
+      "best_hash": "00000000000000000001db0097100bb7a3f6f6b98865a8371bb7dd96b2561814",
+      "peers": 7,
+      "rss_kb": 1065916,
+      "ibd": false,
+      "error": null
+    },
+    {
+      "name": "rustoshi",
+      "port": 8350,
+      "rpc_ok": true,
+      "height": 944272,
+      "best_hash": "00000000000000000001db0097100bb7a3f6f6b98865a8371bb7dd96b2561814",
+      "peers": 8,
+      "rss_kb": 73820,
+      "ibd": true,
+      "error": null
+    },
+    {
+      "name": "nimrod",
+      "port": 8353,
+      "rpc_ok": true,
+      "height": 512314,
+      "best_hash": "000000000000000000043b1c8b2b3917ea87e9abca33256eb7e11431771ebc78",
+      "peers": 9,
+      "rss_kb": 2926512,
+      "ibd": false,
+      "error": null
+    },
+    {
+      "name": "beamchain",
+      "port": 48348,
+      "rpc_ok": true,
+      "height": 944271,
+      "best_hash": "000000000000000000006e91ad2219131f71b28e52f381501f5246491ab75f3d",
+      "peers": 10,
+      "rss_kb": 319068,
+      "ibd": false,
+      "error": null
+    },
+    {
+      "name": "hotbuns",
+      "port": 8351,
+      "rpc_ok": true,
+      "height": 944272,
+      "best_hash": "00000000000000000001db0097100bb7a3f6f6b98865a8371bb7dd96b2561814",
+      "peers": 3,
+      "rss_kb": 1408012,
+      "ibd": false,
+      "error": null
+    },
+    {
+      "name": "clearbit",
+      "port": 8356,
+      "rpc_ok": false,
+      "height": null,
+      "best_hash": null,
+      "peers": null,
+      "rss_kb": 8568160,
+      "ibd": null,
+      "error": "timed out"
+    },
+    {
+      "name": "blockbrew",
+      "port": 8355,
+      "rpc_ok": false,
+      "height": null,
+      "best_hash": null,
+      "peers": null,
+      "rss_kb": 2972368,
+      "ibd": null,
+      "error": "timed out"
+    },
+    {
+      "name": "lunarblock",
+      "port": 8358,
+      "rpc_ok": true,
+      "height": 276461,
+      "best_hash": "00000000000000039a99dd09b3da5e206d3c064859c5bbdcb3e34dc2b97adc44",
+      "peers": 8,
+      "rss_kb": 3240980,
+      "ibd": true,
+      "error": null
+    },
+    {
+      "name": "ouroboros",
+      "port": 8359,
+      "rpc_ok": true,
+      "height": 418923,
+      "best_hash": "000000000000000001d112bc79cfb1ce7491c8668159cf232c30e647bdf6e64f",
+      "peers": 10,
+      "rss_kb": 4377836,
+      "ibd": true,
+      "error": null
+    },
+    {
+      "name": "camlcoin",
+      "port": 8357,
+      "rpc_ok": true,
+      "height": 565771,
+      "best_hash": "000000000000000000026fa9f4ded5e05b01730497960b66809d6020cf9ba4f2",
+      "peers": 8,
+      "rss_kb": 16980584,
+      "ibd": true,
+      "error": null
+    }
+  ]
+}
