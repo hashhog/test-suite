@@ -1,0 +1,28 @@
+{
+  "node": "lunarblock",
+  "test": "fuzz-testing",
+  "timestamp": "2026-04-09T00:06:58Z",
+  "iterations": 100000,
+  "seed_blocks": 100,
+  "verdict": "PASS",
+  "mutations_by_type": {
+    "truncate": 9913,
+    "zero_field": 9940,
+    "header_flip": 20116,
+    "flip_bits": 19980,
+    "remove_tx": 10113,
+    "max_field": 9926,
+    "insert_random": 9944,
+    "duplicate_block": 5081,
+    "random_garbage": 4987
+  },
+  "stats": {
+    "rejections_expected": 100000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": []
+}

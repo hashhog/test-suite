@@ -1,0 +1,28 @@
+{
+  "node": "beamchain",
+  "test": "fuzz-testing",
+  "timestamp": "2026-04-09T00:08:35Z",
+  "iterations": 100000,
+  "seed_blocks": 100,
+  "verdict": "PASS",
+  "mutations_by_type": {
+    "flip_bits": 20029,
+    "truncate": 10029,
+    "insert_random": 10062,
+    "header_flip": 19853,
+    "remove_tx": 9933,
+    "zero_field": 10095,
+    "max_field": 9956,
+    "random_garbage": 4994,
+    "duplicate_block": 5049
+  },
+  "stats": {
+    "rejections_expected": 100000,
+    "rejections_unexpected": 0,
+    "accepts_expected": 0,
+    "accepts_unexpected": 0
+  },
+  "crashes": [],
+  "hangs": [],
+  "divergences": []
+}
