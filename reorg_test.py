@@ -88,6 +88,38 @@ NODES = {
         ],
         "rpcport": 20358,
     },
+    # Ouroboros (Python+Rust) was missing from this dict — verification
+    # pass 2026-05-05 found that today's reorg fix (15e3a7e: route
+    # Python `_handle_reorg` to existing Rust `disconnect_block_at_height`)
+    # was never exercised end-to-end against the fleet.  Closing the
+    # gap.  Notes:
+    #   • Ouroboros has no `--rpcuser` / `--rpcpassword` flags on its
+    #     `start` command (cli.py:365); credentials come from
+    #     `<datadir>/ouroboros.conf` (config.py:141-142, key names
+    #     `rpcuser=` / `rpcpassword=`).  We pre-write that file in
+    #     start_node() below so test:test auth works without modifying
+    #     the ouroboros CLI.
+    #   • Invocation mirrors `tools/diff-test.sh::launch_entity`:
+    #     `python3 -m ouroboros.cli --network regtest --data-dir <D>
+    #      start --force --rpc-port <P> --p2p-port <Q>`.
+    #   • The runtime needs `cwd=$HASHHOG/ouroboros` so the in-tree
+    #     Rust extension is importable; same pattern as lunarblock.
+    "ouroboros": {
+        "binary": "python3",
+        "args": [
+            "-m", "ouroboros.cli",
+            "--network", "regtest",
+            f"--data-dir={REORG_DIR}/ouroboros",
+            "start",
+            "--force",
+            "--rpc-port", "20359",
+            "--p2p-port", "20459",
+            "--nolisten",
+        ],
+        "rpcport": 20359,
+        "cwd": f"{HASHHOG}/ouroboros",
+        "preflight": "write_ouroboros_conf",
+    },
 }
 
 processes = {}
@@ -144,22 +176,58 @@ def core_cli(*args):
 # Node management
 # ---------------------------------------------------------------------------
 
+def write_ouroboros_conf(datadir):
+    """Pre-write ouroboros.conf with test:test rpc creds.
+
+    Ouroboros's `start` command has no --rpcuser/--rpcpassword flags
+    (cli.py:365); credentials are read from <datadir>/ouroboros.conf
+    (config.py:141-142, parsed via configparser which REQUIRES a
+    section header).  Use the named [rpc] section — NodeConfig.get()
+    walks chain-section, then named sections (rpc/p2p/network/logging),
+    then DEFAULT (config.py:256-259).  configparser treats keys in
+    [DEFAULT] as inherited DEFAULTS rather than addressable options, so
+    has_option('DEFAULT', 'rpcuser') returns False and the value never
+    surfaces — verified empirically before settling on [rpc].
+    """
+    conf_path = os.path.join(datadir, "ouroboros.conf")
+    with open(conf_path, "w") as f:
+        f.write("[rpc]\n")
+        f.write("rpcuser=test\n")
+        f.write("rpcpassword=test\n")
+        f.write("rpcallowip=127.0.0.1\n")
+        f.write("rpcbind=127.0.0.1\n")
+
+
+PREFLIGHT_HANDLERS = {
+    "write_ouroboros_conf": write_ouroboros_conf,
+}
+
+
 def start_node(name):
     cfg = NODES[name]
     datadir = f"{REORG_DIR}/{name}"
     os.makedirs(datadir, exist_ok=True)
+
+    # Optional preflight (e.g. write a config file before launch).
+    preflight = cfg.get("preflight")
+    if preflight:
+        handler = PREFLIGHT_HANDLERS.get(preflight)
+        if handler is None:
+            raise RuntimeError(f"Unknown preflight handler: {preflight}")
+        handler(datadir)
+
     log_path = f"{REORG_DIR}/{name}.log"
     log_file = open(log_path, "w")
 
-    if name == "lunarblock":
-        cmd = [cfg["binary"]] + cfg["args"]
-        proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file,
-                                preexec_fn=os.setsid,
-                                cwd=f"{HASHHOG}/lunarblock")
-    else:
-        cmd = [cfg["binary"]] + cfg["args"]
-        proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file,
-                                preexec_fn=os.setsid)
+    cmd = [cfg["binary"]] + cfg["args"]
+    cwd = cfg.get("cwd")
+    if cwd is None and name == "lunarblock":
+        # Backwards-compat: lunarblock used a hard-coded cwd before
+        # the per-node `cwd` field landed.  Keep until config migrates.
+        cwd = f"{HASHHOG}/lunarblock"
+    proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file,
+                            preexec_fn=os.setsid,
+                            cwd=cwd)
     processes[name] = proc
     return proc
 
