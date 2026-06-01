@@ -97,6 +97,7 @@ RPC_PASS = "test"
 REGTEST_BITS_HEX = "207fffff"  # haskoin Consensus.hs:1042 regtest powLimit bits
 REGTEST_TARGET = bits_to_target(REGTEST_BITS_HEX)  # trivially easy
 SUBSIDY_REGTEST = 50 * 100_000_000  # blockRewardForNet(regtest, low height)
+COINBASE_MATURITY = 100  # haskoin Consensus.hs netCoinbaseMaturity (regtest=100)
 
 # Monotonic per-height block timestamps.  haskoin's addHeader enforces the
 # BIP-113 median-time-past gate (Consensus.hs:4229-4233): a header is rejected
@@ -229,10 +230,11 @@ def _submit_legacy_coinbase_block(prevhash_be: str, height: int):
     return block_hash_le[::-1].hex(), cb_txid_le[::-1].hex(), cb_value
 
 
-def prime_chain(n_blocks: int = 3):
+def prime_chain(n_blocks: int = 105, immature_depth: int = 3):
     """Mine ``n_blocks`` VALID coinbase-only blocks via submitblock so we have
-    (a) a tip height >= 1 and (b) a spendable OP_TRUE coinbase UTXO to
-    reference in the bad block's non-coinbase tx (needed to pass G19).
+    (a) a tip height >= 101 and (b) TWO spendable OP_TRUE coinbase UTXOs to
+    reference in the injected block's non-coinbase tx (needed to pass G19):
+    one MATURE (>= COINBASE_MATURITY=100 deep) and one IMMATURE (a few deep).
 
     We build the priming blocks ENTIRELY in-harness with a legacy
     (non-witness) coinbase rather than reusing regtest_miner.build_coinbase_tx
@@ -243,8 +245,25 @@ def prime_chain(n_blocks: int = 3):
     recorded spend_outpoint txid is computed by the SAME serializer the bad/good
     blocks use, so it matches haskoin's stored UTXO byte-for-byte.
 
-    Returns (tip_hash_hex_be, tip_height, spend_outpoint) where spend_outpoint
-    is (txid_be_hex, vout, value) of the FIRST primed block's coinbase output.
+    WHY >= 101 BLOCKS (load-bearing, per _coinbase-maturity-gap doc):  the
+    injected block lands at tip+1.  For the maturity-fix to leave the `good`
+    control + the W164 reject vectors UNCHANGED post-fix, each of those vectors
+    must spend a MATURE coinbase (their intended defect — bad value / bad script
+    / bad sigops — is then the ONLY reason they reject; maturity does not mask
+    it).  A coinbase is mature when (tip+1) - coinHeight >= 100.  Priming 105
+    blocks gives a tip of (start + 105); the FIRST primed coinbase is then
+    >= 104 deep at injection time -> mature.  The new immature vector instead
+    spends a RECENT coinbase (``immature_depth`` from the tip, default 3) which
+    is < 100 deep -> immature, so AFTER the fix it (and only it) flips to reject.
+
+    Returns (tip_hash_hex_be, tip_height, mature_outpoint, immature_outpoint)
+    where each *_outpoint is (txid_be_hex, vout, value):
+      * mature_outpoint   = the FIRST primed block's coinbase (>= 100 deep) —
+                            used by good / bad-cb-amount / bad-tx-in-block /
+                            bad-blk-sigops so only their intended defect remains.
+      * immature_outpoint = a coinbase ``immature_depth`` blocks below the tip
+                            (< 100 deep) — used by immature-coinbase-spend so the
+                            ONLY defect is maturity.
     """
     tip_hash, err = _rpc("getbestblockhash")
     if err:
@@ -256,17 +275,36 @@ def prime_chain(n_blocks: int = 3):
         sys.exit(1)
     height = int(height)
 
-    spend_outpoint = None
+    # Guarantee enough blocks to produce a mature coinbase plus an immature one
+    # at the requested depth below the tip.  Need: first coinbase >= 100 deep at
+    # injection (tip+1), and a distinct immature coinbase immature_depth deep.
+    min_blocks = COINBASE_MATURITY + immature_depth + 1
+    if n_blocks < min_blocks:
+        n_blocks = min_blocks
+
+    mature_outpoint = None
+    immature_outpoint = None
+    # The immature coinbase must sit ``immature_depth`` blocks below the final
+    # tip.  With a final tip height of (start_height + n_blocks), the coinbase at
+    # height (final_tip - immature_depth + 1) is exactly immature_depth deep when
+    # the injected block at (final_tip + 1) validates it:
+    #     spend_height - coinHeight = (final_tip + 1) - (final_tip - immature_depth + 1)
+    #                               = immature_depth   ( < 100 -> immature ).
+    final_tip = height + n_blocks
+    immature_cb_height = final_tip - immature_depth + 1
     for _ in range(n_blocks):
         next_height = height + 1
         bhash_be, cb_txid_be, cb_value = _submit_legacy_coinbase_block(
             tip_hash, next_height)
-        if spend_outpoint is None:
-            # Record the FIRST primed block's coinbase as the spendable UTXO.
-            spend_outpoint = (cb_txid_be, 0, cb_value)
+        if mature_outpoint is None:
+            # FIRST primed block's coinbase -> deepest -> mature at injection.
+            mature_outpoint = (cb_txid_be, 0, cb_value)
+        if next_height == immature_cb_height:
+            # A recent coinbase -> immature_depth deep at injection -> immature.
+            immature_outpoint = (cb_txid_be, 0, cb_value)
         tip_hash, height = bhash_be, next_height
 
-    return tip_hash, height, spend_outpoint
+    return tip_hash, height, mature_outpoint, immature_outpoint
 
 
 # --------------------------------------------------------------------------
@@ -423,12 +461,53 @@ def make_block_bad_sigops(prevhash_be, height, spend_outpoint) -> bytes:
     return _assemble_block(prevhash_be, height, [cb, tx1])
 
 
+def make_block_immature_coinbase_spend(prevhash_be, height, spend_outpoint) -> bytes:
+    """REJECT VECTOR 4 (bad-txns-premature-spend-of-coinbase): the non-coinbase
+    tx spends an IMMATURE coinbase output — one only a few blocks deep (3 by
+    default), far short of COINBASE_MATURITY=100.  Coinbase value is CORRECT and
+    the input script is empty (OP_TRUE prevout, satisfied trivially), so the
+    block is otherwise fully valid — the ONLY defect is coinbase maturity.
+
+    Unlike the good / bad-* vectors (which spend the MATURE primed coinbase so
+    only their intended defect remains), this one is deliberately wired by
+    main() to the IMMATURE outpoint recorded by prime_chain.
+
+    Maturity is checked in validateFullBlock (Consensus.hs section 0a, applied
+    fix); the live-arm connectBlock(connectBlockAt) never ran it pre-fix, and the
+    TxOut-only utxoMap at Consensus.hs:2504 discards the per-coin height/coinbase
+    metadata the check needs.
+
+    Expected: PRE-FIX  -> ACCEPTED (tip advances) = the maturity false-accept.
+              POST-FIX -> REJECTED (tip stays)    = validateFullBlock now runs
+                          the maturity loop (section 0a).
+    Bitcoin Core verdict on the equivalent block: reject
+    bad-txns-premature-spend-of-coinbase (consensus/tx_verify.cpp:179,
+    validation.cpp:2535 connect-path, no +1).
+    """
+    prev_txid, vout, prev_value = spend_outpoint
+    cb, _ = _build_valid_coinbase(height)
+    tx1 = _serialize_legacy_tx(
+        version=2,
+        inputs=[(prev_txid, vout, b"", 0xFFFFFFFF)],  # OP_TRUE: empty scriptSig
+        outputs=[(prev_value, OP_TRUE)],
+    )
+    return _assemble_block(prevhash_be, height, [cb, tx1])
+
+
 VECTORS = {
     "good": make_block_good,
     "bad-cb-amount": make_block_bad_cb_amount,
     "bad-tx-in-block": make_block_bad_tx_script,
     "bad-blk-sigops": make_block_bad_sigops,
+    "immature-coinbase-spend": make_block_immature_coinbase_spend,  # NEW
 }
+
+# Vectors that must spend a MATURE coinbase so the maturity fix leaves them
+# unchanged (their intended defect — or, for `good`, nothing — is the only
+# reason they accept/reject).  The maturity vector alone spends the immature
+# coinbase.  main() uses this set to pick which recorded outpoint to feed each
+# builder.
+IMMATURE_VECTORS = {"immature-coinbase-spend"}
 
 
 # --------------------------------------------------------------------------
@@ -465,8 +544,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--vector", required=True, choices=sorted(VECTORS),
                     help="which block to inject")
-    ap.add_argument("--prime", type=int, default=3,
-                    help="number of valid blocks to mine before injecting")
+    ap.add_argument("--prime", type=int, default=105,
+                    help="number of valid blocks to mine before injecting "
+                         "(>= 101 so a MATURE coinbase exists; clamped up "
+                         "internally if too low)")
+    ap.add_argument("--immature-depth", type=int, default=3,
+                    help="depth (< 100) of the coinbase the immature-coinbase-"
+                         "spend vector references")
     ap.add_argument("--keep-datadir", action="store_true")
     args = ap.parse_args()
 
@@ -474,15 +558,30 @@ def main():
     rc = 1
     try:
         wait_for_rpc()
-        tip_hash, tip_height, spend_outpoint = prime_chain(args.prime)
-        print(f"[prime] tip={tip_hash[:16]}... height={tip_height} "
-              f"spend_outpoint=({spend_outpoint[0][:16]}...,{spend_outpoint[1]},"
-              f"{spend_outpoint[2]} sats)")
+        tip_hash, tip_height, mature_outpoint, immature_outpoint = prime_chain(
+            args.prime, args.immature_depth)
+        # Mature coinbase is the FIRST primed block's, at height 1 (node starts
+        # at genesis=0), so its depth at injection (tip+1) == tip_height.
+        mature_depth = tip_height
+        print(f"[prime] tip={tip_hash[:16]}... height={tip_height}\n"
+              f"        mature_outpoint=({mature_outpoint[0][:16]}...,"
+              f"{mature_outpoint[1]},{mature_outpoint[2]} sats) "
+              f"depth={mature_depth} (>= {COINBASE_MATURITY} -> mature)\n"
+              f"        immature_outpoint=({immature_outpoint[0][:16]}...,"
+              f"{immature_outpoint[1]},{immature_outpoint[2]} sats) "
+              f"depth={args.immature_depth} (< {COINBASE_MATURITY} -> immature)")
 
+        # Maturity vector spends the IMMATURE coinbase (its only defect is
+        # maturity); every other vector spends the MATURE coinbase so the
+        # maturity fix leaves it unchanged.
+        spend_outpoint = (immature_outpoint if args.vector in IMMATURE_VECTORS
+                          else mature_outpoint)
         builder = VECTORS[args.vector]
         block = builder(tip_hash, tip_height + 1, spend_outpoint)
         print(f"[inject] vector={args.vector} size={len(block)} bytes "
-              f"at height {tip_height + 1}")
+              f"at height {tip_height + 1} "
+              f"(spends {'immature' if args.vector in IMMATURE_VECTORS else 'mature'} "
+              f"coinbase {spend_outpoint[0][:16]}...)")
 
         asyncio.run(inject(block))
 
