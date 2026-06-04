@@ -224,9 +224,16 @@ nblk="$(printf '%s' "$resp" | py_field 'len(r)')"
 if [[ "$nblk" != "121" ]]; then finish FAIL "generatetoaddress did not mine 121 (got '${nblk}')"; fi
 
 # ── 6. getbalance + listunspent (the two probe-crashers) ────────────────────
+# getbalance now reports the MATURE spendable balance only (immature coinbases
+# excluded — Core parity). Snapshot the immature total too so the later debit
+# assertion can add back any coinbase that MATURES while we mine the confirming
+# block (mining advances the tip, so a near-boundary coinbase crosses 101 confs
+# and lands in the spendable balance — a real, correct accounting effect).
 FUNDED="$(rpc_call "$RPC/wallet/spend" getbalance '[]' | py_field 'r')"
 if [[ "$FUNDED" == "__ERR__" ]]; then finish FAIL "getbalance crashed"; fi
-log "funded balance=$FUNDED"
+IMMATURE_PRE="$(rpc_call "$RPC/wallet/spend" getbalances '[]' | py_field 'r["mine"]["immature"]')"
+if [[ "$IMMATURE_PRE" == "__ERR__" ]]; then IMMATURE_PRE=0; fi
+log "funded balance=$FUNDED (immature=$IMMATURE_PRE)"
 if [[ "$(fcmp "$FUNDED" gt 0)" != "True" ]]; then finish FAIL "funded balance not positive ($FUNDED)"; fi
 
 # listunspent must not crash and must list owned UTXOs (the spendable set).
@@ -292,13 +299,22 @@ if [[ "$(fcmp "$RECV_AMT" eq "$SEND_AMT")" != "True" ]]; then
 fi
 log "recipient credited=$RECV_AMT"
 
-# sender debited by sent + fee (fee >= 0). MINER is foreign, so no coinbase
-# inflation: AFTER = FUNDED - SEND_AMT - fee  =>  debit = FUNDED - AFTER.
+# sender debited by sent + fee (fee >= 0). MINER is foreign, so the confirming
+# block's COINBASE does not credit the sender. But mining that block advances
+# the tip, maturing any coinbase that crosses 101 confs — its value moves from
+# `immature` into the spendable balance. Add that matured amount back so the
+# debit reflects the spend alone:
+#   AFTER = FUNDED - SEND_AMT - fee + matured
+#   matured = IMMATURE_PRE - IMMATURE_POST
+#   => debit = (FUNDED + matured) - AFTER = SEND_AMT + fee.
 AFTER="$(rpc_call "$RPC/wallet/spend" getbalance '[]' | py_field 'r')"
 if [[ "$AFTER" == "__ERR__" ]]; then finish FAIL "getbalance post-spend crashed"; fi
-DEBIT="$(python3 -c "print(round(float('$FUNDED') - float('$AFTER'), 8))")"
+IMMATURE_POST="$(rpc_call "$RPC/wallet/spend" getbalances '[]' | py_field 'r["mine"]["immature"]')"
+if [[ "$IMMATURE_POST" == "__ERR__" ]]; then IMMATURE_POST="$IMMATURE_PRE"; fi
+MATURED="$(python3 -c "print(round(float('$IMMATURE_PRE') - float('$IMMATURE_POST'), 8))")"
+DEBIT="$(python3 -c "print(round(float('$FUNDED') + float('$MATURED') - float('$AFTER'), 8))")"
 FEE="$(python3 -c "print(round(float('$DEBIT') - float('$SEND_AMT'), 8))")"
-log "sender FUNDED=$FUNDED AFTER=$AFTER debit=$DEBIT fee=$FEE"
+log "sender FUNDED=$FUNDED AFTER=$AFTER matured=$MATURED debit=$DEBIT fee=$FEE"
 # debit must be >= sent (i.e. fee >= 0) and == sent + fee by construction.
 if [[ "$(fcmp "$DEBIT" ge "$SEND_AMT")" != "True" ]]; then
   finish FAIL "sender debit $DEBIT < sent $SEND_AMT (balance went UP?)"
