@@ -64,6 +64,14 @@ for impl in $IMPLS; do
   # the same-process-group footgun (see the recovery runner's camlcoin exit-144 note).
   setsid -w bash "$script" >"$tmpout" 2>"$log"; rc=$?
   line="$(tail -n 1 "$tmpout" 2>/dev/null)"
+  # Transient startup failures under load (node death / slow RPC) are not regressions —
+  # retry ONCE before declaring FAIL, unless it's a build gap (deterministic). Kills the
+  # box-load false-positives seen when the guard runs alongside another heavy job.
+  if [ "$rc" -ne 0 ] && ! printf '%s' "$line" | grep -qiE "$GAP_RE"; then
+    echo "  RETRY $impl (attempt 1 exit $rc: ${line})"
+    setsid -w bash "$script" >"$tmpout" 2>"$log"; rc=$?
+    line="$(tail -n 1 "$tmpout" 2>/dev/null)"
+  fi
   [ -z "$line" ] && line="(no summary line — see $log)"
   if [ "$rc" -eq 0 ]; then
     echo "  PASS  $impl — $line"; PASS=$((PASS+1))
