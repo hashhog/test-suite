@@ -143,7 +143,10 @@ NODE_PID=$!
 log "node pid=$NODE_PID"
 
 # ── 3. Locate the cookie + wait for RPC. ───────────────────────────────────
-deadline=$(( $(date +%s) + 45 ))
+# 150s (not 45s): ouroboros is Python — slowest startup — and under the nightly
+# guard it launches AFTER 20 other regtest nodes (recovery+spend passes), so its
+# RPC can take well over 45s to come up under that accumulated load.
+deadline=$(( $(date +%s) + 150 ))
 while (( $(date +%s) < deadline )); do
     if [[ -z "$COOKIE" ]]; then
         for c in "$DATADIR/.cookie" "$DATADIR/regtest/.cookie"; do
@@ -160,9 +163,9 @@ while (( $(date +%s) < deadline )); do
     kill -0 "$NODE_PID" 2>/dev/null || { tail -20 "$LOGFILE" >&2 || true; fail "node exited during startup (see $LOGFILE)"; }
     sleep 1
 done
-[[ -n "$COOKIE" ]] || fail "cookie never appeared within 45s"
+[[ -n "$COOKIE" ]] || fail "cookie never appeared within 150s"
 r=$(rpc getblockcount)
-echo "$r" | grep -q '"result"' || fail "RPC never responded within 45s"
+echo "$r" | grep -q '"result"' || fail "RPC never responded within 150s"
 
 # ── 4. Restore the fixed seed on the default wallet, derive A1. ────────────
 log "sethdseed (fixed) on default wallet"
