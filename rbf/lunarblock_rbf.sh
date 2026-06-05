@@ -153,7 +153,13 @@ fuser -k "${LB_RPC}/tcp"   >/dev/null 2>&1 || true
 fuser -k "${LB_P2P}/tcp"   >/dev/null 2>&1 || true
 fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
 fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
-sleep 1
+# A just-SIGKILLed LuaJIT holder can keep its listen socket briefly, so a flat
+# `sleep 1` races -> "address already in use" under sustained load (caught by the
+# 2026-06-05 consolidation guard). Poll until the RPC+P2P ports actually release.
+for _ in $(seq 1 15); do
+  fuser "${LB_RPC}/tcp" >/dev/null 2>&1 || fuser "${LB_P2P}/tcp" >/dev/null 2>&1 || break
+  sleep 1
+done
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"
 
