@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# run-gettxoutsetinfo-regression.sh — gettxoutsetinfo UTXO-set Core-parity differential.
+#
+# Runs each per-impl test in utxosetinfo/<impl>_gettxoutsetinfo.sh. Each test is self-
+# contained: it shares ONE chain (incl a spend) between its impl and a real bitcoind
+# regtest ORACLE (own scratch + ports, -listen=0), then asserts gettxoutsetinfo matches
+# Core — most importantly the UTXO-set HASH, which is a fingerprint of the entire UTXO set:
+#
+#   fields -> height, bestblock, txouts, total_amount byte-EXACT vs Core.
+#   hash   -> the set hash (hash_serialized_3, or muhash where that's the impl's Core hash)
+#             byte-EXACT vs Core -> proves the whole UTXO set (consensus STATE) is identical.
+#   mutate -> mine 1 more block: height+1, bestblock+hash change on both and still match.
+#   errors -> hash_serialized_3 for a specific block -> -8; bad hash_type -> error.
+#   (bogosize/transactions/disk_size: present + typed only, not byte-equal.)
+#
+# Thirteenth differential axis — the deepest indexing cell (consensus-state identity). A FAIL
+# means an impl's UTXO set diverges from Core (wrong coins, wrong accounting, wrong hash algo).
+#
+# Each test prints exactly ONE summary line — "GETTXOUTSETINFO <impl>: PASS/FAIL/SKIP ..." —
+# and exits 0 (PASS) / 1 (FAIL). Impls with no UTXO-set-hash machinery, no test yet, or an
+# unbuilt binary SKIP. A transient startup race retries once.
+#
+# HEAVY: a regtest impl node + a Core oracle per impl, SEQUENTIALLY. Gated behind a mem floor.
+#
+# Exit 0 = no regression (all PASS, modulo SKIPs); non-zero = at least one impl regressed.
+#
+#   Usage:  run-gettxoutsetinfo-regression.sh
+#           GTXO_IMPLS="rustoshi nimrod" run-gettxoutsetinfo-regression.sh
+set -uo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+GTXO="$DIR/utxosetinfo"
+
+export PATH="/home/work/.bun/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export haskoin_datadir="${haskoin_datadir:-/home/work/hashhog/haskoin}"
+
+IMPLS="${GTXO_IMPLS:-rustoshi nimrod ouroboros blockbrew hotbuns camlcoin beamchain clearbit lunarblock haskoin}"
+LOGDIR="${GTXO_LOGDIR:-/tmp/gettxoutsetinfo-regression}"
+mkdir -p "$LOGDIR"
+
+GAP_RE='not found|not built|no binary|release binary|rebuild|missing.*RPC|RPC missing|not installed|no utxo|no hash'
+
+PASS=0; FAIL=0; SKIP=0
+declare -a FAILED=()
+
+echo "== gettxoutsetinfo-regression $(date -u +%Y-%m-%dT%H:%M:%SZ) =="
+for impl in $IMPLS; do
+  script="$GTXO/${impl}_gettxoutsetinfo.sh"
+  if [ ! -x "$script" ]; then
+    echo "  SKIP  $impl (no gettxoutsetinfo test yet: $script)"; SKIP=$((SKIP+1)); continue
+  fi
+  log="$LOGDIR/${impl}.log"
+  tmpout="$(mktemp)"
+  setsid -w bash "$script" >"$tmpout" 2>"$log"; rc=$?
+  line="$(tail -n 1 "$tmpout" 2>/dev/null)"
+  if [ "$rc" -ne 0 ] && ! printf '%s' "$line" | grep -qiE "$GAP_RE"; then
+    echo "  RETRY $impl (attempt 1 exit $rc: ${line})"
+    setsid -w bash "$script" >"$tmpout" 2>"$log"; rc=$?
+    line="$(tail -n 1 "$tmpout" 2>/dev/null)"
+  fi
+  [ -z "$line" ] && line="(no summary line — see $log)"
+  if [ "$rc" -eq 0 ] && ! printf '%s' "$line" | grep -qiE "SKIP"; then
+    echo "  PASS  $impl — $line"; PASS=$((PASS+1))
+  elif printf '%s' "$line" | grep -qiE "$GAP_RE|SKIP"; then
+    echo "  SKIP  $impl — $line"; SKIP=$((SKIP+1))
+  else
+    echo "  FAIL  $impl (exit $rc) — $line  [detail: $log]"; FAIL=$((FAIL+1)); FAILED+=("$impl")
+  fi
+  rm -f "$tmpout"
+done
+
+echo "== gettxoutsetinfo-regression: PASS=$PASS FAIL=$FAIL SKIP=$SKIP =="
+if [ "$FAIL" -gt 0 ]; then
+  printf '  FAILED: %s\n' "${FAILED[*]}"
+  exit 1
+fi
+exit 0
