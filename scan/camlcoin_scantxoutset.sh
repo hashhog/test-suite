@@ -37,9 +37,10 @@
 #   (3) desc  : impl's matched unspent (txid/vout/amount) EQUALS Core's.
 #       amount: impl's total_amount EQUALS Core's (compared in satoshis).
 #   (4) shape : top-level has success + total_amount + unspents; each unspent
-#       has Core's required keys (txid,vout,scriptPubKey,desc,amount,coinbase,
-#       height). blockhash/confirmations are optional (Core emits them; the impl
-#       may omit) — logged, not gated, per the cell spec ('blockhash?').
+#       has EVERY key Core emits (txid,vout,scriptPubKey,desc,amount,coinbase,
+#       height,blockhash,confirmations). blockhash+confirmations are GATED
+#       (required, must equal Core's) — mirrors the strict shape check in
+#       test-suite/scan/rustoshi_scantxoutset.sh.
 #   (5) empty : an unmatched address -> total_amount 0 / empty unspents on BOTH.
 #   Extra robustness: also scan addr(FUND_ADDR) (many coinbase coins) and assert
 #   total_amount + the full matched-outpoint set EQUAL Core's.
@@ -462,6 +463,11 @@ fi
 log "FUND_ADDR scan matches Core: $CMP_F"
 
 # ── 7. TEST shape — top-level + per-unspent keys (Core's required keys). ───
+# STRICT (mirrors test-suite/scan/rustoshi_scantxoutset.sh): EVERY key Core
+# emits per-unspent is REQUIRED and gated — including blockhash + confirmations.
+# Core unspent keys (rpc/blockchain.cpp:2455-2466):
+#   txid,vout,scriptPubKey,desc,amount,coinbase,height,blockhash,confirmations.
+# A missing key is a real shape divergence — reported, never papered over.
 SHAPE_T="ok"
 SHAPE_OUT=$(python3 -c "
 import sys, json
@@ -469,7 +475,7 @@ core = json.loads(sys.argv[1]); impl = json.loads(sys.argv[2])
 
 # Top-level: impl must expose at least Core's headline keys for action=start.
 top_required = ['success', 'txouts', 'height', 'bestblock', 'unspents', 'total_amount']
-errs=[]; warns=[]
+errs=[]
 for k in top_required:
     if k not in impl: errs.append('missing top-level key %r' % k)
 
@@ -477,27 +483,43 @@ for k in top_required:
 if isinstance(impl.get('success'), bool) is False: errs.append('success not bool')
 if not isinstance(impl.get('unspents'), list): errs.append('unspents not array')
 
-# Per-unspent: Core emits txid,vout,scriptPubKey,desc,amount,coinbase,height,
-# blockhash,confirmations. The cell spec marks blockhash optional ('blockhash?')
-# and the impl may omit blockhash/confirmations — those are WARN, not FAIL.
-# The remaining keys are REQUIRED and gated.
-unspent_required = ['txid','vout','scriptPubKey','desc','amount','coinbase','height']
-unspent_optional = ['blockhash','confirmations']
+# Per-unspent: every key Core emits MUST also be present on the impl. blockhash
+# and confirmations are GATED (no longer optional): Core always emits them
+# (rpc/blockchain.cpp:2455-2466), and the impl must too.
+unspent_required = ['txid','vout','scriptPubKey','desc','amount','coinbase',
+                    'height','blockhash','confirmations']
+core_us = core.get('unspents', [])
 imp_us = impl.get('unspents', [])
+if core_us:
+    # Cross-check: confirm Core really emits the keys we gate on (oracle sanity).
+    cu = core_us[0]
+    for k in ('blockhash','confirmations'):
+        if k not in cu:
+            errs.append('CORE unspent missing %r (oracle/Core version anomaly)' % k)
 if imp_us:
     u = imp_us[0]
     for k in unspent_required:
         if k not in u: errs.append('unspent missing required key %r' % k)
-    for k in unspent_optional:
-        if k not in u: warns.append('unspent omits Core key %r' % k)
     # desc must be a non-empty string (Core: a specialized/inferred descriptor).
     if not isinstance(u.get('desc'), str) or not u.get('desc'):
         errs.append('unspent desc not a non-empty string')
     if isinstance(u.get('coinbase'), bool) is False:
         errs.append('unspent coinbase not bool')
+    # blockhash: 64-hex string. confirmations: int >= 1.
+    bh = u.get('blockhash')
+    if not isinstance(bh, str) or len(bh) != 64:
+        errs.append('unspent blockhash not a 64-hex string: %r' % bh)
+    cf = u.get('confirmations')
+    if not isinstance(cf, int) or isinstance(cf, bool) or cf < 1:
+        errs.append('unspent confirmations not a positive int: %r' % cf)
+    # blockhash + confirmations must EQUAL Core's for the same matched coin.
+    if core_us:
+        cu = core_us[0]
+        if 'blockhash' in cu and bh != cu.get('blockhash'):
+            errs.append('blockhash core=%r impl=%r' % (cu.get('blockhash'), bh))
+        if 'confirmations' in cu and cf != cu.get('confirmations'):
+            errs.append('confirmations core=%r impl=%r' % (cu.get('confirmations'), cf))
 
-if warns:
-    sys.stderr.write('shape warnings: ' + '; '.join(warns) + '\n')
 print('OK' if not errs else '; '.join(errs))
 sys.exit(0 if not errs else 1)
 " "$CORE_M" "$CC_M" 2>>"$CC_LOG") || SHAPE_T="bad"
@@ -506,16 +528,7 @@ if [[ "$SHAPE_T" != "ok" ]]; then
     log "  caml MATCH result: $CC_M"
     fail "scantxoutset result shape diverges from Core: $SHAPE_OUT"
 fi
-# Surface the optional-key warnings (blockhash/confirmations) into the run log.
-SHAPE_WARN=$(python3 -c "
-import sys, json
-core=json.loads(sys.argv[1]); impl=json.loads(sys.argv[2])
-us=impl.get('unspents',[])
-miss=[k for k in ('blockhash','confirmations') if us and k not in us[0]]
-print(','.join(miss))
-" "$CORE_M" "$CC_M" 2>/dev/null)
-[[ -n "$SHAPE_WARN" ]] && log "NOTE: camlcoin unspent omits Core key(s): $SHAPE_WARN (cell spec marks blockhash optional; not gated)"
-log "SHAPE ok: top-level success+txouts+height+bestblock+unspents+total_amount; unspent has Core's required keys"
+log "SHAPE ok: top-level success+txouts+height+bestblock+unspents+total_amount; unspent has ALL Core keys incl. blockhash+confirmations (gated)"
 
 # ── 8. TEST empty — unmatched address -> total_amount 0 / empty unspents. ──
 EMPTY_T="ok"

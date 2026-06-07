@@ -17,8 +17,12 @@
 #     - amount=ok : the result's total_amount EQUALS Core's (to satoshi).
 #     - shape=ok  : the result is an OBJECT carrying success(bool) + total_amount
 #                   + txouts + height + bestblock + an unspents array whose
-#                   elements carry Core's load-bearing keys
-#                   (txid,vout,scriptPubKey,desc,amount,coinbase,height).
+#                   elements carry EVERY key Core emits per-output
+#                   (txid,vout,scriptPubKey,desc,amount,coinbase,height,
+#                   blockhash,confirmations — blockchain.cpp:2455-2466). blockhash
+#                   and confirmations are GATED (not optional): a missing key is a
+#                   real shape divergence and FAILS, and blockhash must equal
+#                   getblockhash(height) while confirmations == tip-height+1.
 #     - empty=ok  : an UNFUNDED address -> success=true, total_amount=0, empty
 #                   unspents on BOTH impl and Core.
 #
@@ -37,14 +41,14 @@
 #   and assert each unspent's txid == its own block's coinbase txid on each node.
 #   (Same oracle rationale as test-suite/rawtx/blockbrew_getrawtransaction.sh.)
 #
-#   DOCUMENTED, NON-FATAL impl/Core divergences (logged, not asserted — the impl's
-#   per-output schema is a documented SUBSET, see scantxoutset_methods.go):
-#     * blockbrew omits per-unspent `blockhash` and `confirmations` (Core emits
-#       both; task spec lists blockhash as optional "blockhash?").
-#     * blockbrew's `desc` has no `#checksum` suffix (Core appends one).
-#   These do NOT affect the load-bearing answer (amount / matched-output set) and
-#   so are reported as notes, NOT failures. A REAL divergence (wrong amount, wrong
-#   unspent set, wrong total) is a FAIL.
+#   blockbrew now emits the FULL Core per-unspent schema, including `blockhash`
+#   and `confirmations` (scantxoutset_methods.go), so those keys are GATED in the
+#   shape check (a missing key FAILS). The only DOCUMENTED, NON-FATAL divergence
+#   that remains is:
+#     * blockbrew's `desc` has no `#checksum` suffix (Core appends one) — this
+#       does NOT affect the load-bearing answer and is reported as a note.
+#   A REAL divergence (wrong amount, wrong unspent set, wrong total, or a missing
+#   per-output key including blockhash/confirmations) is a FAIL.
 #
 # STRICT UNIFORM INTERFACE (mirrors test-suite/rawtx/blockbrew_getrawtransaction.sh):
 #   no required args, idempotent, trap cleanup, scratch /tmp + unique ports,
@@ -320,23 +324,33 @@ BB_TIP=$(bb_result getbestblockhash "[]")
 [[ "$(jget "$BB_SCAN" height)" == "$NBLOCKS_MINE" ]] || fail "blockbrew scan height != tip $NBLOCKS_MINE"
 BB_NU=$(python3 -c 'import sys,json;print(len(json.loads(sys.argv[1])["unspents"]))' "$BB_SCAN")
 (( BB_NU >= 1 )) || fail "blockbrew scan found no unspents for funded address (count=$BB_NU)"
-# each unspent must carry Core's load-bearing per-output keys.
-for f in txid vout scriptPubKey desc amount coinbase height; do
+# each unspent must carry EVERY key Core emits per-output. blockhash and
+# confirmations are GATED (not optional): Core emits exactly 9 keys
+# (txid,vout,scriptPubKey,desc,amount,coinbase,height,blockhash,confirmations
+# — blockchain.cpp:2455-2466) and a missing one is a real shape divergence.
+# This mirrors the strict per-unspent key check in rustoshi_scantxoutset.sh.
+for f in txid vout scriptPubKey desc amount coinbase height blockhash confirmations; do
     [[ "$(jget "$BB_SCAN" unspents 0 "$f")" != "<MISSING>" ]] || fail "blockbrew unspent[0] missing key '$f'"
     [[ "$(jget "$CORE_SCAN" unspents 0 "$f")" != "<MISSING>" ]] || fail "ORACLE: core unspent[0] missing key '$f' (oracle sanity)"
 done
 # scriptPubKey must be byte-identical across nodes (same address -> same script).
 [[ "$(jget "$BB_SCAN" unspents 0 scriptPubKey)" == "$(jget "$CORE_SCAN" unspents 0 scriptPubKey)" ]] \
     || fail "scriptPubKey of matched unspent differs across nodes (same address must yield same script)"
-log "shape OK: success+txouts+height+bestblock+unspents+total_amount; unspent has txid/vout/scriptPubKey/desc/amount/coinbase/height; spk matches Core"
+# blockhash must be the 64-hex hash of the coin's block and EQUAL its height's
+# block hash on blockbrew (Core: tip->GetAncestor(coin.nHeight)->GetBlockHash()).
+# confirmations must be tip_height - coin_height + 1.
+BB_U0_BH=$(jget "$BB_SCAN" unspents 0 blockhash)
+BB_U0_H=$(jget "$BB_SCAN" unspents 0 height)
+BB_U0_CONF=$(jget "$BB_SCAN" unspents 0 confirmations)
+[[ "$BB_U0_BH" =~ ^[0-9a-f]{64}$ ]] || fail "blockbrew unspent[0] blockhash not a 64-hex: $BB_U0_BH"
+BB_EXP_BH=$(bb_result getblockhash "[$BB_U0_H]")
+[[ "$BB_U0_BH" == "$BB_EXP_BH" ]] \
+    || fail "blockbrew unspent[0] blockhash ($BB_U0_BH) != getblockhash($BB_U0_H) ($BB_EXP_BH)"
+BB_EXP_CONF=$(( NBLOCKS_MINE - BB_U0_H + 1 ))
+[[ "$BB_U0_CONF" == "$BB_EXP_CONF" ]] \
+    || fail "blockbrew unspent[0] confirmations ($BB_U0_CONF) != tip-height+1 ($BB_EXP_CONF)"
+log "shape OK: success+txouts+height+bestblock+unspents+total_amount; unspent has txid/vout/scriptPubKey/desc/amount/coinbase/height/blockhash/confirmations; spk matches Core; blockhash==getblockhash(height); confirmations==tip-height+1"
 
-# Documented, NON-FATAL divergence notes (not load-bearing — see header).
-if [[ "$(jget "$BB_SCAN" unspents 0 blockhash)" == "<MISSING>" ]]; then
-    log "NOTE divergence: blockbrew omits per-unspent 'blockhash' (Core emits it; spec lists it optional 'blockhash?')"
-fi
-if [[ "$(jget "$BB_SCAN" unspents 0 confirmations)" == "<MISSING>" ]]; then
-    log "NOTE divergence: blockbrew omits per-unspent 'confirmations' (Core emits it)"
-fi
 BB_DESC0=$(jget "$BB_SCAN" unspents 0 desc); CORE_DESC0=$(jget "$CORE_SCAN" unspents 0 desc)
 [[ "$BB_DESC0" == addr\(*\) || "$BB_DESC0" == addr\(*\)#* ]] || fail "blockbrew unspent desc not an addr() descriptor: $BB_DESC0"
 if [[ "$BB_DESC0" != *"#"* && "$CORE_DESC0" == *"#"* ]]; then
