@@ -77,6 +77,10 @@ CORE2_LOG="$CORE2_DATADIR/core2.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to.
 SECRET="1111111111111111111111111111111111111111111111111111111111111112"
+# A SECOND deterministic secret -> the chain-B mining address for the reorg
+# phase. B mines to a DISTINCT address so its blocks differ from chain A's
+# even at equal heights (different coinbase scriptPubKey).
+DST_SECRET="3333333333333333333333333333333333333333333333333333333333333334"
 
 NBLOCKS=150        # mine 150 blocks (matures coinbases, leaves H=100 well below tip)
 HHIST=100          # the HISTORICAL height we query (well below tip)
@@ -87,6 +91,7 @@ RS_COOKIE=""
 CORE_BG=""
 CORE2_BG=""
 ADDR=""
+DST_ADDR=""
 
 log() { echo "[coinstatsindex:rustoshi] $*" >&2; }
 
@@ -116,7 +121,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 pass() {
-    echo "COINSTATSINDEX rustoshi: PASS atheight=$1 txouts=$2 amount=$3 hash=$4 bestblock=$5"
+    echo "COINSTATSINDEX rustoshi: PASS atheight=$1 txouts=$2 amount=$3 hash=$4 bestblock=$5 reorg=$6"
     exit 0
 }
 fail() {
@@ -174,6 +179,18 @@ print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
 [[ "$ADDR" == bcrt1* ]] || fail "derived address is not a regtest bech32 address: '$ADDR'"
 log "deterministic mining address: $ADDR"
 
+# Second deterministic address for the chain-B side of the reorg phase.
+DST_ADDR=$(python3 -c "
+import sys; sys.path.insert(0,'$TF_PATH')
+from test_framework.key import ECKey
+from test_framework.address import key_to_p2wpkh
+k=ECKey(); k.set(bytes.fromhex('$DST_SECRET'),compressed=True)
+print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
+" 2>/dev/null) || fail "could not derive deterministic chain-B address"
+[[ "$DST_ADDR" == bcrt1* ]] || fail "chain-B address is not a regtest bech32 address: '$DST_ADDR'"
+[[ "$DST_ADDR" != "$ADDR" ]] || fail "chain-A and chain-B addresses collided"
+log "deterministic chain-B address: $DST_ADDR"
+
 # ── JSON-RPC helpers ──────────────────────────────────────────────────────
 core_cli()  { "$CORE_CLI" -regtest -datadir="$CORE_DATADIR"  -rpcport="$CORE_RPC"  "$@"; }
 core2_cli() { "$CORE_CLI" -regtest -datadir="$CORE2_DATADIR" -rpcport="$CORE2_RPC" "$@"; }
@@ -204,6 +221,9 @@ except Exception:
     pass
 " <<<"$1" 2>/dev/null
 }
+# Convenience wrappers over rs_rpc + jpy (mirror blockbrew's bb_scalar/bb_field).
+rs_scalar() { jpy "$(rs_rpc "$1" "$2")" "d['result']"; }
+rs_field()  { jpy "$(rs_rpc "$1" "$2")" "d['result']['$3']"; }
 
 # ── 3. Launch the Core regtest oracle (-listen=0, -coinstatsindex=1 -txindex=1).
 launch_core_once() {
@@ -586,10 +606,137 @@ else
     ERR_T="ok"   # error-shape assertion is secondary to the at-height gate
 fi
 
-# ── 10. Verdict. ───────────────────────────────────────────────────────────
-[[ "$ATHEIGHT_T" == "ok" && "$TXOUTS_T" == "ok" && "$AMOUNT_T" == "ok" \
-    && "$HASH_T" == "ok" && "$BEST_T" == "ok" ]] \
-    || fail "internal: a gate flag was not set (atheight=$ATHEIGHT_T txouts=$TXOUTS_T amount=$AMOUNT_T hash=$HASH_T bestblock=$BEST_T)"
+log "PASS (linear): rustoshi coinstatsindex matches Core at historical height H=$HHIST + disabled-index error gate"
 
-log "PASS: rustoshi coinstatsindex at-height query matches Core on all gated fields"
-pass "$ATHEIGHT_T" "$TXOUTS_T" "$AMOUNT_T" "$HASH_T" "$BEST_T"
+# ── 10. REORG-SAFETY GATE ──────────────────────────────────────────────────
+# WHY: the at-height gate above only proves the impl maintains the per-height
+# MuHash on a LINEAR chain (connect-only). It CANNOT catch a reorg-desync — an
+# impl that reverses the index on disconnect but never RE-ADDS on reconnect of
+# the new chain's blocks will pass linear yet serve a stale (chain-A) muhash for
+# a height that was reorged onto chain B. Core's coinstatsindex (BaseIndex +
+# index/coinstatsindex.cpp: CustomAppend on connect, CustomRemove on disconnect)
+# re-runs CustomAppend when B's blocks reconnect, so its per-height MuHash tracks
+# the ACTIVE chain. This gate forces a reorg and asserts the impl agrees.
+#
+# REORG DESIGN (impl-agnostic; mirrors blockbrew/nimrod harnesses exactly):
+#   (1) Both nodes already share linear chain A at tip N (= $CORE_HEIGHT).
+#   (2) On the Core ORACLE only: invalidateblock(getblockhash(F+1)) for a fork
+#       point F < N. That disconnects A's F+1..N (Core runs CustomRemove for each).
+#       Then generatetoaddress a LONGER competing chain B from F to N+3 to a
+#       DETERMINISTIC address. B has strictly more work, so Core reorgs A->B and
+#       its index re-runs CustomAppend for B's F+1..N+3.
+#   (3) REORG TRIGGER via invalidateblock ON THE IMPL (Core-faithful). A naive
+#       submitblock of B's blocks onto A's tip N would be (correctly) rejected as
+#       a side-branch double-spend. So FIRST call invalidateblock(F+1) ON THE
+#       IMPL — rewinding it to fork F (disconnecting A's F+1..N, restoring the
+#       prevouts they spent) — THEN submitblock B's blocks F+1..N+3 in order; each
+#       now connects as a clean active-tip extension and the impl reorgs to B.
+#   (4) Pick H_R with F < H_R <= N — a height whose block DIFFERS between A and
+#       B. Call gettxoutsetinfo muhash H_R on BOTH and ASSERT
+#       impl.muhash@H_R == Core.muhash@H_R AND impl.bestblock@H_R ==
+#       Core.bestblock@H_R (the B-chain block at H_R, NOT A's). This FAILS iff the
+#       impl's index did not reconnect B's blocks (the connect-on-reconnect gap).
+REORG_OK="ok"
+REORG_DEPTH=5                                   # A's blocks F+1..N that get reorged out
+REORG_F=$(( CORE_HEIGHT - REORG_DEPTH ))        # fork point F (< N)
+REORG_NEWTIP=$(( CORE_HEIGHT + 3 ))             # B's tip height (N+3): strictly more work
+REORG_H=$CORE_HEIGHT                            # H_R: the OLD tip height (F < H_R <= N)
+[[ "$REORG_F" -gt "$HHIST" ]] || log "note: fork point F=$REORG_F not above linear-H=$HHIST (ok; reorg-H differs)"
+
+# Record A's block hash at H_R (must change after the reorg, proving A!=B at H_R).
+A_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain A) failed"
+log "reorg: chain A tip N=$CORE_HEIGHT, fork F=$REORG_F, B newtip=$REORG_NEWTIP, reorg-H=$REORG_H (A@H_R=$A_HASH_AT_HR)"
+
+# (2) On the Core oracle: invalidate F+1 then build longer chain B to DST_ADDR.
+FORK_CHILD=$(core_cli_retry getblockhash "$(( REORG_F + 1 ))") || fail "Core getblockhash F+1 failed"
+core_cli invalidateblock "$FORK_CHILD" >/dev/null 2>&1 || fail "Core invalidateblock $FORK_CHILD failed"
+INVAL_TIP=$(core_cli_retry getblockcount) || fail "Core getblockcount after invalidate failed"
+[[ "$INVAL_TIP" == "$REORG_F" ]] || fail "Core after invalidate is at $INVAL_TIP, expected fork F=$REORG_F"
+NB_B=$(( REORG_NEWTIP - REORG_F ))              # number of B blocks to generate (= depth+3)
+core_cli_retry generatetoaddress "$NB_B" "$DST_ADDR" >/dev/null || fail "Core generatetoaddress (chain B) failed"
+CORE_BTIP_H=$(core_cli_retry getblockcount) || fail "Core getblockcount (B tip) failed"
+[[ "$CORE_BTIP_H" == "$REORG_NEWTIP" ]] || fail "Core B tip height $CORE_BTIP_H != expected $REORG_NEWTIP"
+CORE_BTIP=$(core_cli_retry getbestblockhash) || fail "Core getbestblockhash (B) failed"
+B_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain B) failed"
+[[ "$B_HASH_AT_HR" != "$A_HASH_AT_HR" ]] \
+    || fail "reorg sanity: block at H_R=$REORG_H unchanged after reorg (A=B=$A_HASH_AT_HR; not a real reorg)"
+log "reorg: Core reorged to B, tip=$CORE_BTIP @h$CORE_BTIP_H; B@H_R=$B_HASH_AT_HR (differs from A@H_R)"
+
+# (3) REORG TRIGGER: invalidateblock(F+1) ON THE IMPL first, rewinding it to F.
+IMPL_FORK_CHILD=$(rs_scalar getblockhash "[$(( REORG_F + 1 ))]")
+[[ "$IMPL_FORK_CHILD" == "$FORK_CHILD" ]] \
+    || fail "reorg: impl F+1 hash ($IMPL_FORK_CHILD) != Core F+1 hash ($FORK_CHILD) before invalidate"
+log "reorg: invalidateblock F+1=$IMPL_FORK_CHILD on rustoshi (rewind to fork F=$REORG_F)"
+IB_RESP=$(rs_rpc invalidateblock "[\"$IMPL_FORK_CHILD\"]")
+echo "$IB_RESP" | grep -q '"error":null' || log "reorg: rustoshi invalidateblock -> $IB_RESP"
+# Poll until the impl has actually rewound to fork point F.
+IMPL_AT_F=0
+for _ in $(seq 1 30); do
+    RS_INVAL_H=$(rs_scalar getblockcount '[]')
+    if [[ "$RS_INVAL_H" == "$REORG_F" ]]; then IMPL_AT_F=1; break; fi
+    sleep 1
+done
+[[ "$IMPL_AT_F" == "1" ]] \
+    || fail "rustoshi did not rewind to fork F=$REORG_F after invalidateblock (impl height=$RS_INVAL_H) — invalidateblock unsupported/ineffective"
+RS_INVAL_TIP=$(rs_scalar getbestblockhash '[]')
+log "reorg: rustoshi rewound to fork F=$REORG_F (tip $RS_INVAL_TIP)"
+
+# Mirror B to the impl: submitblock B's blocks F+1..N+3 in order. Each now
+# connects as a clean active-tip extension; B carries strictly more work.
+log "reorg: mirroring B's blocks $(( REORG_F + 1 ))..$REORG_NEWTIP to rustoshi via submitblock"
+for (( h=REORG_F+1; h<=REORG_NEWTIP; h++ )); do
+    kill -0 "$RS_PID" 2>/dev/null || fail "rustoshi died during B replication at h=$h (see $RS_LOG)"
+    bh=$(core_cli_retry getblockhash "$h") || fail "Core getblockhash $h (chain B) failed"
+    raw=$(core_cli_retry getblock "$bh" 0) || fail "Core getblock $bh 0 (chain B) failed"
+    [[ -n "$raw" ]] || fail "empty raw for chain-B block at h=$h"
+    SUB=$(rs_rpc submitblock "[\"$raw\"]")
+    echo "$SUB" | grep -q '"error":null' || log "reorg submitblock h=$h -> $SUB"
+done
+
+# Poll until impl tip == Core tip (B). If the impl never adopts B, that is itself
+# a reorg failure (it could not switch to the more-work chain).
+RS_REORG_OK=0
+for _ in $(seq 1 30); do
+    RS_BTIP=$(rs_scalar getbestblockhash '[]')
+    RS_BTIP_H=$(rs_scalar getblockcount '[]')
+    if [[ "$RS_BTIP" == "$CORE_BTIP" && "$RS_BTIP_H" == "$CORE_BTIP_H" ]]; then RS_REORG_OK=1; break; fi
+    sleep 1
+done
+[[ "$RS_REORG_OK" == "1" ]] \
+    || fail "rustoshi did not adopt chain B (impl tip=$RS_BTIP @h$RS_BTIP_H, Core B tip=$CORE_BTIP @h$CORE_BTIP_H) — reorg to more-work chain failed"
+log "reorg: rustoshi adopted chain B (tip $RS_BTIP @h$RS_BTIP_H)"
+
+# (4) The reorg differential: gettxoutsetinfo muhash H_R on BOTH. Assert the
+#     impl serves B's per-height MuHash + bestblock, NOT A's stale value.
+RB_MUH=$(core_cli_retry gettxoutsetinfo muhash "$REORG_H") || fail "Core gettxoutsetinfo muhash $REORG_H (post-reorg) failed"
+RC_HEIGHT=$(echo "$RB_MUH" | python3 -c "import sys,json;print(json.load(sys.stdin).get('height',''))" 2>/dev/null)
+RC_BEST=$(echo "$RB_MUH"   | python3 -c "import sys,json;print(json.load(sys.stdin).get('bestblock',''))" 2>/dev/null)
+RC_MUHASH=$(echo "$RB_MUH" | python3 -c "import sys,json;print(json.load(sys.stdin).get('muhash',''))" 2>/dev/null)
+[[ "$RC_HEIGHT" == "$REORG_H" ]] || fail "Core post-reorg muhash@H_R height=$RC_HEIGHT != H_R=$REORG_H"
+[[ "$RC_BEST" == "$B_HASH_AT_HR" ]] || fail "Core post-reorg bestblock@H_R=$RC_BEST != B@H_R=$B_HASH_AT_HR (oracle wrong?)"
+
+RB_BEST=$(rs_field gettxoutsetinfo "[\"muhash\", $REORG_H]" bestblock)
+RB_MUHASH=$(rs_field gettxoutsetinfo "[\"muhash\", $REORG_H]" muhash)
+RB_HEIGHT=$(rs_field gettxoutsetinfo "[\"muhash\", $REORG_H]" height)
+log "reorg @H_R=$REORG_H: core(best=$RC_BEST muhash=$RC_MUHASH) rust(height=$RB_HEIGHT best=$RB_BEST muhash=$RB_MUHASH)"
+
+if [[ "$RB_BEST" == "$A_HASH_AT_HR" ]]; then
+    REORG_OK="bad"; log "reorg DESYNC: rustoshi bestblock@H_R=$RB_BEST is A's stale block (B@H_R=$B_HASH_AT_HR) — index did not reconnect B"
+fi
+[[ "$RB_HEIGHT" == "$REORG_H" ]] \
+    || { REORG_OK="bad"; log "reorg: rustoshi height@H_R=$RB_HEIGHT != H_R=$REORG_H"; }
+[[ "$RB_BEST" == "$B_HASH_AT_HR" && "$RB_BEST" == "$RC_BEST" ]] \
+    || { REORG_OK="bad"; log "reorg: bestblock@H_R mismatch (rust=$RB_BEST want B@H_R=$B_HASH_AT_HR core=$RC_BEST)"; }
+[[ -n "$RB_MUHASH" && "$RB_MUHASH" == "$RC_MUHASH" ]] \
+    || { REORG_OK="bad"; log "reorg: muhash@H_R MISMATCH (rust=$RB_MUHASH core=$RC_MUHASH) — impl served stale chain-A index after reorg"; }
+
+[[ "$REORG_OK" == "ok" ]] || fail "reorg-safety gate failed at H_R=$REORG_H (impl muhash/bestblock did not follow reorg from A to B; coinstatsindex reverses on disconnect but does NOT reconnect on the new chain)"
+log "REORG OK @H_R=$REORG_H: rustoshi muhash+bestblock match Core's B-chain values after reorg"
+
+# ── 11. Verdict. ───────────────────────────────────────────────────────────
+[[ "$ATHEIGHT_T" == "ok" && "$TXOUTS_T" == "ok" && "$AMOUNT_T" == "ok" \
+    && "$HASH_T" == "ok" && "$BEST_T" == "ok" && "$REORG_OK" == "ok" ]] \
+    || fail "internal: a gate flag was not set (atheight=$ATHEIGHT_T txouts=$TXOUTS_T amount=$AMOUNT_T hash=$HASH_T bestblock=$BEST_T reorg=$REORG_OK)"
+
+log "PASS: rustoshi coinstatsindex at-height query matches Core on all gated fields (linear + reorg)"
+pass "$ATHEIGHT_T" "$TXOUTS_T" "$AMOUNT_T" "$HASH_T" "$BEST_T" "$REORG_OK"
