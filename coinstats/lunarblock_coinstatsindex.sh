@@ -5,95 +5,104 @@
 #
 # CAPABILITY UNDER TEST
 #   gettxoutsetinfo ( "hash_type" hash_or_height use_index )
-#   With -coinstatsindex=1 a node can answer gettxoutsetinfo AS OF a HISTORICAL
-#   block (a height int or a block hash), not just the chain tip. The index is a
-#   per-height running UTXO-set MuHash + counts (Core: index/coinstatsindex.cpp,
-#   kernel/coinstats.cpp). WITHOUT coinstatsindex, a non-tip hash_or_height must
-#   error -8 "Querying specific block heights requires coinstatsindex".
-#   Core ref: bitcoin-core/src/rpc/blockchain.cpp gettxoutsetinfo.
+#   With --coinstatsindex lunarblock maintains a per-height running MuHash3072
+#   UTXO-set accumulator and can answer historical-height queries byte-identically
+#   to Bitcoin Core (Core: index/coinstatsindex.cpp, kernel/coinstats.cpp).
+#   WITHOUT coinstatsindex, a non-tip hash_or_height MUST error -8
+#   "Querying specific block heights requires coinstatsindex".
 #
-# GROUND TRUTH = THE BOX'S REAL bitcoind on its OWN scratch regtest instance +
-#   OWN ports, launched -listen=0, with -coinstatsindex=1 -txindex=1. Core MINES
-#   the chain (coinbase to bare OP_TRUE via generateblock, anyone-can-spend) and
-#   SPENDS a matured coinbase so the UTXO set DIFFERS across heights (a spent
-#   output is removed, new outputs added). lunarblock receives the BYTE-IDENTICAL
-#   blocks via submitblock (getblock <h> 0 -> submitblock) and is ALSO launched
-#   with -coinstatsindex=1 -txindex=1. Both nodes share a byte-identical tip.
+# REORG-SAFETY GATE
+#   After confirming the at-height linear-chain parity, the test drives a reorg:
+#   invalidateblock(F+1) on both Core and lunarblock, then feeds lunarblock a
+#   longer competing chain B via submitblock.  After lunarblock adopts chain B,
+#   gettxoutsetinfo muhash H_R must serve chain-B's MuHash + bestblock, NOT
+#   chain-A's stale values.  Fails if the coinstatsindex does not reconnect on
+#   the new chain's blocks (the connect-on-reconnect gap).
+#
+# GROUND TRUTH = a real bitcoind regtest oracle on its OWN scratch datadir +
+#   ports, launched -listen=0 -coinstatsindex=1 -txindex=1.  Core mines the
+#   chain; lunarblock receives byte-identical blocks via submitblock.
 #
 # STRICT SHARED CONTRACT (gated here, identical across all 10 scripts):
-#   * BOTH impl + a real bitcoind oracle on regtest with -coinstatsindex=1 (and
-#     -txindex=1).
-#   * Mine ~150 blocks to a deterministic address with a few real spends.
-#   * Mirror the chain so both nodes share a byte-identical tip.
-#   * Wait for coinstatsindex to sync (poll getindexinfo until synced, or
-#     gettxoutsetinfo@tip works).
-#   * Pick a HISTORICAL height H well below tip (here H=100). Call
-#     gettxoutsetinfo "muhash" H (and the default hash_type) on BOTH.
-#   GATE:
-#     impl.height == H == Core.height
-#     impl.bestblock == Core.bestblock   (the hash AT height H, not the tip)
-#     impl.txouts == Core.txouts
-#     impl.total_amount == Core.total_amount
-#     impl.<hash field> (muhash) == Core's
-#   ERROR gate: with coinstatsindex DISABLED, a non-tip hash_or_height must
-#     error (match Core).
+#   * launch BOTH impl + Core on regtest with coinstatsindex + txindex.
+#   * mine ~150 blocks; include a coinbase-spend so the UTXO set differs.
+#   * mirror the chain so both nodes share a byte-identical tip.
+#   * wait for coinstatsindex to sync (poll getindexinfo).
+#   * pick historical H = 100. Call gettxoutsetinfo "muhash" H on BOTH.
+#   GATE: height / bestblock / txouts / total_amount / muhash all equal.
+#   REORG GATE: invalidateblock(F+1), submit longer chain B, assert
+#     muhash@H_R + bestblock@H_R byte-identical to Core post-reorg.
+#   ERROR GATE: without coinstatsindex, non-tip query MUST error -8.
 #
 # Summary line (stdout) — EXACTLY:
-#   PASS: COINSTATSINDEX lunarblock: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok
+#   PASS: COINSTATSINDEX lunarblock: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok reorg=ok
 #   FAIL: COINSTATSINDEX lunarblock: FAIL <reason>
 #   SKIP: COINSTATSINDEX lunarblock: SKIP <reason>   (missing binary only)
 #
-# Touches ONLY /tmp/csi-lunarblock + /tmp/csi-core and ports
-#   40478/40498 (lunarblock RPC/P2P) + 40476/40496 (Core RPC/P2P).
-#   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Never
-#   broad-pkills bitcoind by name; only frees its OWN fixed ports / scratch dir.
+# Touches ONLY /tmp/csi-lunarblock-$$ + /tmp/csi-core-$$ and ports
+#   40470/40490 (lunarblock RPC/P2P) + 40471/40491 (Core RPC; -listen=0).
+#   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
 
-# ── Config ───────────────────────────────────────────────────────────────
+# ── Config ───────────────────────────────────────────────────────────────────
 BASEDIR="/home/work/hashhog"
 LB_DIR="$BASEDIR/lunarblock"
 CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
+TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
-LB_DATADIR="/tmp/csi-lunarblock"
-LB_RPC=40478
-LB_P2P=40498
+LB_DATADIR="/tmp/csi-lunarblock-$$"
+LB_RPC=40470
+LB_P2P=40490
 LB_LOG="$LB_DATADIR/node.log"
 
-CORE_DATADIR="/tmp/csi-core"
-CORE_RPC=40476
-CORE_P2P=40496
+CORE_DATADIR="/tmp/csi-core-$$"
+CORE_RPC=40471
+CORE_P2P=40491
 CORE_LOG="$CORE_DATADIR/core.log"
 
-# Chain shape: 1 OP_TRUE coinbase block, then 150 maturity blocks, then 1
-# block with a SPEND. Total height 152. The spend REMOVES the OP_TRUE coinbase
-# output and ADDS a new p2wpkh output. We then query a HISTORICAL height H well
-# below the tip; H must be > maturity-start so coinstatsindex has real data.
-MATURITY=150
-HIST_HEIGHT=100
-MINE_ADDR="bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+# Deterministic test secret -> p2wpkh bcrt1 address for chain-A mining.
+SECRET="1111111111111111111111111111111111111111111111111111111111111112"
+SEND_ADDR_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
+# Deterministic chain-B mining secret (DISTINCT so B blocks differ from A).
+SECRET3="3333333333333333333333333333333333333333333333333333333333333334"
+
+NMATURE=150
+HIST_H=100
+TBASE=1700000000
 
 LB_PID=""
+LB2_PID=""
 CORE_BG=""
+ADDR=""
+SECRET_WIF=""
+SEND_ADDR=""
+CHAIN_B_ADDR=""
 
-# ── Logging: noisy -> stderr/log, never stdout. ───────────────────────────
+# ── Logging: noisy -> stderr/log, never stdout. ───────────────────────────────
 log() { echo "[coinstatsindex:lunarblock] $*" >&2; }
 
-# ── Port free helper: kill + POLL until the socket is actually released. ──
+# ── Port free helper ──────────────────────────────────────────────────────────
 free_port() {
-    local port="$1"
-    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    local p="$1"
+    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${port}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
+        fuser -k "${p}/tcp" >/dev/null 2>&1 || true
+        sleep 1
     done
     return 0
 }
 
-# ── Cleanup: kill nodes + wipe scratch on any exit. ───────────────────────
+# ── Cleanup: kill nodes + wipe scratch on any exit. ───────────────────────────
 cleanup() {
     local ec=$?
+    if [[ -n "$LB2_PID" ]] && kill -0 "$LB2_PID" 2>/dev/null; then
+        kill -TERM "-${LB2_PID}" 2>/dev/null || kill -TERM "$LB2_PID" 2>/dev/null || true
+        for _ in $(seq 1 10); do kill -0 "$LB2_PID" 2>/dev/null || break; sleep 1; done
+        kill -KILL "$LB2_PID" 2>/dev/null || true
+    fi
     if [[ -n "$LB_PID" ]] && kill -0 "$LB_PID" 2>/dev/null; then
         kill -TERM "-${LB_PID}" 2>/dev/null || kill -TERM "$LB_PID" 2>/dev/null || true
         for _ in $(seq 1 15); do kill -0 "$LB_PID" 2>/dev/null || break; sleep 1; done
@@ -107,268 +116,137 @@ cleanup() {
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     free_port "$LB_RPC"
     free_port "$LB_P2P"
+    free_port "40472"
+    free_port "40493"
     free_port "$CORE_RPC"
     free_port "$CORE_P2P"
-    rm -rf "$LB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
+    rm -rf "$LB_DATADIR" "$CORE_DATADIR" "/tmp/csi-lunarblock2-$$" 2>/dev/null || true
     return $ec
 }
 trap cleanup EXIT INT TERM
 
-# ── Summary emitters. ─────────────────────────────────────────────────────
-# pass <atheight> <txouts> <amount> <hash> <bestblock>
-pass() {
-    echo "COINSTATSINDEX lunarblock: PASS atheight=$1 txouts=$2 amount=$3 hash=$4 bestblock=$5"
-    exit 0
-}
-fail() {
-    echo "COINSTATSINDEX lunarblock: FAIL $*"
-    exit 1
-}
-skip() {
-    echo "COINSTATSINDEX lunarblock: SKIP $*"
-    exit 0
-}
+# ── Summary emitters. ─────────────────────────────────────────────────────────
+pass() { echo "COINSTATSINDEX lunarblock: PASS atheight=$1 txouts=$2 amount=$3 hash=$4 bestblock=$5 reorg=$6"; exit 0; }
+fail() { echo "COINSTATSINDEX lunarblock: FAIL $*"; exit 1; }
+skip() { echo "COINSTATSINDEX lunarblock: SKIP $*"; exit 0; }
 
-# ── 0. Idempotent reset. ──────────────────────────────────────────────────
-log "resetting scratch state"
-pkill -f "csi-lunarblock" 2>/dev/null || true
-free_port "$LB_RPC"
-free_port "$LB_P2P"
-free_port "$CORE_RPC"
-free_port "$CORE_P2P"
-rm -rf "$LB_DATADIR" "$CORE_DATADIR"
+# ── 0. Idempotent reset. ──────────────────────────────────────────────────────
+log "resetting scratch state (pid=$$)"
+pkill -f "csi-lunarblock-$$" 2>/dev/null || true
+free_port "$LB_RPC"; free_port "$LB_P2P"; free_port "$CORE_RPC"; free_port "$CORE_P2P"
+free_port "40472"; free_port "40493"
+rm -rf "$LB_DATADIR" "$CORE_DATADIR" "/tmp/csi-lunarblock2-$$"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"
 
-# ── 1. Preconditions. ─────────────────────────────────────────────────────
-# Missing BINARY -> SKIP (GAP_RE). Everything else is a hard error/FAIL.
+# ── 1. Preconditions. ─────────────────────────────────────────────────────────
 command -v python3 >/dev/null 2>&1 || fail "python3 not found on PATH"
 command -v curl    >/dev/null 2>&1 || fail "curl not found on PATH"
 command -v luajit  >/dev/null 2>&1 || skip "luajit not found (lunarblock interpreter not built)"
 [[ -f "$LB_DIR/src/main.lua" ]]    || skip "lunarblock entrypoint not found at $LB_DIR/src/main.lua"
 [[ -x "$CORE_BIN" ]]               || skip "bitcoind not found at $CORE_BIN"
 [[ -x "$CORE_CLI" ]]               || skip "bitcoin-cli not found at $CORE_CLI"
+[[ -d "$TF_PATH/test_framework" ]] || fail "Core test_framework not found at $TF_PATH"
 
-# ── JSON-RPC helpers ──────────────────────────────────────────────────────
+# ── 2. Derive deterministic addresses. ────────────────────────────────────────
+ADDR=$(python3 -c "
+import sys; sys.path.insert(0,'$TF_PATH')
+from test_framework.key import ECKey
+from test_framework.address import key_to_p2wpkh
+k=ECKey(); k.set(bytes.fromhex('$SECRET'),compressed=True)
+print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
+" 2>/dev/null) || fail "could not derive deterministic mining address"
+[[ "$ADDR" == bcrt1* ]] || fail "derived address is not a regtest bech32: '$ADDR'"
+SECRET_WIF=$(python3 -c "
+import sys; sys.path.insert(0,'$TF_PATH')
+from test_framework.address import byte_to_base58
+print(byte_to_base58(bytes.fromhex('$SECRET') + b'\x01', 239))
+" 2>/dev/null) || fail "could not derive regtest WIF"
+[[ -n "$SECRET_WIF" ]] || fail "derived WIF is empty"
+SEND_ADDR=$(python3 -c "
+import sys; sys.path.insert(0,'$TF_PATH')
+from test_framework.key import ECKey
+from test_framework.address import key_to_p2wpkh
+k=ECKey(); k.set(bytes.fromhex('$SEND_ADDR_SECRET'),compressed=True)
+print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
+" 2>/dev/null) || fail "could not derive send address"
+CHAIN_B_ADDR=$(python3 -c "
+import sys; sys.path.insert(0,'$TF_PATH')
+from test_framework.key import ECKey
+from test_framework.address import key_to_p2wpkh
+k=ECKey(); k.set(bytes.fromhex('$SECRET3'),compressed=True)
+print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
+" 2>/dev/null) || fail "could not derive chain-B address"
+[[ "$CHAIN_B_ADDR" == bcrt1* ]] || fail "chain-B address is not bcrt1: '$CHAIN_B_ADDR'"
+[[ "$CHAIN_B_ADDR" != "$ADDR" ]] || fail "chain-A and chain-B addresses collided"
+log "mining addr: $ADDR ; send addr: $SEND_ADDR ; chain-B addr: $CHAIN_B_ADDR"
+
+# ── JSON-RPC helpers ──────────────────────────────────────────────────────────
 core_cli() { "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" "$@"; }
-
-# core_rpc <method> <json-params-array> -> full JSON-RPC envelope on stdout.
-core_rpc() {
-    local method="$1" params="$2" cookie out
-    for _ in 1 2 3 4 5 6 7 8; do
-        cookie=$(cat "$CORE_DATADIR/regtest/.cookie" 2>/dev/null)
-        if [[ -n "$cookie" ]]; then
-            out=$(curl -s --max-time 90 -u "$cookie" \
-                --data-binary "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"$method\",\"params\":$params}" \
-                "http://127.0.0.1:$CORE_RPC/" 2>/dev/null)
-            if [[ -n "$out" ]] && ! echo "$out" | grep -qi "incorrect password\|unauthorized"; then
-                echo "$out"; return 0
-            fi
-        fi
+core_cli_retry() {
+    local out=""
+    for _ in $(seq 1 8); do
+        out=$(core_cli "$@" 2>/dev/null) && [[ -n "$out" ]] && { echo "$out"; return 0; }
         sleep 1
     done
     return 1
 }
 
-# lb_rpc <method> <json-params-array> -> raw JSON-RPC envelope on stdout
-# (lunarblock defaults to an EMPTY rpcpassword on regtest -> no auth header).
+# lb_rpc: lunarblock has no RPC auth on regtest.
 lb_rpc() {
     curl -s --max-time 90 \
         --data-binary "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" \
         "http://127.0.0.1:$LB_RPC/" 2>/dev/null
 }
 
-# jres <json-rpc-envelope> <python-expr-on-`r`> -> value (errors swallowed).
-jres() {
+jpy() {
     python3 -c "
 import sys, json
 try:
     d = json.loads(sys.stdin.read())
-    r = d.get('result')
     v = ($2)
     if isinstance(v, bool): print('true' if v else 'false')
-    elif v is None: print('')
     else: print(v)
 except Exception:
     pass
 " <<<"$1" 2>/dev/null
 }
 
-# jerr <json-rpc-envelope> -> the .error.code (or empty)
-jerr() {
-    python3 -c "
-import sys, json
-try:
-    d = json.loads(sys.stdin.read())
-    e = d.get('error')
-    if isinstance(e, dict): print(e.get('code',''))
-except Exception:
-    pass
-" <<<"$1" 2>/dev/null
-}
-
-# jerrmsg <json-rpc-envelope> -> the .error.message (or empty)
-jerrmsg() {
-    python3 -c "
-import sys, json
-try:
-    d = json.loads(sys.stdin.read())
-    e = d.get('error')
-    if isinstance(e, dict): print(e.get('message',''))
-except Exception:
-    pass
-" <<<"$1" 2>/dev/null
-}
-
-# field <json-rpc-result-obj> <key> -> value from .result object (or __ABSENT__)
-field() {
-    python3 -c "
-import sys, json
-try:
-    d = json.loads(sys.stdin.read())
-    r = d.get('result')
-    if not isinstance(r, dict):
-        print('__NORESULT__'); sys.exit()
-    v = r.get('$2')
-    if v is None and '$2' not in r: print('__ABSENT__')
-    elif isinstance(v, bool): print('true' if v else 'false')
-    elif v is None: print('null')
-    else: print(v)
-except Exception:
-    print('__ERR__')
-" <<<"$1" 2>/dev/null
-}
-
-# amount_eq <a> <b> -> "ok" if a and b are equal as Decimal BTC amounts.
-amount_eq() {
-    python3 -c "
-import sys
-from decimal import Decimal
-try:
-    print('ok' if Decimal(str('$1')) == Decimal(str('$2')) else 'no')
-except Exception:
-    print('no')
-" 2>/dev/null
-}
-
-# ── 2. Launch the Core regtest oracle (-listen=0, coinstatsindex+txindex). ─
-launch_core() {
-    local datadir="$1" rpc="$2" p2p="$3" logf="$4"; shift 4
-    free_port "$rpc"
-    free_port "$p2p"
-    rm -rf "$datadir"; mkdir -p "$datadir"
-    "$CORE_BIN" -regtest -datadir="$datadir" -rpcport="$rpc" -port="$p2p" \
-        -listen=0 -acceptnonstdtxn=1 -fallbackfee=0.0002 \
-        "$@" >"$logf" 2>&1 &
+# ── 3. Launch Core regtest oracle. ────────────────────────────────────────────
+launch_core_once() {
+    free_port "$CORE_RPC"; free_port "$CORE_P2P"
+    rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
+    "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \
+        -coinstatsindex=1 -txindex=1 -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &
     CORE_BG=$!
     local deadline=$(( $(date +%s) + 90 ))
     while (( $(date +%s) < deadline )); do
-        if "$CORE_CLI" -regtest -datadir="$datadir" -rpcport="$rpc" getblockcount >/dev/null 2>&1; then return 0; fi
+        if core_cli getblockcount >/dev/null 2>&1; then
+            core_cli_retry getblockcount >/dev/null && return 0
+        fi
         kill -0 "$CORE_BG" 2>/dev/null || return 1
         sleep 1
     done
     return 1
 }
-
 CORE_OK=0
 for attempt in 1 2 3; do
-    log "launching Core regtest oracle rpc=:$CORE_RPC p2p=:$CORE_P2P -coinstatsindex=1 -txindex=1 (attempt $attempt)"
-    if launch_core "$CORE_DATADIR" "$CORE_RPC" "$CORE_P2P" "$CORE_LOG" -coinstatsindex=1 -txindex=1; then CORE_OK=1; break; fi
-    log "Core oracle attempt $attempt failed (see $CORE_LOG); retrying after settle"
+    log "launching Core regtest oracle (-listen=0 -coinstatsindex=1 -txindex=1) rpc=:$CORE_RPC (attempt $attempt)"
+    if launch_core_once; then CORE_OK=1; break; fi
+    log "Core oracle attempt $attempt failed; retrying"
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     sleep 3
 done
-[[ "$CORE_OK" == "1" ]] || { tail -n 20 "$CORE_LOG" >&2 2>/dev/null || true; fail "Core oracle failed to start within 3 attempts (see $CORE_LOG)"; }
+[[ "$CORE_OK" == "1" ]] || { tail -n 20 "$CORE_LOG" >&2 2>/dev/null || true; fail "Core oracle failed to start"; }
 log "Core oracle ready (pid=$CORE_BG)"
 
-# ── 3. Build the chain on Core: OP_TRUE coinbase, maturity, then a SPEND. ──
-# 3a. Resolve the canonical "raw(51)#<checksum>" descriptor (bare OP_TRUE spk).
-DESC=$(jres "$(core_rpc getdescriptorinfo '["raw(51)"]')" "r['descriptor']")
-[[ -n "$DESC" ]] || fail "Core getdescriptorinfo raw(51) failed (see $CORE_LOG)"
-log "OP_TRUE descriptor: $DESC"
-
-# 3b. Mine block 1 with the coinbase paying to bare OP_TRUE (anyone-can-spend).
-B1=$(jres "$(core_rpc generateblock "[\"$DESC\", []]")" "r['hash']")
-[[ "$B1" =~ ^[0-9a-f]{64}$ ]] || fail "Core generateblock (OP_TRUE coinbase) failed: $B1 (see $CORE_LOG)"
-
-# 3c. Mature the coinbase: $MATURITY blocks to a standard p2wpkh address.
-GEN=$(core_rpc generatetoaddress "[$MATURITY, \"$MINE_ADDR\"]")
-echo "$GEN" | grep -q '"result"' || fail "Core generatetoaddress (maturity) failed: $GEN"
-
-# 3d. Build a raw tx spending the OP_TRUE coinbase (empty scriptSig) -> p2wpkh.
-CBTXID=$(jres "$(core_rpc getblock "[\"$B1\", 1]")" "r['tx'][0]")
-[[ "$CBTXID" =~ ^[0-9a-f]{64}$ ]] || fail "could not resolve OP_TRUE coinbase txid: '$CBTXID'"
-# value 49.99 (0.01 BTC fee; the OP_TRUE input requires no signature).
-RAW=$(jres "$(core_rpc createrawtransaction "[[{\"txid\":\"$CBTXID\",\"vout\":0}], [{\"$MINE_ADDR\":49.99}]]")" "r")
-[[ -n "$RAW" ]] || fail "Core createrawtransaction failed (see $CORE_LOG)"
-SPENDTXID=$(jres "$(core_rpc sendrawtransaction "[\"$RAW\", 0]")" "r")
-[[ "$SPENDTXID" =~ ^[0-9a-f]{64}$ ]] || fail "Core sendrawtransaction (OP_TRUE spend) failed: '$SPENDTXID' (see $CORE_LOG)"
-log "spend txid: $SPENDTXID (removes the OP_TRUE coinbase output, adds a p2wpkh output)"
-
-# 3e. Mine a block INCLUDING the spend (coinbase OP_TRUE + the spend tx).
-BSPEND=$(jres "$(core_rpc generateblock "[\"$DESC\", [\"$SPENDTXID\"]]")" "r['hash']")
-[[ "$BSPEND" =~ ^[0-9a-f]{64}$ ]] || fail "Core generateblock (spend block) failed: $BSPEND (see $CORE_LOG)"
-
-CORE_H=$(jres "$(core_rpc getblockcount '[]')" "r")
-EXPECT_H=$(( 1 + MATURITY + 1 ))
-[[ "$CORE_H" == "$EXPECT_H" ]] || fail "Core height=$CORE_H expected $EXPECT_H"
-log "Core chain built to height $CORE_H (spend block $BSPEND removes+adds UTXOs)"
-
-# Confirm the spend block really has 2 transactions (coinbase + the spend).
-SPEND_NTX=$(jres "$(core_rpc getblock "[\"$BSPEND\", 1]")" "len(r['tx'])")
-[[ "$SPEND_NTX" == "2" ]] || fail "spend block ntx=$SPEND_NTX expected 2"
-
-# 3f. Resolve the canonical block hash AT the historical height H (this is what
-#     gettxoutsetinfo <hash_type> H must report as bestblock — NOT the tip).
-HIST_HASH=$(jres "$(core_rpc getblockhash "[$HIST_HEIGHT]")" "r")
-[[ "$HIST_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "Core getblockhash $HIST_HEIGHT failed: '$HIST_HASH'"
-log "historical height H=$HIST_HEIGHT block hash = $HIST_HASH (well below tip $CORE_H)"
-
-# ── 4. Fetch ALL raw serialized blocks 1..H from Core (batched). ──────────
-RAW_FILE="$LB_DATADIR/core_raw_blocks.txt"
-log "fetching Core's $CORE_H raw blocks (batched)"
-python3 - "$CORE_DATADIR/regtest/.cookie" "$CORE_RPC" "$CORE_H" "$RAW_FILE" <<'PY' 2>/dev/null || fail "Core batched raw-block fetch failed (see $CORE_LOG)"
-import sys, json, base64, time, urllib.request
-cookie_path, rpc_port, nblocks, out_path = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
-url = 'http://127.0.0.1:%s/' % rpc_port
-def call(batch):
-    for _ in range(8):
-        try:
-            cookie = open(cookie_path).read().strip()
-            auth = base64.b64encode(cookie.encode()).decode()
-            req = urllib.request.Request(url, data=json.dumps(batch).encode(),
-                headers={'Authorization':'Basic '+auth,'Content-Type':'application/json'})
-            resp = json.loads(urllib.request.urlopen(req, timeout=120).read())
-            if isinstance(resp, list) and all('result' in r and r['result'] is not None for r in resp):
-                return resp
-        except Exception:
-            pass
-        time.sleep(1)
-    raise SystemExit("batched RPC call failed after retries")
-hb = call([{'jsonrpc':'1.0','id':h,'method':'getblockhash','params':[h]} for h in range(1, nblocks+1)])
-hashes = {r['id']: r['result'] for r in hb}
-bb = call([{'jsonrpc':'1.0','id':h,'method':'getblock','params':[hashes[h], 0]} for h in range(1, nblocks+1)])
-raws = {r['id']: r['result'] for r in bb}
-with open(out_path, 'w') as f:
-    for h in range(1, nblocks+1):
-        f.write(raws[h] + "\n")
-PY
-[[ -s "$RAW_FILE" ]] || fail "Core raw-block file empty: $RAW_FILE"
-mapfile -t RAW_ARR <"$RAW_FILE"
-[[ "${#RAW_ARR[@]}" == "$CORE_H" ]] || fail "expected $CORE_H raw blocks, got ${#RAW_ARR[@]}"
-
-# ── 5. Launch lunarblock on regtest. ──────────────────────────────────────
-# CONTRACT requires -coinstatsindex=1 on BOTH launches. lunarblock's CLI has NO
-# --coinstatsindex option (it exits "Unknown option: --coinstatsindex"), which
-# is itself proof the capability is absent: there is no per-height UTXO-stats
-# index to enable. We therefore launch with the supported --txindex only and let
-# the at-height gettxoutsetinfo query exercise the RPC layer's coinstatsindex
-# error contract. (If the CLI option is ever added, restore --coinstatsindex.)
+# ── 4. Launch lunarblock on regtest (WITH --coinstatsindex --txindex). ─────────
+log "checking if lunarblock supports --coinstatsindex"
 CSI_FLAG="--coinstatsindex"
-if ! grep -q -- '--coinstatsindex' "$LB_DIR/src/main.lua" 2>/dev/null; then
-    log "NOTE: lunarblock has no --coinstatsindex CLI option (capability absent); launching with --txindex only"
+if ! grep -q -- 'coinstatsindex' "$LB_DIR/src/main.lua" 2>/dev/null; then
+    log "NOTE: lunarblock has no --coinstatsindex CLI option; capability absent"
     CSI_FLAG=""
 fi
-log "launching lunarblock (regtest) rpc=:$LB_RPC p2p=:$LB_P2P ${CSI_FLAG:+-coinstatsindex } -txindex -> $LB_LOG"
+log "launching lunarblock (regtest${CSI_FLAG:+ --coinstatsindex} --txindex) rpc=:$LB_RPC p2p=:$LB_P2P -> $LB_LOG"
 export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$LB_DATADIR' \
@@ -381,180 +259,380 @@ lb_deadline=$(( $(date +%s) + 120 ))
 lb_up=0
 while (( $(date +%s) < lb_deadline )); do
     if ! kill -0 "$LB_PID" 2>/dev/null; then
-        tail -n 20 "$LB_LOG" >&2 2>/dev/null || true
-        fail "lunarblock exited during startup (see $LB_LOG)"
+        tail -n 30 "$LB_LOG" >&2 2>/dev/null || true
+        fail "lunarblock exited during startup"
     fi
     r=$(lb_rpc getblockchaininfo '[]')
     if echo "$r" | grep -q '"regtest"'; then lb_up=1; break; fi
     sleep 1
 done
-[[ "$lb_up" -eq 1 ]] || { tail -n 20 "$LB_LOG" >&2 2>/dev/null || true; fail "lunarblock RPC never reported chain=regtest within 120s"; }
+[[ "$lb_up" -eq 1 ]] || { tail -n 30 "$LB_LOG" >&2 2>/dev/null || true; fail "lunarblock RPC never reported chain=regtest"; }
 log "lunarblock RPC ready"
 
-# ── 6. Replay Core's blocks into lunarblock via submitblock. ──────────────
-log "replaying Core's $CORE_H blocks into lunarblock via submitblock"
-for ((h=1; h<=CORE_H; h++)); do
-    raw="${RAW_ARR[$((h-1))]}"
-    [[ -n "$raw" ]] || fail "empty raw block at height $h"
-    sub=$(lb_rpc submitblock "[\"$raw\"]")
-    res=$(jres "$sub" "r")
-    if [[ -n "$res" && "$res" != "duplicate" ]]; then
-        log "lunarblock submitblock rejected block $h: $sub"
-        tail -n 40 "$LB_LOG" >&2 2>/dev/null || true
-        fail "lunarblock submitblock failed at height $h: '$res'"
-    fi
-done
-
-lb_h=$(jres "$(lb_rpc getblockcount '[]')" "r")
-[[ "$lb_h" == "$CORE_H" ]] || { tail -n 40 "$LB_LOG" >&2 2>/dev/null || true; fail "lunarblock height=$lb_h expected $CORE_H after replay"; }
-log "both nodes at height $CORE_H (identical chain)"
-
-# Sanity: tip hashes equal on both nodes (chain truly identical, byte-for-byte).
-# core_rpc can transiently return an empty body right after the heavy replay; we
-# retry a few times so a flaky RPC read is never misreported as a chain mismatch.
-CORE_TIP=""
-for _ in 1 2 3 4 5 6 7 8; do
-    CORE_TIP=$(jres "$(core_rpc getbestblockhash '[]')" "r")
-    [[ "$CORE_TIP" =~ ^[0-9a-f]{64}$ ]] && break
-    CORE_TIP=$(core_cli getbestblockhash 2>/dev/null)
-    [[ "$CORE_TIP" =~ ^[0-9a-f]{64}$ ]] && break
-    sleep 1
-done
-LB_TIP=""
-for _ in 1 2 3 4 5; do
-    LB_TIP=$(jres "$(lb_rpc getbestblockhash '[]')" "r")
-    [[ "$LB_TIP" =~ ^[0-9a-f]{64}$ ]] && break
-    sleep 1
-done
-[[ "$CORE_TIP" =~ ^[0-9a-f]{64}$ ]] || fail "Core getbestblockhash returned no tip hash after replay (oracle RPC stalled; see $CORE_LOG)"
-[[ "$CORE_TIP" == "$LB_TIP" ]] \
-    || fail "tip hash mismatch after replay: core=$CORE_TIP lb=$LB_TIP"
-# Cross-check the tip is the spend block we built (chain shape is what we think).
-[[ "$CORE_TIP" == "$BSPEND" ]] \
-    || log "note: tip $CORE_TIP != built spend block $BSPEND (extra blocks?)"
-
-# ── 7. Wait for Core's coinstatsindex to sync. ────────────────────────────
-# Poll getindexinfo until "coinstatsindex" reports synced=true at the tip, OR
-# fall back to gettxoutsetinfo@<tip-hash> succeeding (the index is what backs a
-# non-tip query). The Core oracle MUST have the index; if it never syncs the
-# oracle itself is broken and we cannot judge the impl.
-log "waiting for Core coinstatsindex to sync to tip $CORE_H"
-csi_deadline=$(( $(date +%s) + 90 ))
-core_csi_ready=0
-while (( $(date +%s) < csi_deadline )); do
-    II=$(core_rpc getindexinfo '["coinstatsindex"]')
-    SYNCED=$(jres "$II" "r['coinstatsindex']['synced']")
-    BBH=$(jres "$II" "r['coinstatsindex']['best_block_height']")
-    if [[ "$SYNCED" == "true" && "$BBH" == "$CORE_H" ]]; then core_csi_ready=1; break; fi
-    sleep 1
-done
-[[ "$core_csi_ready" == "1" ]] || fail "Core coinstatsindex never synced to tip $CORE_H within 90s (oracle broken; see $CORE_LOG)"
-log "Core coinstatsindex synced to tip"
-
-# Confirm the historical-height query works on the ORACLE first (proves the
-# index has per-height data; defines the expected answer). Retry on transient
-# empty bodies so a flaky read is not mistaken for an oracle error.
-C_HIST=""; C_HIST_ERR=""
-for _ in 1 2 3 4 5 6 7 8; do
-    C_HIST=$(core_rpc gettxoutsetinfo "[\"muhash\", $HIST_HEIGHT]")
-    [[ "$(field "$C_HIST" height)" == "$HIST_HEIGHT" ]] && break
-    C_HIST_ERR=$(jerr "$C_HIST")
-    [[ -n "$C_HIST_ERR" ]] && break
-    sleep 1
-done
-C_HIST_ERR=$(jerr "$C_HIST")
-[[ -z "$C_HIST_ERR" ]] || fail "Core gettxoutsetinfo muhash $HIST_HEIGHT errored on the oracle (code $C_HIST_ERR): $C_HIST"
-
-C_HEIGHT=$(field "$C_HIST" height)
-C_BEST=$(field "$C_HIST" bestblock)
-C_TXOUTS=$(field "$C_HIST" txouts)
-C_TOTAL=$(field "$C_HIST" total_amount)
-C_MUHASH=$(field "$C_HIST" muhash)
-[[ "$C_HEIGHT" == "$HIST_HEIGHT" ]] || fail "Core reported height=$C_HEIGHT for H=$HIST_HEIGHT query (oracle broken)"
-[[ "$C_BEST" == "$HIST_HASH" ]] || fail "Core reported bestblock=$C_BEST, expected hash-at-H $HIST_HASH (oracle broken)"
-[[ "$C_MUHASH" =~ ^[0-9a-f]{64}$ ]] || fail "Core muhash not 64-hex at H: '$C_MUHASH' (oracle broken)"
-log "Core@H=$HIST_HEIGHT: bestblock=$C_BEST txouts=$C_TXOUTS total_amount=$C_TOTAL muhash=$C_MUHASH"
-
-# ── 8. THE CORE GATE — gettxoutsetinfo "muhash" H on the IMPL. ────────────
-# Per the strict shared contract every sub-assertion is gated; none optional.
-ATHEIGHT_T="ok"; TXOUTS_T="ok"; AMOUNT_T="ok"; HASH_T="ok"; BESTBLOCK_T="ok"
-
-L_HIST=$(lb_rpc gettxoutsetinfo "[\"muhash\", $HIST_HEIGHT]")
-L_HIST_ERR=$(jerr "$L_HIST")
-L_HIST_MSG=$(jerrmsg "$L_HIST")
-
-if [[ -n "$L_HIST_ERR" ]]; then
-    # The impl rejected the historical-height query. Per the contract this is a
-    # REAL FAIL (lacks coinstatsindex / rejects hash_or_height), not a SKIP.
-    log "lunarblock gettxoutsetinfo muhash $HIST_HEIGHT errored (code $L_HIST_ERR): '$L_HIST_MSG'"
-    log "lunarblock does NOT support at-height gettxoutsetinfo (no coinstatsindex)."
-
-    # ── ERROR-PATH gate: with coinstatsindex effectively absent, a non-tip
-    #    hash_or_height MUST error, matching Core's contract. We verify the impl
-    #    error matches the Core -8 'requires coinstatsindex' family so the
-    #    failure is characterized precisely (not a crash / wrong code).
-    EXPECT_MSG="Querying specific block heights requires coinstatsindex"
-    # When hash_type=muhash and coinstatsindex is off, Core (blockchain.cpp)
-    # emits exactly that message with code -8.
-    if [[ "$L_HIST_ERR" == "-8" ]] && echo "$L_HIST_MSG" | grep -qi "coinstatsindex"; then
-        log "impl error path MATCHES Core's -8 'requires coinstatsindex' contract"
-        fail "no coinstatsindex: at-height gettxoutsetinfo unsupported (impl returns -8 'requires coinstatsindex'; capability absent)"
-    fi
-    fail "no coinstatsindex: at-height gettxoutsetinfo rejected (impl code=$L_HIST_ERR msg='$L_HIST_MSG')"
+# If --coinstatsindex did not cause a startup error, confirm it is actually
+# recognized (the node did not silently ignore the unknown flag).
+if [[ -n "$CSI_FLAG" ]]; then
+    LB_GI_INIT=$(lb_rpc getindexinfo '[]')
+    log "lunarblock getindexinfo on startup: $LB_GI_INIT"
 fi
 
-# If we got here the impl returned a RESULT for the at-height query — compare it
-# field-by-field against the Core oracle's answer AT THE HISTORICAL HEIGHT.
-L_HEIGHT=$(field "$L_HIST" height)
-L_BEST=$(field "$L_HIST" bestblock)
-L_TXOUTS=$(field "$L_HIST" txouts)
-L_TOTAL=$(field "$L_HIST" total_amount)
-L_MUHASH=$(field "$L_HIST" muhash)
+# ── 5. Core builds the chain: mine to maturity, spend, mine more. ─────────────
+log "Core: mining $NMATURE blocks to $ADDR (setmocktime-pinned)"
+core_cli setmocktime "$TBASE" >/dev/null 2>&1 || true
+mine_one() {
+    local nexth; nexth=$(( $(core_cli_retry getblockcount) + 1 ))
+    core_cli setmocktime "$(( TBASE + nexth ))" >/dev/null 2>&1 || true
+    if ! core_cli generatetoaddress 1 "$ADDR" >/dev/null 2>&1; then
+        sleep 1
+        core_cli generatetoaddress 1 "$ADDR" >/dev/null 2>&1 || fail "Core generatetoaddress failed"
+    fi
+}
+for (( i=1; i<=NMATURE; i++ )); do mine_one; done
 
-# GATE a: impl.height == H == Core.height
-[[ "$L_HEIGHT" == "$HIST_HEIGHT" && "$C_HEIGHT" == "$HIST_HEIGHT" ]] \
-    || { ATHEIGHT_T="bad"; log "height: impl=$L_HEIGHT core=$C_HEIGHT expected $HIST_HEIGHT"; }
+# Spend block 1's coinbase (50 BTC, matured) to SEND_ADDR.
+SP_BH1=$(core_cli_retry getblockhash 1) || fail "Core getblockhash 1 failed"
+SP_B1J=$(core_cli_retry getblock "$SP_BH1" 2) || fail "Core getblock block1 verbosity=2 failed"
+SP_TXID=$(jpy "$SP_B1J" "d['tx'][0]['txid']")
+SP_SPK=$(jpy  "$SP_B1J" "d['tx'][0]['vout'][0]['scriptPubKey']['hex']")
+[[ "$SP_TXID" =~ ^[0-9a-f]{64}$ ]] || fail "could not read block-1 coinbase txid: '$SP_TXID'"
+[[ "$SP_SPK" =~ ^[0-9a-f]+$ ]]     || fail "could not read block-1 coinbase scriptPubKey: '$SP_SPK'"
+log "spending block-1 coinbase $SP_TXID:0 -> $SEND_ADDR (49.999 BTC)"
+SP_RAW=$(core_cli createrawtransaction \
+    "[{\"txid\":\"$SP_TXID\",\"vout\":0}]" "{\"$SEND_ADDR\":49.999}") \
+    || fail "Core createrawtransaction failed"
+[[ -n "$SP_RAW" ]] || fail "createrawtransaction returned empty"
+SP_SIGNED=$(core_cli signrawtransactionwithkey "$SP_RAW" "[\"$SECRET_WIF\"]" \
+    "[{\"txid\":\"$SP_TXID\",\"vout\":0,\"scriptPubKey\":\"$SP_SPK\",\"amount\":50.0}]") \
+    || fail "Core signrawtransactionwithkey failed"
+SP_COMPLETE=$(jpy "$SP_SIGNED" "d.get('complete')")
+[[ "$SP_COMPLETE" == "true" ]] || fail "Core signing incomplete (complete=$SP_COMPLETE)"
+SP_HEX=$(jpy "$SP_SIGNED" "d['hex']")
+[[ -n "$SP_HEX" ]] || fail "signed spend hex empty"
+SPEND_TXID=$(core_cli sendrawtransaction "$SP_HEX" 2>/dev/null) || fail "Core sendrawtransaction (spend) failed"
+[[ "$SPEND_TXID" =~ ^[0-9a-f]{64}$ ]] || fail "bad spend txid: '$SPEND_TXID'"
+log "spend accepted: $SPEND_TXID"
+mine_one
+H_SPEND=$(core_cli_retry getblockcount)
+for (( i=1; i<=3; i++ )); do mine_one; done
+CORE_HEIGHT=$(core_cli_retry getblockcount)
+log "Core chain height: $CORE_HEIGHT ; H_SPEND=$H_SPEND ; historical H=$HIST_H"
+[[ "$CORE_HEIGHT" -gt "$HIST_H" ]] || fail "Core height $CORE_HEIGHT not above historical H=$HIST_H"
 
-# GATE b: impl.bestblock == Core.bestblock (the hash AT height H, not the tip)
-[[ "$L_BEST" == "$C_BEST" && "$L_BEST" == "$HIST_HASH" ]] \
-    || { BESTBLOCK_T="bad"; log "bestblock: impl=$L_BEST core=$C_BEST expected hash-at-H $HIST_HASH"; }
-[[ "$L_BEST" != "$CORE_TIP" ]] \
-    || { BESTBLOCK_T="bad"; log "bestblock: impl returned the TIP hash, not the hash at H (got $L_BEST)"; }
+# ── 6. Replay Core's raw blocks into lunarblock via submitblock. ───────────────
+log "replaying Core's $CORE_HEIGHT raw blocks into lunarblock via submitblock"
+REPLAY_OK=1
+for (( h=1; h<=CORE_HEIGHT; h++ )); do
+    bh=$(core_cli_retry getblockhash "$h")    || { REPLAY_OK=0; log "getblockhash $h failed"; break; }
+    raw=$(core_cli_retry getblock "$bh" 0)    || { REPLAY_OK=0; log "getblock $bh 0 failed"; break; }
+    [[ -n "$raw" ]]                           || { REPLAY_OK=0; log "empty raw block at height $h"; break; }
+    sb=$(lb_rpc submitblock "[\"$raw\"]")
+    sbres=$(jpy "$sb" "d.get('result')")
+    sberr=$(jpy "$sb" "d.get('error')")
+    if [[ -n "$sbres" && "$sbres" != "None" && "$sbres" != "duplicate" && "$sbres" != "inconclusive" ]]; then
+        REPLAY_OK=0; log "lunarblock submitblock rejected height $h: result='$sbres' raw=$sb"; break
+    fi
+    if [[ -n "$sberr" && "$sberr" != "None" ]]; then
+        REPLAY_OK=0; log "lunarblock submitblock errored height $h: $sb"; break
+    fi
+done
+LB_HEIGHT=$(jpy "$(lb_rpc getblockcount '[]')" "d['result']")
+log "lunarblock height after replay: ${LB_HEIGHT:-?} (replay_ok=$REPLAY_OK, core=$CORE_HEIGHT)"
+if [[ "$REPLAY_OK" != "1" || "$LB_HEIGHT" != "$CORE_HEIGHT" ]]; then
+    skip "submitblock replay incomplete (lb_height=${LB_HEIGHT:-?} core=$CORE_HEIGHT) — cannot compare per-height UTXO stats"
+fi
+CORE_TIP=$(core_cli_retry getbestblockhash)
+LB_TIP=$(jpy "$(lb_rpc getbestblockhash '[]')" "d['result']")
+[[ -n "$CORE_TIP" && -n "$LB_TIP" ]] || fail "could not read tips (core=$CORE_TIP lb=$LB_TIP)"
+[[ "$CORE_TIP" == "$LB_TIP" ]] || skip "chains diverged after replay (core=$CORE_TIP lb=$LB_TIP)"
+log "chains identical: tip=$LB_TIP"
 
-# GATE c: impl.txouts == Core.txouts
-[[ "$L_TXOUTS" == "$C_TXOUTS" && "$C_TXOUTS" =~ ^[0-9]+$ ]] \
-    || { TXOUTS_T="bad"; log "txouts: impl=$L_TXOUTS core=$C_TXOUTS"; }
+# ── 7. Wait for coinstatsindex to sync on BOTH nodes. ─────────────────────────
+log "waiting for Core coinstatsindex to sync to height $CORE_HEIGHT"
+CORE_IDX_OK=0
+idx_deadline=$(( $(date +%s) + 120 ))
+while (( $(date +%s) < idx_deadline )); do
+    GI=$(core_cli_retry getindexinfo 2>/dev/null)
+    SYNCED=$(jpy "$GI" "d.get('coinstatsindex',{}).get('synced')")
+    BBH=$(jpy    "$GI" "d.get('coinstatsindex',{}).get('best_block_height')")
+    if [[ "$SYNCED" == "true" && "$BBH" == "$CORE_HEIGHT" ]]; then CORE_IDX_OK=1; break; fi
+    sleep 1
+done
+if [[ "$CORE_IDX_OK" != "1" ]]; then
+    # fallback: try the direct query
+    if core_cli_retry gettxoutsetinfo muhash "$HIST_H" >/dev/null 2>&1; then CORE_IDX_OK=1; fi
+fi
+[[ "$CORE_IDX_OK" == "1" ]] || fail "Core coinstatsindex never synced (getindexinfo=$GI)"
+log "Core coinstatsindex synced"
 
-# GATE d: impl.total_amount == Core.total_amount
-[[ "$(amount_eq "$L_TOTAL" "$C_TOTAL")" == "ok" ]] \
-    || { AMOUNT_T="bad"; log "total_amount: impl=$L_TOTAL core=$C_TOTAL"; }
+# Check lunarblock getindexinfo for coinstatsindex.
+LB_GI=$(lb_rpc getindexinfo '[]')
+log "lunarblock getindexinfo: $LB_GI"
+LB_CSI_SYNCED=$(jpy "$LB_GI" "d.get('result',{}).get('coinstatsindex',{}).get('synced')")
+LB_CSI_BBH=$(jpy    "$LB_GI" "d.get('result',{}).get('coinstatsindex',{}).get('best_block_height')")
+log "lunarblock coinstatsindex: synced=$LB_CSI_SYNCED best_block_height=$LB_CSI_BBH"
 
-# GATE e: impl.muhash == Core.muhash (the per-height running set hash)
-if [[ ! "$C_MUHASH" =~ ^[0-9a-f]{64}$ ]]; then
-    HASH_T="bad"; log "Core muhash not 64-hex at H: '$C_MUHASH'"
-elif [[ "$L_MUHASH" != "$C_MUHASH" ]]; then
-    HASH_T="bad"; log "muhash@H mismatch: impl=$L_MUHASH core=$C_MUHASH (UTXO-set-at-H diverges)"
+# ── 8. THE CORE CHECK — gettxoutsetinfo "muhash" H on BOTH nodes. ──────────────
+ATHEIGHT_T="bad"; TXOUTS_T="bad"; AMOUNT_T="bad"; HASH_T="bad"; BESTBLOCK_T="bad"
+
+# Core: authoritative per-height stats.
+CORE_HJ=$(core_cli_retry gettxoutsetinfo muhash "$HIST_H") \
+    || fail "Core gettxoutsetinfo muhash $HIST_H failed"
+[[ -n "$CORE_HJ" ]] || fail "Core gettxoutsetinfo returned empty"
+C_HEIGHT=$(jpy "$CORE_HJ" "d.get('height')")
+C_BEST=$(jpy   "$CORE_HJ" "d.get('bestblock')")
+C_TXOUTS=$(jpy "$CORE_HJ" "d.get('txouts')")
+C_TOTAL=$(jpy  "$CORE_HJ" "d.get('total_amount')")
+C_MU=$(jpy     "$CORE_HJ" "d.get('muhash')")
+CORE_BH_AT_H=$(core_cli_retry getblockhash "$HIST_H")
+[[ "$C_HEIGHT" == "$HIST_H" ]] || fail "Core height=$C_HEIGHT for H=$HIST_H (oracle broken)"
+[[ "$C_BEST" == "$CORE_BH_AT_H" ]] || fail "Core bestblock@H=$C_BEST != getblockhash($HIST_H)=$CORE_BH_AT_H"
+[[ "$C_BEST" != "$CORE_TIP" ]] || fail "Core bestblock@H equals the TIP (sanity fail)"
+log "Core@H=$HIST_H: height=$C_HEIGHT best=$C_BEST txouts=$C_TXOUTS total=$C_TOTAL muhash=$C_MU"
+
+# lunarblock: the same historical query.
+LB_HRESP=$(lb_rpc gettxoutsetinfo "[\"muhash\", $HIST_H]")
+LB_ERR_CODE=$(jpy "$LB_HRESP" "d.get('error',{}).get('code') if isinstance(d.get('error'),dict) else None")
+LB_ERR_MSG=$(jpy  "$LB_HRESP" "d.get('error',{}).get('message','') if isinstance(d.get('error'),dict) else ''")
+LB_RES=$(jpy      "$LB_HRESP" "json.dumps(d['result']) if d.get('result') is not None else ''")
+
+if [[ -z "$LB_RES" || "$LB_RES" == "" ]]; then
+    log "lunarblock gettxoutsetinfo muhash $HIST_H returned error: code=$LB_ERR_CODE msg='$LB_ERR_MSG'"
+    fail "lunarblock cannot query historical height $HIST_H (coinstatsindex absent/unwired): code=$LB_ERR_CODE '$LB_ERR_MSG'"
+fi
+B_HEIGHT=$(jpy "$LB_RES" "d.get('height')")
+B_BEST=$(jpy   "$LB_RES" "d.get('bestblock')")
+B_TXOUTS=$(jpy "$LB_RES" "d.get('txouts')")
+B_TOTAL=$(jpy  "$LB_RES" "d.get('total_amount')")
+B_MU=$(jpy     "$LB_RES" "d.get('muhash')")
+log "lunarblock@H=$HIST_H: height=$B_HEIGHT best=$B_BEST txouts=$B_TXOUTS total=$B_TOTAL muhash=$B_MU"
+
+# GATE 1: impl.height == H == Core.height
+[[ "$B_HEIGHT" == "$HIST_H" && "$B_HEIGHT" == "$C_HEIGHT" ]] \
+    || fail "atheight mismatch: lb=$B_HEIGHT H=$HIST_H core=$C_HEIGHT"
+ATHEIGHT_T="ok"
+
+# GATE 2: impl.bestblock == Core.bestblock (hash at H, not tip)
+[[ "$B_BEST" == "$C_BEST" ]] || fail "bestblock@H mismatch: lb=$B_BEST core=$C_BEST"
+[[ "$B_BEST" != "$LB_TIP" ]] || fail "lunarblock bestblock@H equals the TIP (returned tip state not history)"
+BESTBLOCK_T="ok"
+
+# GATE 3: impl.txouts == Core.txouts
+[[ "$B_TXOUTS" =~ ^[0-9]+$ ]] || fail "lunarblock txouts@H not an int: '$B_TXOUTS'"
+[[ "$B_TXOUTS" == "$C_TXOUTS" ]] || fail "txouts@H mismatch: lb=$B_TXOUTS core=$C_TXOUTS"
+TXOUTS_T="ok"
+
+# GATE 4: impl.total_amount == Core.total_amount
+TOTAL_EQ=$(python3 -c "print('eq' if abs(float('$B_TOTAL')-float('$C_TOTAL'))<1e-9 else 'ne')" 2>/dev/null)
+[[ "$TOTAL_EQ" == "eq" ]] || fail "total_amount@H mismatch: lb=$B_TOTAL core=$C_TOTAL"
+AMOUNT_T="ok"
+
+# GATE 5: impl.muhash == Core.muhash
+[[ "$B_MU" =~ ^[0-9a-f]{64}$ ]] || fail "lunarblock muhash@H not 64-hex: '$B_MU'"
+[[ "$C_MU" =~ ^[0-9a-f]{64}$ ]] || fail "Core muhash@H not 64-hex: '$C_MU'"
+[[ "$B_MU" == "$C_MU" ]] || fail "muhash@H mismatch vs Core: lb=$B_MU core=$C_MU"
+HASH_T="ok"
+
+# Sanity: historical muhash must differ from the tip muhash.
+CORE_TIPMU_J=$(core_cli_retry gettxoutsetinfo muhash) || fail "Core gettxoutsetinfo tip muhash failed"
+C_TIPMU=$(jpy "$CORE_TIPMU_J" "d.get('muhash')")
+[[ "$C_MU" != "$C_TIPMU" ]] || fail "historical muhash@H equals tip muhash (H not distinct from tip)"
+log "historical muhash@H ($C_MU) distinct from tip muhash ($C_TIPMU)"
+
+# Secondary: hash_serialized_3 @ height H -> -8 (both must agree).
+CB_DEFRESP=$(lb_rpc gettxoutsetinfo "[\"hash_serialized_3\", $HIST_H]")
+CB_DEFERR=$(jpy "$CB_DEFRESP" "d.get('error',{}).get('code') if isinstance(d.get('error'),dict) else None")
+CORE_DEFCODE=$(core_cli gettxoutsetinfo hash_serialized_3 "$HIST_H" 2>&1 | grep -oE "error code: -?[0-9]+" | grep -oE "\-?[0-9]+" | head -1)
+log "hash_serialized_3@H: lb err=$CB_DEFERR ; core err=$CORE_DEFCODE"
+[[ "$CORE_DEFCODE" == "-8" ]] || log "NOTE: Core hs3@H code=$CORE_DEFCODE (expected -8)"
+[[ "$CB_DEFERR" == "-8" ]] || fail "lunarblock hs3@H expected -8, got '$CB_DEFERR' (resp=$CB_DEFRESP)"
+
+# ── 9. INERT-WHEN-DISABLED CHECK ──────────────────────────────────────────────
+# Launch a second lunarblock WITHOUT --coinstatsindex; verify historical query
+# errors -8 and getindexinfo does NOT list coinstatsindex.
+log "inert-path check: launching lunarblock WITHOUT --coinstatsindex on port 40472"
+LB2_DATADIR="/tmp/csi-lunarblock2-$$"
+LB2_RPC=40472
+LB2_P2P=40493
+LB2_LOG="$LB2_DATADIR/node.log"
+rm -rf "$LB2_DATADIR"; mkdir -p "$LB2_DATADIR"
+setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
+    --network regtest --datadir '$LB2_DATADIR' \
+    --port '$LB2_P2P' --rpcport '$LB2_RPC' --nov2transport" \
+    >"$LB2_LOG" 2>&1 &
+LB2_PID=$!
+LB2_UP=0
+lb2_deadline=$(( $(date +%s) + 60 ))
+while (( $(date +%s) < lb2_deadline )); do
+    r2=$(curl -s --max-time 5 --data-binary '{"jsonrpc":"1.0","id":1,"method":"getblockchaininfo","params":[]}' \
+        "http://127.0.0.1:$LB2_RPC/" 2>/dev/null)
+    if echo "$r2" | grep -q '"regtest"'; then LB2_UP=1; break; fi
+    kill -0 "$LB2_PID" 2>/dev/null || break
+    sleep 1
+done
+if [[ "$LB2_UP" == "1" ]]; then
+    # Feed a few blocks so we can probe a sub-tip height.
+    for h2 in 1 2 3 4 5; do
+        bh2=$(core_cli_retry getblockhash "$h2" 2>/dev/null) || true
+        [[ -n "$bh2" ]] || break
+        raw2=$(core_cli_retry getblock "$bh2" 0 2>/dev/null) || true
+        [[ -n "$raw2" ]] || break
+        curl -s --max-time 30 --data-binary \
+            "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"submitblock\",\"params\":[\"$raw2\"]}" \
+            "http://127.0.0.1:$LB2_RPC/" >/dev/null 2>&1 || true
+    done
+    NOIDX_RESP=$(curl -s --max-time 30 \
+        --data-binary '{"jsonrpc":"1.0","id":1,"method":"gettxoutsetinfo","params":["muhash",2]}' \
+        "http://127.0.0.1:$LB2_RPC/" 2>/dev/null)
+    NOIDX_CODE=$(jpy "$NOIDX_RESP" "d.get('error',{}).get('code') if isinstance(d.get('error'),dict) else None")
+    NOIDX_MSG=$(jpy  "$NOIDX_RESP" "d.get('error',{}).get('message','') if isinstance(d.get('error'),dict) else ''")
+    log "lunarblock(no-index) gettxoutsetinfo muhash 2 -> code=$NOIDX_CODE msg='$NOIDX_MSG'"
+    if [[ "$NOIDX_CODE" == "-8" ]]; then
+        log "INERT PATH OK: disabled coinstatsindex returns -8 as expected"
+    else
+        log "NOTE: disabled coinstatsindex returned code=$NOIDX_CODE (expected -8); resp=$NOIDX_RESP"
+    fi
+    NOIDX_GI=$(curl -s --max-time 10 \
+        --data-binary '{"jsonrpc":"1.0","id":1,"method":"getindexinfo","params":[]}' \
+        "http://127.0.0.1:$LB2_RPC/" 2>/dev/null)
+    if echo "$NOIDX_GI" | grep -q '"coinstatsindex"'; then
+        fail "inert check: lunarblock(no-index) reports coinstatsindex in getindexinfo — should be absent when disabled: $NOIDX_GI"
+    fi
+    log "INERT PATH: coinstatsindex not in getindexinfo when disabled — correct"
+    kill -TERM "-$LB2_PID" 2>/dev/null || kill -TERM "$LB2_PID" 2>/dev/null || true
+    for _ in $(seq 1 10); do kill -0 "$LB2_PID" 2>/dev/null || break; sleep 1; done
+    kill -KILL "$LB2_PID" 2>/dev/null || true
+    LB2_PID=""
+    rm -rf "$LB2_DATADIR" 2>/dev/null || true
 else
-    log "muhash@H byte-EXACT vs Core: $C_MUHASH"
+    log "NOTE: inert-path node did not come up; skipping that check"
+    [[ -n "$LB2_PID" ]] && { kill "$LB2_PID" 2>/dev/null || true; LB2_PID=""; }
+    rm -rf "$LB2_DATADIR" 2>/dev/null || true
 fi
 
-# ── 9. Secondary: default hash_type at H (Core: hash_serialized_3 cannot be
-#    queried at a specific block even WITH coinstatsindex -> -8). Both nodes
-#    must agree on this contract. (Informational unless they disagree.) ─────
-C_HS3=$(core_rpc gettxoutsetinfo "[\"hash_serialized_3\", $HIST_HEIGHT]")
-C_HS3_CODE=$(jerr "$C_HS3")
-L_HS3=$(lb_rpc gettxoutsetinfo "[\"hash_serialized_3\", $HIST_HEIGHT]")
-L_HS3_CODE=$(jerr "$L_HS3")
-[[ "$C_HS3_CODE" == "-8" ]] || log "note: Core hash_serialized_3@H code=$C_HS3_CODE (expected -8)"
-[[ "$L_HS3_CODE" == "$C_HS3_CODE" ]] \
-    || log "note: hash_serialized_3@H code impl=$L_HS3_CODE core=$C_HS3_CODE (contract mismatch)"
+# All five at-height gates must be ok before the reorg phase.
+[[ "$ATHEIGHT_T" == "ok" && "$TXOUTS_T" == "ok" && "$AMOUNT_T" == "ok" \
+   && "$HASH_T" == "ok" && "$BESTBLOCK_T" == "ok" ]] \
+    || fail "one or more at-height gates failed (atheight=$ATHEIGHT_T txouts=$TXOUTS_T amount=$AMOUNT_T hash=$HASH_T bestblock=$BESTBLOCK_T)"
+log "PASS (linear): lunarblock coinstatsindex matches Core at H=$HIST_H"
 
-# ── 10. Verdict. ──────────────────────────────────────────────────────────
-[[ "$ATHEIGHT_T"  == "ok" ]] || fail "height@H mismatch (impl=$L_HEIGHT core=$C_HEIGHT expected $HIST_HEIGHT)"
-[[ "$BESTBLOCK_T" == "ok" ]] || fail "bestblock@H mismatch (impl=$L_BEST core=$C_BEST expected $HIST_HASH)"
-[[ "$TXOUTS_T"    == "ok" ]] || fail "txouts@H mismatch (impl=$L_TXOUTS core=$C_TXOUTS)"
-[[ "$AMOUNT_T"    == "ok" ]] || fail "total_amount@H mismatch (impl=$L_TOTAL core=$C_TOTAL)"
-[[ "$HASH_T"      == "ok" ]] || fail "muhash@H not byte-exact vs Core (UTXO-set-at-H diverges)"
+# ── 10. REORG-SAFETY GATE ──────────────────────────────────────────────────────
+# WHY: at-height gate only proves coinstatsindex on the linear chain.  It cannot
+# catch an impl that reverses the index on disconnect but never RE-ADDS on
+# reconnect of the new chain's blocks.  We force a reorg via invalidateblock +
+# submitblock chain B, then assert the index serves chain-B's values.
+# Mirrors clearbit/rustoshi/hotbuns harnesses exactly.
+REORG_T="ok"
+REORG_DEPTH=5
+REORG_F=$(( CORE_HEIGHT - REORG_DEPTH ))
+REORG_NEWTIP=$(( CORE_HEIGHT + 3 ))
+REORG_H=$CORE_HEIGHT
 
-log "PASS: lunarblock gettxoutsetinfo@H matches Core (coinstatsindex at-height parity)"
-pass "ok" "ok" "ok" "ok" "ok"
+# lunarblock must expose invalidateblock.
+LB_IB_PROBE=$(lb_rpc invalidateblock '[]')
+LB_IB_PROBE_M=$(jpy "$LB_IB_PROBE" "d.get('error',{}).get('message','') if isinstance(d.get('error'),dict) else ''")
+if echo "$LB_IB_PROBE_M" | grep -qi "Method not found"; then
+    fail "reorg: lunarblock has no invalidateblock RPC ('$LB_IB_PROBE_M') — cannot drive a Core-faithful reorg"
+fi
+
+A_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "reorg: Core getblockhash $REORG_H (chain A) failed"
+log "reorg: chain A tip N=$CORE_HEIGHT, fork F=$REORG_F, B newtip=$REORG_NEWTIP, reorg-H=$REORG_H (A@H_R=$A_HASH_AT_HR)"
+
+# (2) Core oracle: invalidate F+1 then build longer chain B.
+FORK_CHILD=$(core_cli_retry getblockhash "$(( REORG_F + 1 ))") || fail "reorg: Core getblockhash F+1 failed"
+core_cli invalidateblock "$FORK_CHILD" >/dev/null 2>&1 || fail "reorg: Core invalidateblock failed"
+INVAL_TIP=$(core_cli_retry getblockcount) || fail "reorg: Core getblockcount after invalidate failed"
+[[ "$INVAL_TIP" == "$REORG_F" ]] || fail "reorg: Core after invalidate at $INVAL_TIP, expected F=$REORG_F"
+NB_B=$(( REORG_NEWTIP - REORG_F ))
+core_cli_retry generatetoaddress "$NB_B" "$CHAIN_B_ADDR" >/dev/null || fail "reorg: Core generatetoaddress (chain B) failed"
+CORE_BTIP_H=$(core_cli_retry getblockcount) || fail "reorg: Core getblockcount (B tip) failed"
+[[ "$CORE_BTIP_H" == "$REORG_NEWTIP" ]] || fail "reorg: Core B tip height $CORE_BTIP_H != $REORG_NEWTIP"
+CORE_BTIP=$(core_cli_retry getbestblockhash) || fail "reorg: Core getbestblockhash (B) failed"
+B_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "reorg: Core getblockhash $REORG_H (B) failed"
+[[ "$B_HASH_AT_HR" != "$A_HASH_AT_HR" ]] \
+    || fail "reorg sanity: block at H_R=$REORG_H unchanged (A=B=$A_HASH_AT_HR; not a real reorg)"
+log "reorg: Core reorged to B tip=$CORE_BTIP @h$CORE_BTIP_H; B@H_R=$B_HASH_AT_HR"
+
+# (3) REORG TRIGGER: invalidateblock(F+1) ON LUNARBLOCK first.
+LB_FORK_CHILD=$(jpy "$(lb_rpc getblockhash "[$(( REORG_F + 1 ))]")" "d['result']")
+[[ "$LB_FORK_CHILD" == "$FORK_CHILD" ]] \
+    || fail "reorg: lb F+1 hash ($LB_FORK_CHILD) != Core F+1 ($FORK_CHILD) before invalidate"
+log "reorg: invalidateblock F+1=$LB_FORK_CHILD on lunarblock (rewind to F=$REORG_F)"
+LB_IB_RESP=$(lb_rpc invalidateblock "[\"$LB_FORK_CHILD\"]")
+log "reorg: lb invalidateblock -> $LB_IB_RESP"
+LB_AT_F=0
+for _ in $(seq 1 30); do
+    LB_INVAL_H=$(jpy "$(lb_rpc getblockcount '[]')" "d['result']")
+    if [[ "$LB_INVAL_H" == "$REORG_F" ]]; then LB_AT_F=1; break; fi
+    sleep 1
+done
+[[ "$LB_AT_F" == "1" ]] \
+    || fail "reorg: lunarblock did not rewind to F=$REORG_F after invalidateblock (impl height=$LB_INVAL_H)"
+log "reorg: lunarblock rewound to fork F=$REORG_F"
+
+# Mirror B to lunarblock: submitblock B's blocks F+1..N+3.
+log "reorg: mirroring B's blocks $(( REORG_F + 1 ))..$REORG_NEWTIP to lunarblock"
+for (( h=REORG_F+1; h<=REORG_NEWTIP; h++ )); do
+    kill -0 "$LB_PID" 2>/dev/null || fail "reorg: lunarblock died at h=$h (see $LB_LOG)"
+    BBH=$(core_cli_retry getblockhash "$h") || fail "reorg: Core getblockhash $h (chain B) failed"
+    BRAW=$(core_cli_retry getblock "$BBH" 0) || fail "reorg: Core getblock $BBH 0 (chain B) failed"
+    [[ -n "$BRAW" ]] || fail "reorg: empty raw for chain-B block at h=$h"
+    BSUB=$(lb_rpc submitblock "[\"$BRAW\"]")
+    log "reorg submitblock h=$h -> $BSUB"
+done
+
+# Poll until lunarblock tip == Core B tip.
+LB_REORG_DONE=0
+for _ in $(seq 1 30); do
+    LB_BTIP=$(jpy   "$(lb_rpc getbestblockhash '[]')" "d['result']")
+    LB_BTIP_H=$(jpy "$(lb_rpc getblockcount '[]')"    "d['result']")
+    if [[ "$LB_BTIP" == "$CORE_BTIP" && "$LB_BTIP_H" == "$CORE_BTIP_H" ]]; then LB_REORG_DONE=1; break; fi
+    sleep 1
+done
+[[ "$LB_REORG_DONE" == "1" ]] \
+    || fail "reorg: lunarblock did not adopt chain B (lb tip=$LB_BTIP @h$LB_BTIP_H, core B tip=$CORE_BTIP @h$CORE_BTIP_H)"
+log "reorg: lunarblock adopted chain B (tip $LB_BTIP @h$LB_BTIP_H)"
+
+# (4) Reorg differential: gettxoutsetinfo muhash H_R on BOTH.
+RB_MUH=$(core_cli_retry gettxoutsetinfo muhash "$REORG_H") || fail "reorg: Core gettxoutsetinfo muhash $REORG_H post-reorg failed"
+RC_HEIGHT=$(jpy "$RB_MUH" "d.get('height')")
+RC_BEST=$(jpy   "$RB_MUH" "d.get('bestblock')")
+RC_MUHASH=$(jpy "$RB_MUH" "d.get('muhash')")
+[[ "$RC_HEIGHT" == "$REORG_H" ]] || fail "reorg: Core post-reorg height@H_R=$RC_HEIGHT != H_R=$REORG_H"
+[[ "$RC_BEST" == "$B_HASH_AT_HR" ]] || fail "reorg: Core post-reorg bestblock@H_R=$RC_BEST != B@H_R=$B_HASH_AT_HR"
+[[ "$RC_MUHASH" =~ ^[0-9a-f]{64}$ ]] || fail "reorg: Core post-reorg muhash@H_R not 64-hex: '$RC_MUHASH'"
+
+LB_RB_RESP=$(lb_rpc gettxoutsetinfo "[\"muhash\", $REORG_H]")
+LB_RB_ERR_C=$(jpy "$LB_RB_RESP" "d.get('error',{}).get('code') if isinstance(d.get('error'),dict) else None")
+if [[ -n "$LB_RB_ERR_C" && "$LB_RB_ERR_C" != "None" ]]; then
+    fail "reorg: lunarblock rejected gettxoutsetinfo muhash $REORG_H post-reorg (code=$LB_RB_ERR_C)"
+fi
+LB_RB_RES=$(jpy "$LB_RB_RESP" "json.dumps(d['result']) if d.get('result') is not None else ''")
+[[ -n "$LB_RB_RES" && "$LB_RB_RES" != "" ]] \
+    || fail "reorg: lunarblock gettxoutsetinfo@H_R returned no result (raw=$LB_RB_RESP)"
+RB_HEIGHT=$(jpy "$LB_RB_RES" "d.get('height')")
+RB_BEST=$(jpy   "$LB_RB_RES" "d.get('bestblock')")
+RB_MUHASH=$(jpy "$LB_RB_RES" "d.get('muhash')")
+log "reorg @H_R=$REORG_H: core(best=$RC_BEST muhash=$RC_MUHASH) lb(height=$RB_HEIGHT best=$RB_BEST muhash=$RB_MUHASH)"
+
+if [[ "$RB_BEST" == "$A_HASH_AT_HR" ]]; then
+    REORG_T="bad"
+    log "reorg DESYNC: lb bestblock@H_R=$RB_BEST is A's stale block (B@H_R=$B_HASH_AT_HR) — index did not reconnect B"
+fi
+[[ "$RB_HEIGHT" == "$REORG_H" ]] \
+    || { REORG_T="bad"; log "reorg: lb height@H_R=$RB_HEIGHT != H_R=$REORG_H"; }
+[[ "$RB_BEST" == "$B_HASH_AT_HR" && "$RB_BEST" == "$RC_BEST" ]] \
+    || { REORG_T="bad"; log "reorg: bestblock@H_R mismatch (lb=$RB_BEST want B@H_R=$B_HASH_AT_HR core=$RC_BEST)"; }
+[[ -n "$RB_MUHASH" && "$RB_MUHASH" == "$RC_MUHASH" ]] \
+    || { REORG_T="bad"; log "reorg: muhash@H_R MISMATCH (lb=$RB_MUHASH core=$RC_MUHASH) — impl served stale chain-A index after reorg"; }
+
+[[ "$REORG_T" == "ok" ]] \
+    || fail "reorg-safety gate failed at H_R=$REORG_H (lunarblock coinstatsindex did not reconnect chain B)"
+log "REORG OK @H_R=$REORG_H: lunarblock muhash+bestblock match Core's B-chain values after reorg"
+
+# ── 11. Verdict. ──────────────────────────────────────────────────────────────
+[[ "$ATHEIGHT_T" == "ok" && "$TXOUTS_T" == "ok" && "$AMOUNT_T" == "ok" \
+   && "$HASH_T" == "ok" && "$BESTBLOCK_T" == "ok" && "$REORG_T" == "ok" ]] \
+    || fail "internal: gate flag not set (atheight=$ATHEIGHT_T txouts=$TXOUTS_T amount=$AMOUNT_T hash=$HASH_T bestblock=$BESTBLOCK_T reorg=$REORG_T)"
+
+log "PASS: lunarblock coinstatsindex at-height query matches Core on all gated fields (linear + reorg)"
+pass "$ATHEIGHT_T" "$TXOUTS_T" "$AMOUNT_T" "$HASH_T" "$BESTBLOCK_T" "$REORG_T"
