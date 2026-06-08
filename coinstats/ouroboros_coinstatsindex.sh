@@ -142,7 +142,7 @@ trap cleanup EXIT INT TERM
 
 # ── Summary emitters. ─────────────────────────────────────────────────────
 pass() {
-    echo "COINSTATSINDEX ouroboros: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok"
+    echo "COINSTATSINDEX ouroboros: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok reorg=ok"
     exit 0
 }
 fail() {
@@ -270,18 +270,19 @@ done
 [[ "$CORE_OK" == "1" ]] || { tail -n 20 "$CORE_LOG" >&2 2>/dev/null || true; fail "Core oracle failed to start within 3 attempts (see $CORE_LOG)"; }
 log "Core oracle ready (pid=$CORE_BG)"
 
-# ── 3. Launch ouroboros on regtest (unique ports). ────────────────────────
-# NOTE: ouroboros's CLI exposes NO -coinstatsindex flag (only --blockfilterindex).
-# The shared contract requires -coinstatsindex=1 on BOTH launches; we pass the
-# canonical flag here so the launch line is contract-shaped, but ouroboros has
-# no such option to honour. The historical-height query below is what actually
-# exercises whether the capability exists.
-log "launching ouroboros (regtest) rpc=:$OU_RPC p2p=:$OU_P2P -> $OU_LOG"
+# ── 3. Launch ouroboros on regtest (unique ports) WITH --coinstatsindex. ──
+# The shared contract requires -coinstatsindex=1 on BOTH launches.  ouroboros's
+# CLI now exposes the boolean --coinstatsindex flag (a `start`-subcommand
+# option, like --blockfilterindex); pass it so the node maintains the
+# per-height UTXO MuHash3072 commitment that backs the at-height query below.
+# (--blockfilterindex / -txindex equivalents are not required by this cell;
+# only the coinstatsindex is exercised.)
+log "launching ouroboros (regtest, --coinstatsindex) rpc=:$OU_RPC p2p=:$OU_P2P -> $OU_LOG"
 (
     cd "$OURO_DIR"
     exec "$OURO_PY" -m ouroboros.cli \
         --network regtest --data-dir "$OU_DATADIR" \
-        start --force --nolisten --nodnsseed \
+        start --force --nolisten --nodnsseed --coinstatsindex \
         --rpc-port "$OU_RPC" --p2p-port "$OU_P2P"
 ) >"$OU_LOG" 2>&1 &
 OU_PID=$!
@@ -530,6 +531,140 @@ if [[ -n "$O_ERR_CODE" ]]; then
         || { ERROR_GATE_T="bad"; log "disabled-path error message lacks 'coinstatsindex': '$O_ERR_MSG'"; }
 fi
 
+# ── 6.5 REORG-SAFETY GATE ──────────────────────────────────────────────────
+# WHY: the at-height gate above only proves the impl maintains the per-height
+# MuHash on a LINEAR chain (connect-only). It CANNOT catch a reorg-desync — an
+# impl that reverses the index on disconnect but never RE-ADDS on reconnect of
+# the new chain's blocks will pass linear yet serve a stale (chain-A) muhash for
+# a height that was reorged onto chain B. Core's coinstatsindex re-runs
+# CustomAppend when B's blocks reconnect, so its per-height MuHash tracks the
+# ACTIVE chain. This gate forces a reorg (via invalidateblock, Core's own reorg
+# primitive) and asserts ouroboros agrees.
+#
+# DESIGN (mirrors the reference impl harnesses blockbrew/nimrod/haskoin):
+#   (1) Both nodes share linear chain A at tip N (= $CORE_TIP).
+#   (2) On the Core ORACLE: invalidateblock(getblockhash(F+1)) for a fork point
+#       F < N, then generatetoaddress a LONGER competing chain B (F->N+3) to a
+#       DETERMINISTIC address. B has more work, so Core reorgs A->B.
+#   (3) REORG TRIGGER on the impl: invalidateblock(F+1) FIRST (rewind to F,
+#       restoring the prevouts A's F+1..N spent), THEN submitblock B's blocks
+#       F+1..N+3 in order so each connects as a clean active-tip extension and
+#       the impl reorgs to B.
+#   (4) Pick H_R with F < H_R <= N (block DIFFERS A vs B). gettxoutsetinfo
+#       muhash H_R on BOTH must agree (impl serves B's value, not A's stale).
+REORG_T="ok"
+REORG_DEPTH=5                          # A's blocks F+1..N that get reorged out
+REORG_F=$(( CORE_TIP - REORG_DEPTH ))  # fork point F (< N)
+REORG_NEWTIP=$(( CORE_TIP + 3 ))       # B's tip height (N+3): strictly more work
+REORG_H=$CORE_TIP                      # H_R: OLD tip height (F < H_R <= N); differs A vs B
+
+A_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain A) failed"
+log "reorg: chain A tip N=$CORE_TIP, fork F=$REORG_F, B newtip=$REORG_NEWTIP, reorg-H=$REORG_H (A@H_R=$A_HASH_AT_HR)"
+
+# (2) Core: invalidate F+1, then build longer chain B to DEST_ADDR (distinct
+#     from the A-mining address so B's blocks differ from A's at equal heights).
+FORK_CHILD=$(core_cli_retry getblockhash "$(( REORG_F + 1 ))") || fail "Core getblockhash F+1 failed"
+core_cli invalidateblock "$FORK_CHILD" >/dev/null 2>&1 || fail "Core invalidateblock $FORK_CHILD failed"
+INVAL_TIP=$(core_cli_retry getblockcount) || fail "Core getblockcount after invalidate failed"
+[[ "$INVAL_TIP" == "$REORG_F" ]] || fail "Core after invalidate is at $INVAL_TIP, expected fork F=$REORG_F"
+NB_B=$(( REORG_NEWTIP - REORG_F ))    # number of B blocks (= depth+3)
+core_cli_retry generatetoaddress "$NB_B" "$DEST_ADDR" >/dev/null || fail "Core generatetoaddress (chain B) failed"
+CORE_BTIP_H=$(core_cli_retry getblockcount) || fail "Core getblockcount (B tip) failed"
+[[ "$CORE_BTIP_H" == "$REORG_NEWTIP" ]] || fail "Core B tip height $CORE_BTIP_H != expected $REORG_NEWTIP"
+CORE_BTIP=$(core_cli_retry getbestblockhash) || fail "Core getbestblockhash (B) failed"
+B_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain B) failed"
+[[ "$B_HASH_AT_HR" != "$A_HASH_AT_HR" ]] \
+    || fail "reorg sanity: block at H_R=$REORG_H unchanged after reorg (A=B; not a real reorg)"
+log "reorg: Core reorged to B, tip=$CORE_BTIP @h$CORE_BTIP_H; B@H_R=$B_HASH_AT_HR (differs from A@H_R)"
+
+# (3) REORG TRIGGER on ouroboros: invalidateblock(F+1) first, then mirror B.
+CORE_COOKIE_FILE="$CORE_DATADIR/regtest/.cookie"
+[[ -f "$CORE_COOKIE_FILE" ]] || fail "Core cookie not found at $CORE_COOKIE_FILE"
+OU_FORK_CHILD=$(jpy "$(ou_rpc getblockhash "[$(( REORG_F + 1 ))]")" "d.get('result')")
+[[ "$OU_FORK_CHILD" == "$FORK_CHILD" ]] \
+    || fail "reorg: ouroboros F+1 hash ($OU_FORK_CHILD) != Core F+1 hash ($FORK_CHILD) before invalidate"
+log "reorg: invalidateblock F+1=$OU_FORK_CHILD on ouroboros (rewind to fork F=$REORG_F)"
+IB_RESP=$(ou_rpc invalidateblock "[\"$OU_FORK_CHILD\"]")
+IB_ERR=$(jpy "$IB_RESP" "d.get('error')")
+[[ -z "$IB_ERR" || "$IB_ERR" == "None" ]] || log "reorg: ouroboros invalidateblock err='$IB_ERR'"
+OU_AT_F=0
+for _ in $(seq 1 30); do
+    OU_INVAL_H=$(jpy "$(ou_rpc getblockcount '[]')" "d.get('result')")
+    if [[ "$OU_INVAL_H" == "$REORG_F" ]]; then OU_AT_F=1; break; fi
+    sleep 1
+done
+if [[ "$OU_AT_F" != "1" ]]; then
+    REORG_T="bad"; log "ouroboros did not rewind to fork F=$REORG_F after invalidateblock (impl height=$OU_INVAL_H)"
+fi
+log "reorg: ouroboros rewound to fork F=$REORG_F"
+
+# Mirror B to ouroboros: submitblock B's blocks F+1..N+3 in order.
+log "reorg: mirroring B's blocks $(( REORG_F + 1 ))..$REORG_NEWTIP to ouroboros via submitblock"
+B_RAW_LIST=$(python3 -c "
+import sys, json, base64, urllib.request
+cookie=open('$CORE_COOKIE_FILE').read().strip()
+auth='Basic '+base64.b64encode(cookie.encode()).decode()
+def rpc(method, params):
+    body=json.dumps({'jsonrpc':'1.0','id':1,'method':method,'params':params}).encode()
+    req=urllib.request.Request('http://127.0.0.1:$CORE_RPC/', data=body,
+        headers={'Content-Type':'application/json','Authorization':auth})
+    return json.load(urllib.request.urlopen(req, timeout=60))['result']
+for h in range($(( REORG_F + 1 )), $REORG_NEWTIP+1):
+    bh=rpc('getblockhash',[h])
+    raw=rpc('getblock',[bh,0])
+    print('%d %s'%(h, raw))
+" 2>/dev/null) || fail "Core raw-block fetch for chain B failed"
+GOT_B=$(echo "$B_RAW_LIST" | grep -c .)
+[[ "$GOT_B" == "$NB_B" ]] || fail "fetched $GOT_B B-blocks from Core, expected $NB_B"
+while read -r h RAW; do
+    [[ -n "$RAW" ]] || continue
+    kill -0 "$OU_PID" 2>/dev/null || fail "ouroboros died during B replication at h=$h (see $OU_LOG)"
+    SB=$(ou_rpc submitblock "[\"$RAW\"]")
+    SB_ERR=$(jpy "$SB" "d.get('error')")
+    if [[ -n "$SB_ERR" && "$SB_ERR" != "None" ]]; then log "reorg submitblock h=$h err='$SB_ERR'"; fi
+done <<< "$B_RAW_LIST"
+
+# Poll until ouroboros tip == Core B tip.
+OU_REORG_OK=0
+for _ in $(seq 1 30); do
+    OU_BTIP=$(jpy "$(ou_rpc getbestblockhash '[]')" "d.get('result')")
+    OU_BTIP_H=$(jpy "$(ou_rpc getblockcount '[]')" "d.get('result')")
+    if [[ "$OU_BTIP" == "$CORE_BTIP" && "$OU_BTIP_H" == "$CORE_BTIP_H" ]]; then OU_REORG_OK=1; break; fi
+    sleep 1
+done
+if [[ "$OU_REORG_OK" != "1" ]]; then
+    REORG_T="bad"; log "ouroboros did not adopt chain B (impl tip=$OU_BTIP @h$OU_BTIP_H, Core B tip=$CORE_BTIP @h$CORE_BTIP_H)"
+else
+    log "reorg: ouroboros adopted chain B (tip $OU_BTIP @h$OU_BTIP_H)"
+    # (4) The reorg differential: gettxoutsetinfo muhash H_R on BOTH.
+    RB_MUH=$(core_cli_retry gettxoutsetinfo muhash "$REORG_H") || fail "Core gettxoutsetinfo muhash $REORG_H (post-reorg) failed"
+    RC_BEST=$(jpy   "$RB_MUH" "d['bestblock']")
+    RC_MUHASH=$(jpy "$RB_MUH" "d.get('muhash','')")
+    RC_HEIGHT=$(jpy "$RB_MUH" "d['height']")
+    [[ "$RC_HEIGHT" == "$REORG_H" ]] || fail "Core post-reorg muhash@H_R height=$RC_HEIGHT != H_R=$REORG_H"
+    [[ "$RC_BEST" == "$B_HASH_AT_HR" ]] || fail "Core post-reorg bestblock@H_R=$RC_BEST != B@H_R=$B_HASH_AT_HR (oracle wrong?)"
+
+    OU_RMUH=$(ou_rpc gettxoutsetinfo "[\"muhash\", $REORG_H]")
+    if echo "$OU_RMUH" | grep -q '"result"' && [[ "$(jpy "$OU_RMUH" "d.get('result')")" != "None" ]]; then
+        RB_BEST=$(jpy   "$OU_RMUH" "d['result']['bestblock']")
+        RB_MUHASH=$(jpy "$OU_RMUH" "d['result'].get('muhash','')")
+        RB_HEIGHT=$(jpy "$OU_RMUH" "d['result']['height']")
+        log "reorg @H_R=$REORG_H: core(best=$RC_BEST muhash=$RC_MUHASH) ouroboros(height=$RB_HEIGHT best=$RB_BEST muhash=$RB_MUHASH)"
+        if [[ "$RB_BEST" == "$A_HASH_AT_HR" ]]; then
+            REORG_T="bad"; log "reorg DESYNC: ouroboros bestblock@H_R=$RB_BEST is A's stale block (B@H_R=$B_HASH_AT_HR) — index did not reconnect B"
+        fi
+        [[ "$RB_HEIGHT" == "$REORG_H" ]] || { REORG_T="bad"; log "reorg: ouroboros height@H_R=$RB_HEIGHT != H_R=$REORG_H"; }
+        [[ "$RB_BEST" == "$B_HASH_AT_HR" && "$RB_BEST" == "$RC_BEST" ]] \
+            || { REORG_T="bad"; log "reorg: bestblock@H_R mismatch (ouroboros=$RB_BEST want B@H_R=$B_HASH_AT_HR core=$RC_BEST)"; }
+        [[ -n "$RB_MUHASH" && "$RB_MUHASH" == "$RC_MUHASH" ]] \
+            || { REORG_T="bad"; log "reorg: muhash@H_R MISMATCH (ouroboros=$RB_MUHASH core=$RC_MUHASH) — impl served stale chain-A index after reorg"; }
+    else
+        RR_EC=$(jpy "$OU_RMUH" "d.get('error',{}).get('code') if isinstance(d.get('error'),dict) else None")
+        RR_EM=$(jpy "$OU_RMUH" "d.get('error',{}).get('message') if isinstance(d.get('error'),dict) else ''")
+        REORG_T="bad"; log "reorg: ouroboros gettxoutsetinfo muhash $REORG_H errored after reorg: code=$RR_EC msg='$RR_EM'"
+    fi
+fi
+
 # ── 7. Verdict. Every gate must be ok. ────────────────────────────────────
 REASONS=""
 [[ "$ATHEIGHT_T"  == "ok" ]] || REASONS="$REASONS atheight"
@@ -538,10 +673,11 @@ REASONS=""
 [[ "$HASH_T"      == "ok" ]] || REASONS="$REASONS hash"
 [[ "$BESTBLOCK_T" == "ok" ]] || REASONS="$REASONS bestblock"
 [[ "$ERROR_GATE_T" == "ok" ]] || REASONS="$REASONS error-gate"
+[[ "$REORG_T"     == "ok" ]] || REASONS="$REASONS reorg"
 
 if [[ -n "$REASONS" ]]; then
     fail "at-height parity gates failed:$REASONS (see log; Core@H=$HIST_H muhash=$C_MU txouts=$C_TXOUTS)"
 fi
 
-log "PASS: ouroboros gettxoutsetinfo@H=$HIST_H matches Core (height/bestblock/txouts/total_amount/muhash)"
+log "PASS: ouroboros gettxoutsetinfo@H=$HIST_H matches Core (height/bestblock/txouts/total_amount/muhash) + reorg-safe"
 pass
