@@ -489,18 +489,32 @@ fi
 # re-runs CustomAppend when B's blocks reconnect, so its per-height MuHash tracks
 # the ACTIVE chain. This gate forces a reorg and asserts haskoin agrees.
 #
-# REORG DESIGN (impl-agnostic; mirrored to the impl the SAME way the linear chain
-# was — via submitblock, so no impl-specific invalidateblock is needed; the
-# remaining-7 fanout MUST mirror these exact steps):
+# REORG DESIGN (impl-agnostic; the remaining-7 fanout MUST mirror these exact
+# steps):
 #   (1) Both nodes already share linear chain A at tip N (= $TOTAL).
 #   (2) On the Core ORACLE only: invalidateblock(getblockhash(F+1)) for a fork
 #       point F < N. That disconnects A's F+1..N (Core runs CustomRemove for each).
 #       Then generatetoaddress a LONGER competing chain B from F to N+3 to a
 #       DETERMINISTIC address. B has strictly more work, so Core reorgs A->B and
 #       its index re-runs CustomAppend for B's F+1..N+3.
-#   (3) Mirror B to the impl by submitblock-ing B's blocks F+1..N+3 in order. The
-#       impl MUST reorg from A to B (B has more work). Poll until impl tip ==
-#       Core tip (B).
+#   (3) REORG TRIGGER via invalidateblock ON THE IMPL (Core-faithful). A naive
+#       submitblock of B's blocks F+1..N+3 onto the impl while it still sits at A's
+#       tip N does NOT trigger a reorg on a CORRECT node: B's fork-child re-spends
+#       a UTXO that A spent above the fork, so a node that (correctly) validates an
+#       incoming side-branch block against the ACTIVE-TIP UTXO snapshot rejects it
+#       as a double-spend — B never imports and no reorg happens (nimrod/haskoin do
+#       exactly this; their coinstatsindex is in fact reorg-safe, provable via
+#       invalidateblock). So the trigger here MIRRORS Core's own reorg primitive:
+#       FIRST call invalidateblock(getblockhash(F+1)) ON THE IMPL — this rewinds it
+#       to fork point F, disconnecting A's F+1..N and RESTORING the prevouts those
+#       blocks spent. THEN submitblock B's blocks F+1..N+3 to the impl in order;
+#       each now connects as a clean ACTIVE-TIP extension against the restored
+#       fork-point UTXO set, so the impl reorgs to B's tip and reconnects B into the
+#       coinstatsindex. Poll until impl tip == Core B tip.
+#       FALLBACK (impls lacking invalidateblock): build B's spend from a coinbase
+#       created ABOVE F so the fork is self-contained (no cross-fork prevout reuse)
+#       and submitblock alone suffices. blockbrew/nimrod/haskoin all support
+#       invalidateblock, so this path uses it directly.
 #   (4) Pick a height H_R with F < H_R <= N — a height whose block DIFFERS between
 #       A and B. Call gettxoutsetinfo muhash H_R on BOTH and ASSERT
 #       impl.muhash@H_R == Core.muhash@H_R AND impl.bestblock@H_R ==
@@ -533,9 +547,32 @@ B_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhas
     || fail "reorg sanity: block at H_R=$REORG_H unchanged after reorg (A=B; not a real reorg)"
 log "reorg: Core reorged to B, tip=$CORE_BTIP @h$CORE_BTIP_H; B@H_R=$B_HASH_AT_HR (differs from A@H_R)"
 
-# (3) Mirror B to haskoin: submitblock B's blocks F+1..N+3 in order; haskoin must
-#     reorg A->B (B carries strictly more work). CORE_COOKIE_FILE was set in §5.
+# (3) REORG TRIGGER: invalidateblock(F+1) ON haskoin first, rewinding it to fork
+#     point F (disconnecting A's F+1..N and restoring the prevouts they spent), so
+#     B's blocks then connect as clean active-tip extensions. A naive submitblock
+#     of B onto A's tip would be (correctly) rejected as a side-branch double-spend.
+#     CORE_COOKIE_FILE was set in §5.
 [[ -f "$CORE_COOKIE_FILE" ]] || fail "Core cookie not found at $CORE_COOKIE_FILE"
+HK_FORK_CHILD=$(jpy "$(hk_rpc getblockhash "[$(( REORG_F + 1 ))]")" "d.get('result')")
+[[ "$HK_FORK_CHILD" == "$FORK_CHILD" ]] \
+    || fail "reorg: haskoin F+1 hash ($HK_FORK_CHILD) != Core F+1 hash ($FORK_CHILD) before invalidate"
+log "reorg: invalidateblock F+1=$HK_FORK_CHILD on haskoin (rewind to fork F=$REORG_F)"
+IB_RESP=$(hk_rpc invalidateblock "[\"$HK_FORK_CHILD\"]")
+IB_ERR=$(jpy "$IB_RESP" "d.get('error')")
+[[ -z "$IB_ERR" || "$IB_ERR" == "None" ]] || log "reorg: haskoin invalidateblock err='$IB_ERR'"
+# Poll until haskoin has actually rewound to fork point F.
+HK_AT_F=0
+for _ in $(seq 1 30); do
+    HK_INVAL_H=$(jpy "$(hk_rpc getblockcount '[]')" "d.get('result')")
+    if [[ "$HK_INVAL_H" == "$REORG_F" ]]; then HK_AT_F=1; break; fi
+    sleep 1
+done
+[[ "$HK_AT_F" == "1" ]] \
+    || fail "haskoin did not rewind to fork F=$REORG_F after invalidateblock (impl height=$HK_INVAL_H) — invalidateblock unsupported/ineffective"
+log "reorg: haskoin rewound to fork F=$REORG_F"
+
+# Mirror B to haskoin: submitblock B's blocks F+1..N+3 in order. Each now connects
+# as a clean active-tip extension; B carries strictly more work so haskoin adopts B.
 log "reorg: mirroring B's blocks $(( REORG_F + 1 ))..$REORG_NEWTIP to haskoin via submitblock"
 B_RAW_LIST=$(python3 -c "
 import sys, json, base64, urllib.request
