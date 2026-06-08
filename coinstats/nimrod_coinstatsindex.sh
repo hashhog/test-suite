@@ -130,7 +130,7 @@ trap cleanup EXIT INT TERM
 
 # ── Summary emitters. ─────────────────────────────────────────────────────
 pass() {
-    echo "COINSTATSINDEX nimrod: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok"
+    echo "COINSTATSINDEX nimrod: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok reorg=ok"
     exit 0
 }
 fail() {
@@ -532,6 +532,134 @@ if [[ "$CORE2_OK" == "1" ]]; then
     echo "$CORE_ERR_NOIDX" | grep -q "error code: -8" || { ERR_T="bad"; log "Core(no-index) non-tip query was not -8: $CORE_ERR_NOIDX"; }
 fi
 
+# ── 11.5 REORG-SAFETY GATE ─────────────────────────────────────────────────
+# WHY: the at-height gate above only proves the impl maintains the per-height
+# MuHash on a LINEAR chain (connect-only). It CANNOT catch a reorg-desync — an
+# impl that reverses the index on disconnect but never RE-ADDS on reconnect of
+# the new chain's blocks will pass linear yet serve a stale (chain-A) muhash for
+# a height that was reorged onto chain B. Core's coinstatsindex (BaseIndex +
+# index/coinstatsindex.cpp: CustomAppend on connect, CustomRemove on disconnect)
+# re-runs CustomAppend when B's blocks reconnect, so its per-height MuHash tracks
+# the ACTIVE chain. This gate forces a reorg and asserts nimrod agrees.
+#
+# REORG DESIGN (impl-agnostic; mirrored to the impl the SAME way the linear chain
+# was — via submitblock, so no impl-specific invalidateblock is needed; the
+# remaining-7 fanout MUST mirror these exact steps):
+#   (1) Both nodes already share linear chain A at tip N (= $TOTAL).
+#   (2) On the Core ORACLE only: invalidateblock(getblockhash(F+1)) for a fork
+#       point F < N. That disconnects A's F+1..N (Core runs CustomRemove for each).
+#       Then generatetoaddress a LONGER competing chain B from F to N+3 to a
+#       DETERMINISTIC address. B has strictly more work, so Core reorgs A->B and
+#       its index re-runs CustomAppend for B's F+1..N+3.
+#   (3) Mirror B to the impl by submitblock-ing B's blocks F+1..N+3 in order. The
+#       impl MUST reorg from A to B (B has more work). Poll until impl tip ==
+#       Core tip (B).
+#   (4) Pick a height H_R with F < H_R <= N — a height whose block DIFFERS between
+#       A and B. Call gettxoutsetinfo muhash H_R on BOTH and ASSERT
+#       impl.muhash@H_R == Core.muhash@H_R AND impl.bestblock@H_R ==
+#       Core.bestblock@H_R (the B-chain block at H_R, NOT A's). FAILS iff the
+#       impl's index did not reconnect B's blocks (the connect-on-reconnect gap).
+REORG_T="ok"
+REORG_DEPTH=5                         # A's blocks F+1..N that get reorged out
+REORG_F=$(( TOTAL - REORG_DEPTH ))    # fork point F (< N)
+REORG_NEWTIP=$(( TOTAL + 3 ))         # B's tip height (N+3): strictly more work
+REORG_H=$TOTAL                        # H_R: the OLD tip height (F < H_R <= N); block differs A vs B
+
+# A's block hash at H_R (must change after the reorg, proving A!=B at H_R).
+A_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain A) failed"
+log "reorg: chain A tip N=$TOTAL, fork F=$REORG_F, B newtip=$REORG_NEWTIP, reorg-H=$REORG_H (A@H_R=$A_HASH_AT_HR)"
+
+# (2) On the Core oracle: invalidate F+1, then build longer chain B to a
+#     DETERMINISTIC address ($DEST_ADDR, distinct from the A-mining address so
+#     B's blocks are deterministically different from A's even at equal heights).
+FORK_CHILD=$(core_cli_retry getblockhash "$(( REORG_F + 1 ))") || fail "Core getblockhash F+1 failed"
+core_cli invalidateblock "$FORK_CHILD" >/dev/null 2>&1 || fail "Core invalidateblock $FORK_CHILD failed"
+INVAL_TIP=$(core_cli_retry getblockcount) || fail "Core getblockcount after invalidate failed"
+[[ "$INVAL_TIP" == "$REORG_F" ]] || fail "Core after invalidate is at $INVAL_TIP, expected fork F=$REORG_F"
+NB_B=$(( REORG_NEWTIP - REORG_F ))   # number of B blocks (= depth+3)
+core_cli_retry generatetoaddress "$NB_B" "$DEST_ADDR" >/dev/null || fail "Core generatetoaddress (chain B) failed"
+CORE_BTIP_H=$(core_cli_retry getblockcount) || fail "Core getblockcount (B tip) failed"
+[[ "$CORE_BTIP_H" == "$REORG_NEWTIP" ]] || fail "Core B tip height $CORE_BTIP_H != expected $REORG_NEWTIP"
+CORE_BTIP=$(core_cli_retry getbestblockhash) || fail "Core getbestblockhash (B) failed"
+B_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain B) failed"
+[[ "$B_HASH_AT_HR" != "$A_HASH_AT_HR" ]] \
+    || fail "reorg sanity: block at H_R=$REORG_H unchanged after reorg (A=B; not a real reorg)"
+log "reorg: Core reorged to B, tip=$CORE_BTIP @h$CORE_BTIP_H; B@H_R=$B_HASH_AT_HR (differs from A@H_R)"
+
+# (3) Mirror B to nimrod: submitblock B's blocks F+1..N+3 in order; nimrod must
+#     reorg A->B (B carries strictly more work).
+CORE_COOKIE_FILE="$CORE_DATADIR/regtest/.cookie"
+[[ -f "$CORE_COOKIE_FILE" ]] || fail "Core cookie not found at $CORE_COOKIE_FILE"
+log "reorg: mirroring B's blocks $(( REORG_F + 1 ))..$REORG_NEWTIP to nimrod via submitblock"
+B_RAW_LIST=$(python3 -c "
+import sys, json, base64, urllib.request
+cookie=open('$CORE_COOKIE_FILE').read().strip()
+auth='Basic '+base64.b64encode(cookie.encode()).decode()
+def rpc(method, params):
+    body=json.dumps({'jsonrpc':'1.0','id':1,'method':method,'params':params}).encode()
+    req=urllib.request.Request('http://127.0.0.1:$CORE_RPC/', data=body,
+        headers={'Content-Type':'application/json','Authorization':auth})
+    return json.load(urllib.request.urlopen(req, timeout=60))['result']
+for h in range($(( REORG_F + 1 )), $REORG_NEWTIP+1):
+    bh=rpc('getblockhash',[h])
+    raw=rpc('getblock',[bh,0])
+    print('%d %s'%(h, raw))
+" 2>/dev/null) || fail "Core raw-block fetch for chain B failed"
+GOT_B=$(echo "$B_RAW_LIST" | grep -c .)
+[[ "$GOT_B" == "$NB_B" ]] || fail "fetched $GOT_B B-blocks from Core, expected $NB_B"
+while read -r h RAW; do
+    [[ -n "$RAW" ]] || continue
+    kill -0 "$NR_PID" 2>/dev/null || fail "nimrod died during B replication at h=$h (see $NR_LOG)"
+    SB=$(nr_rpc submitblock "[\"$RAW\"]")
+    SB_RES=$(jpy "$SB" "d.get('result')")
+    SB_ERR=$(jpy "$SB" "d.get('error')")
+    # A 'inconclusive'/None result is fine; only a hard error is notable here.
+    if [[ -n "$SB_ERR" && "$SB_ERR" != "None" ]]; then log "reorg submitblock h=$h err='$SB_ERR'"; fi
+done <<< "$B_RAW_LIST"
+
+# Poll until nimrod tip == Core tip (B). If nimrod never adopts B, that itself is
+# a reorg failure (could not switch to the more-work chain).
+NR_REORG_OK=0
+for _ in $(seq 1 30); do
+    NR_BTIP=$(jpy "$(nr_rpc getbestblockhash '[]')" "d.get('result')")
+    NR_BTIP_H=$(jpy "$(nr_rpc getblockcount '[]')" "d.get('result')")
+    if [[ "$NR_BTIP" == "$CORE_BTIP" && "$NR_BTIP_H" == "$CORE_BTIP_H" ]]; then NR_REORG_OK=1; break; fi
+    sleep 1
+done
+if [[ "$NR_REORG_OK" != "1" ]]; then
+    REORG_T="bad"; log "nimrod did not adopt chain B (impl tip=$NR_BTIP @h$NR_BTIP_H, Core B tip=$CORE_BTIP @h$CORE_BTIP_H)"
+else
+    log "reorg: nimrod adopted chain B (tip $NR_BTIP @h$NR_BTIP_H)"
+    # (4) The reorg differential: gettxoutsetinfo muhash H_R on BOTH. Assert the
+    #     impl serves B's per-height MuHash + bestblock, NOT A's stale value.
+    RB_MUH=$(core_cli_retry gettxoutsetinfo muhash "$REORG_H") || fail "Core gettxoutsetinfo muhash $REORG_H (post-reorg) failed"
+    RC_BEST=$(jpy   "$RB_MUH" "d['bestblock']")
+    RC_MUHASH=$(jpy "$RB_MUH" "d.get('muhash','')")
+    RC_HEIGHT=$(jpy "$RB_MUH" "d['height']")
+    [[ "$RC_HEIGHT" == "$REORG_H" ]] || fail "Core post-reorg muhash@H_R height=$RC_HEIGHT != H_R=$REORG_H"
+    [[ "$RC_BEST" == "$B_HASH_AT_HR" ]] || fail "Core post-reorg bestblock@H_R=$RC_BEST != B@H_R=$B_HASH_AT_HR (oracle wrong?)"
+
+    NR_RMUH=$(nr_rpc gettxoutsetinfo "[\"muhash\", $REORG_H]")
+    if echo "$NR_RMUH" | grep -q '"result"' && [[ "$(jpy "$NR_RMUH" "d.get('result')")" != "None" ]]; then
+        RB_BEST=$(jpy   "$NR_RMUH" "d['result']['bestblock']")
+        RB_MUHASH=$(jpy "$NR_RMUH" "d['result'].get('muhash','')")
+        RB_HEIGHT=$(jpy "$NR_RMUH" "d['result']['height']")
+        log "reorg @H_R=$REORG_H: core(best=$RC_BEST muhash=$RC_MUHASH) nimrod(height=$RB_HEIGHT best=$RB_BEST muhash=$RB_MUHASH)"
+        if [[ "$RB_BEST" == "$A_HASH_AT_HR" ]]; then
+            REORG_T="bad"; log "reorg DESYNC: nimrod bestblock@H_R=$RB_BEST is A's stale block (B@H_R=$B_HASH_AT_HR) — index did not reconnect B"
+        fi
+        [[ "$RB_HEIGHT" == "$REORG_H" ]] || { REORG_T="bad"; log "reorg: nimrod height@H_R=$RB_HEIGHT != H_R=$REORG_H"; }
+        [[ "$RB_BEST" == "$B_HASH_AT_HR" && "$RB_BEST" == "$RC_BEST" ]] \
+            || { REORG_T="bad"; log "reorg: bestblock@H_R mismatch (nimrod=$RB_BEST want B@H_R=$B_HASH_AT_HR core=$RC_BEST)"; }
+        [[ -n "$RB_MUHASH" && "$RB_MUHASH" == "$RC_MUHASH" ]] \
+            || { REORG_T="bad"; log "reorg: muhash@H_R MISMATCH (nimrod=$RB_MUHASH core=$RC_MUHASH) — impl served stale chain-A index after reorg"; }
+    else
+        RR_EC=$(jpy "$NR_RMUH" "d.get('error',{}).get('code') if isinstance(d.get('error'),dict) else None")
+        RR_EM=$(jpy "$NR_RMUH" "d.get('error',{}).get('message') if isinstance(d.get('error'),dict) else ''")
+        REORG_T="bad"; log "reorg: nimrod gettxoutsetinfo muhash $REORG_H errored after reorg: code=$RR_EC msg='$RR_EM'"
+    fi
+fi
+
 # ── 12. Verdict. ──────────────────────────────────────────────────────────
 REASONS=""
 [[ "$ATHEIGHT_T" == "ok" ]] || REASONS+="atheight "
@@ -540,6 +668,7 @@ REASONS=""
 [[ "$HASH_T"     == "ok" ]] || REASONS+="hash "
 [[ "$BEST_T"     == "ok" ]] || REASONS+="bestblock "
 [[ "$ERR_T"      == "ok" ]] || REASONS+="errorgate "
+[[ "$REORG_T"    == "ok" ]] || REASONS+="reorg "
 
 if [[ -n "$REASONS" ]]; then
     fail "AT-HEIGHT parity failed: $REASONS(see log)"

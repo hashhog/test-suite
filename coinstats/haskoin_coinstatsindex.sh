@@ -136,7 +136,7 @@ trap cleanup EXIT INT TERM
 
 # ── Summary emitters. ─────────────────────────────────────────────────────
 pass() {
-    echo "COINSTATSINDEX haskoin: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok"
+    echo "COINSTATSINDEX haskoin: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok reorg=ok"
     exit 0
 }
 fail() {
@@ -179,6 +179,18 @@ print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
 " 2>/dev/null) || fail "could not derive deterministic mining address (Core test_framework import failed)"
 [[ "$ADDR" == bcrt1* ]] || fail "derived address is not a regtest bech32 address: '$ADDR'"
 log "deterministic mining address: $ADDR"
+
+# Second deterministic address for the reorg phase's competing chain B, so B's
+# blocks differ from A's even at equal heights (distinct coinbase scriptPubKey).
+DEST_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
+DEST_ADDR=$(python3 -c "
+import sys; sys.path.insert(0,'$TF_PATH')
+from test_framework.key import ECKey
+from test_framework.address import key_to_p2wpkh
+k=ECKey(); k.set(bytes.fromhex('$DEST_SECRET'),compressed=True)
+print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
+" 2>/dev/null) || fail "could not derive deterministic reorg dest address"
+[[ "$DEST_ADDR" == bcrt1* && "$DEST_ADDR" != "$ADDR" ]] || fail "reorg dest address bad: '$DEST_ADDR'"
 
 # ── RPC helpers ───────────────────────────────────────────────────────────
 core_cli() { "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" "$@"; }
@@ -245,15 +257,16 @@ done
 log "Core oracle ready (pid=$CORE_BG)"
 
 # ── 4. Launch haskoin on regtest. ──────────────────────────────────────────
-# NOTE: haskoin's `node` subcommand exposes ONLY --blockfilterindex; there is
-# NO --coinstatsindex flag. We launch with --blockfilterindex (the closest
-# index opt-in the impl supports) so any index-manager backfill path that
-# *could* feed a coinstatsindex is exercised, then probe whether the at-height
-# query is actually honored.
+# haskoin's `node` subcommand now exposes --coinstatsindex (Bitcoin Core
+# -coinstatsindex=1): a per-height running MuHash3072 + coin counts/amounts,
+# maintained incrementally on block connect/disconnect, which lets
+# gettxoutsetinfo answer for a historical height/hash. We launch with both
+# --coinstatsindex (the capability under test) and --blockfilterindex (so the
+# shared IndexManager backfill path is exercised end-to-end).
 log "launching haskoin (regtest) rpc=:$HK_RPC p2p=:$HK_P2P -> $HK_LOG"
 "$HK_BIN" --network Regtest --datadir "$HK_DATADIR" \
     node --rpcport="$HK_RPC" --port="$HK_P2P" --listen=False --metricsport 0 \
-    --blockfilterindex \
+    --coinstatsindex --blockfilterindex \
     >"$HK_LOG" 2>&1 &
 HK_PID=$!
 hk_deadline=$(( $(date +%s) + 180 ))
@@ -402,25 +415,42 @@ else
     fail "impl rejects historical hash_or_height (code=$E_CODE: '$E_MSG'); coinstatsindex at-height query not wired (substrate exists in src/Haskoin/Index.hs but is never instantiated/queried)"
 fi
 
-# ── 8b. Also exercise the DEFAULT hash_type at height H (Core parity). ─────
-# With coinstatsindex, Core returns hash_serialized_3 at a historical height.
-C_DEF=$(core_cli_retry gettxoutsetinfo hash_serialized_3 "$HIST_H") \
-    || fail "Core gettxoutsetinfo hash_serialized_3 $HIST_H failed (coinstatsindex should allow this)"
-C_DEF_HEIGHT=$(jpy "$C_DEF" "d['height']")
-C_DEF_HASH=$(jpy   "$C_DEF" "d['hash_serialized_3']")
-[[ "$C_DEF_HEIGHT" == "$HIST_H" ]] || fail "Core sanity: hash_serialized_3@$HIST_H height=$C_DEF_HEIGHT"
-
+# ── 8b. Also exercise hash_serialized_3 at height H (Core parity). ─────────
+# IMPORTANT (matches the committed-green blockbrew reference harness, and
+# verified empirically against bitcoind v31.99): the coinstatsindex stores a
+# per-height MuHash only — Core REJECTS `hash_serialized_3` for a specific
+# block with RPC_INVALID_PARAMETER (-8) "hash_serialized_3 hash type cannot
+# be queried for a specific block" EVEN with -coinstatsindex=1. The impl must
+# reproduce whatever Core does. We assert parity in BOTH directions:
+#   * Core errs -8  -> impl must err -8 too.
+#   * Core serves it -> impl must serve a byte-identical hash_serialized_3.
+CORE_DEF_RAW=$(core_cli gettxoutsetinfo hash_serialized_3 "$HIST_H" 2>&1)
+CORE_DEF_ERR=$(echo "$CORE_DEF_RAW" | grep -i "error code" | grep -oE '\-?[0-9]+' | head -1)
 H_DEF=$(hk_rpc gettxoutsetinfo "[\"hash_serialized_3\", $HIST_H]")
-if echo "$H_DEF" | grep -q '"result"' && [[ "$(jpy "$H_DEF" "d.get('result')")" != "None" ]]; then
-    H_DEF_HEIGHT=$(jpy "$H_DEF" "d['result']['height']")
-    H_DEF_HASH=$(jpy   "$H_DEF" "d['result'].get('hash_serialized_3','')")
-    [[ "$H_DEF_HEIGHT" == "$HIST_H" ]] || fail "impl hash_serialized_3@$HIST_H height=$H_DEF_HEIGHT (expected $HIST_H)"
-    [[ "$H_DEF_HASH" == "$C_DEF_HASH" ]] || fail "impl hash_serialized_3@$HIST_H mismatch: impl=$H_DEF_HASH Core=$C_DEF_HASH"
-    log "at-height hash_serialized_3 matches Core"
-else
+if [[ -n "$CORE_DEF_ERR" ]]; then
+    # Core rejects hash_serialized_3 + specific block. The impl must too.
+    if echo "$H_DEF" | grep -q '"result"' && [[ "$(jpy "$H_DEF" "d.get('result')")" != "None" ]]; then
+        fail "hash_serialized_3@$HIST_H: Core rejects (code=$CORE_DEF_ERR) but impl served a result"
+    fi
     H_DEF_CODE=$(jpy "$H_DEF" "d['error']['code']")
-    H_DEF_MSG=$(jpy  "$H_DEF" "d['error']['message']")
-    fail "impl rejects hash_serialized_3 at historical height $HIST_H (code=$H_DEF_CODE: '$H_DEF_MSG'); Core (with coinstatsindex) answers it"
+    [[ "$H_DEF_CODE" == "$CORE_DEF_ERR" ]] \
+        || fail "hash_serialized_3@$HIST_H error-code parity: Core=$CORE_DEF_ERR impl=$H_DEF_CODE"
+    log "at-height hash_serialized_3: Core+impl both reject with $CORE_DEF_ERR (parity)"
+else
+    # Core served a hash_serialized_3 at H via the index: compare byte-exact.
+    C_DEF_HEIGHT=$(jpy "$CORE_DEF_RAW" "d['height']")
+    C_DEF_HASH=$(jpy   "$CORE_DEF_RAW" "d['hash_serialized_3']")
+    if echo "$H_DEF" | grep -q '"result"' && [[ "$(jpy "$H_DEF" "d.get('result')")" != "None" ]]; then
+        H_DEF_HEIGHT=$(jpy "$H_DEF" "d['result']['height']")
+        H_DEF_HASH=$(jpy   "$H_DEF" "d['result'].get('hash_serialized_3','')")
+        [[ "$H_DEF_HEIGHT" == "$HIST_H" ]] || fail "impl hash_serialized_3@$HIST_H height=$H_DEF_HEIGHT (expected $HIST_H)"
+        [[ "$H_DEF_HASH" == "$C_DEF_HASH" ]] || fail "impl hash_serialized_3@$HIST_H mismatch: impl=$H_DEF_HASH Core=$C_DEF_HASH"
+        log "at-height hash_serialized_3 matches Core"
+    else
+        H_DEF_CODE=$(jpy "$H_DEF" "d['error']['code']")
+        H_DEF_MSG=$(jpy  "$H_DEF" "d['error']['message']")
+        fail "impl rejects hash_serialized_3 at historical height $HIST_H (code=$H_DEF_CODE: '$H_DEF_MSG'); Core (with coinstatsindex) answers it"
+    fi
 fi
 
 # ── 9. ERROR GATE: coinstatsindex DISABLED -> non-tip query must error. ───
@@ -449,6 +479,134 @@ else
     log "note: disabled-index Core oracle did not start; skipping the Core side of the error gate"
 fi
 
-# ── 10. Reached only if every at-height gate passed. ──────────────────────
-log "PASS: haskoin gettxoutsetinfo AS-OF historical height matches Core"
+# ── 9.5 REORG-SAFETY GATE ──────────────────────────────────────────────────
+# WHY: the at-height gate above only proves the impl maintains the per-height
+# MuHash on a LINEAR chain (connect-only). It CANNOT catch a reorg-desync — an
+# impl that reverses the index on disconnect but never RE-ADDS on reconnect of
+# the new chain's blocks will pass linear yet serve a stale (chain-A) muhash for
+# a height that was reorged onto chain B. Core's coinstatsindex (BaseIndex +
+# index/coinstatsindex.cpp: CustomAppend on connect, CustomRemove on disconnect)
+# re-runs CustomAppend when B's blocks reconnect, so its per-height MuHash tracks
+# the ACTIVE chain. This gate forces a reorg and asserts haskoin agrees.
+#
+# REORG DESIGN (impl-agnostic; mirrored to the impl the SAME way the linear chain
+# was — via submitblock, so no impl-specific invalidateblock is needed; the
+# remaining-7 fanout MUST mirror these exact steps):
+#   (1) Both nodes already share linear chain A at tip N (= $TOTAL).
+#   (2) On the Core ORACLE only: invalidateblock(getblockhash(F+1)) for a fork
+#       point F < N. That disconnects A's F+1..N (Core runs CustomRemove for each).
+#       Then generatetoaddress a LONGER competing chain B from F to N+3 to a
+#       DETERMINISTIC address. B has strictly more work, so Core reorgs A->B and
+#       its index re-runs CustomAppend for B's F+1..N+3.
+#   (3) Mirror B to the impl by submitblock-ing B's blocks F+1..N+3 in order. The
+#       impl MUST reorg from A to B (B has more work). Poll until impl tip ==
+#       Core tip (B).
+#   (4) Pick a height H_R with F < H_R <= N — a height whose block DIFFERS between
+#       A and B. Call gettxoutsetinfo muhash H_R on BOTH and ASSERT
+#       impl.muhash@H_R == Core.muhash@H_R AND impl.bestblock@H_R ==
+#       Core.bestblock@H_R (the B-chain block at H_R, NOT A's). FAILS iff the
+#       impl's index did not reconnect B's blocks (the connect-on-reconnect gap).
+REORG_OK="ok"
+REORG_DEPTH=5                         # A's blocks F+1..N that get reorged out
+REORG_F=$(( TOTAL - REORG_DEPTH ))    # fork point F (< N)
+REORG_NEWTIP=$(( TOTAL + 3 ))         # B's tip height (N+3): strictly more work
+REORG_H=$TOTAL                        # H_R: the OLD tip height (F < H_R <= N); block differs A vs B
+
+# A's block hash at H_R (must change after the reorg, proving A!=B at H_R).
+A_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain A) failed"
+log "reorg: chain A tip N=$TOTAL, fork F=$REORG_F, B newtip=$REORG_NEWTIP, reorg-H=$REORG_H (A@H_R=$A_HASH_AT_HR)"
+
+# (2) On the Core oracle: invalidate F+1, then build longer chain B to a
+#     DETERMINISTIC address ($DEST_ADDR, distinct from the A-mining address so
+#     B's blocks are deterministically different from A's even at equal heights).
+FORK_CHILD=$(core_cli_retry getblockhash "$(( REORG_F + 1 ))") || fail "Core getblockhash F+1 failed"
+core_cli invalidateblock "$FORK_CHILD" >/dev/null 2>&1 || fail "Core invalidateblock $FORK_CHILD failed"
+INVAL_TIP=$(core_cli_retry getblockcount) || fail "Core getblockcount after invalidate failed"
+[[ "$INVAL_TIP" == "$REORG_F" ]] || fail "Core after invalidate is at $INVAL_TIP, expected fork F=$REORG_F"
+NB_B=$(( REORG_NEWTIP - REORG_F ))   # number of B blocks (= depth+3)
+core_cli_retry generatetoaddress "$NB_B" "$DEST_ADDR" >/dev/null || fail "Core generatetoaddress (chain B) failed"
+CORE_BTIP_H=$(core_cli_retry getblockcount) || fail "Core getblockcount (B tip) failed"
+[[ "$CORE_BTIP_H" == "$REORG_NEWTIP" ]] || fail "Core B tip height $CORE_BTIP_H != expected $REORG_NEWTIP"
+CORE_BTIP=$(core_cli_retry getbestblockhash) || fail "Core getbestblockhash (B) failed"
+B_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "Core getblockhash $REORG_H (chain B) failed"
+[[ "$B_HASH_AT_HR" != "$A_HASH_AT_HR" ]] \
+    || fail "reorg sanity: block at H_R=$REORG_H unchanged after reorg (A=B; not a real reorg)"
+log "reorg: Core reorged to B, tip=$CORE_BTIP @h$CORE_BTIP_H; B@H_R=$B_HASH_AT_HR (differs from A@H_R)"
+
+# (3) Mirror B to haskoin: submitblock B's blocks F+1..N+3 in order; haskoin must
+#     reorg A->B (B carries strictly more work). CORE_COOKIE_FILE was set in §5.
+[[ -f "$CORE_COOKIE_FILE" ]] || fail "Core cookie not found at $CORE_COOKIE_FILE"
+log "reorg: mirroring B's blocks $(( REORG_F + 1 ))..$REORG_NEWTIP to haskoin via submitblock"
+B_RAW_LIST=$(python3 -c "
+import sys, json, base64, urllib.request
+cookie=open('$CORE_COOKIE_FILE').read().strip()
+auth='Basic '+base64.b64encode(cookie.encode()).decode()
+def rpc(method, params):
+    body=json.dumps({'jsonrpc':'1.0','id':1,'method':method,'params':params}).encode()
+    req=urllib.request.Request('http://127.0.0.1:$CORE_RPC/', data=body,
+        headers={'Content-Type':'application/json','Authorization':auth})
+    return json.load(urllib.request.urlopen(req, timeout=60))['result']
+for h in range($(( REORG_F + 1 )), $REORG_NEWTIP+1):
+    bh=rpc('getblockhash',[h])
+    raw=rpc('getblock',[bh,0])
+    print('%d %s'%(h, raw))
+" 2>/dev/null) || fail "Core raw-block fetch for chain B failed"
+GOT_B=$(echo "$B_RAW_LIST" | grep -c .)
+[[ "$GOT_B" == "$NB_B" ]] || fail "fetched $GOT_B B-blocks from Core, expected $NB_B"
+while read -r h RAW; do
+    [[ -n "$RAW" ]] || continue
+    kill -0 "$HK_PID" 2>/dev/null || fail "haskoin died during B replication at h=$h (see $HK_LOG)"
+    SB=$(hk_rpc submitblock "[\"$RAW\"]")
+    SB_ERR=$(jpy "$SB" "d.get('error')")
+    if [[ -n "$SB_ERR" && "$SB_ERR" != "None" ]]; then log "reorg submitblock h=$h err='$SB_ERR'"; fi
+done <<< "$B_RAW_LIST"
+
+# Poll until haskoin tip == Core tip (B). If haskoin never adopts B, that itself
+# is a reorg failure (could not switch to the more-work chain).
+HK_REORG_OK=0
+for _ in $(seq 1 30); do
+    HK_BTIP=$(jpy "$(hk_rpc getbestblockhash '[]')" "d.get('result')")
+    HK_BTIP_H=$(jpy "$(hk_rpc getblockcount '[]')" "d.get('result')")
+    if [[ "$HK_BTIP" == "$CORE_BTIP" && "$HK_BTIP_H" == "$CORE_BTIP_H" ]]; then HK_REORG_OK=1; break; fi
+    sleep 1
+done
+if [[ "$HK_REORG_OK" != "1" ]]; then
+    REORG_OK="bad"; log "haskoin did not adopt chain B (impl tip=$HK_BTIP @h$HK_BTIP_H, Core B tip=$CORE_BTIP @h$CORE_BTIP_H)"
+else
+    log "reorg: haskoin adopted chain B (tip $HK_BTIP @h$HK_BTIP_H)"
+    # (4) The reorg differential: gettxoutsetinfo muhash H_R on BOTH. Assert the
+    #     impl serves B's per-height MuHash + bestblock, NOT A's stale value.
+    RB_MUH=$(core_cli_retry gettxoutsetinfo muhash "$REORG_H") || fail "Core gettxoutsetinfo muhash $REORG_H (post-reorg) failed"
+    RC_BEST=$(jpy   "$RB_MUH" "d['bestblock']")
+    RC_MUHASH=$(jpy "$RB_MUH" "d.get('muhash','')")
+    RC_HEIGHT=$(jpy "$RB_MUH" "d['height']")
+    [[ "$RC_HEIGHT" == "$REORG_H" ]] || fail "Core post-reorg muhash@H_R height=$RC_HEIGHT != H_R=$REORG_H"
+    [[ "$RC_BEST" == "$B_HASH_AT_HR" ]] || fail "Core post-reorg bestblock@H_R=$RC_BEST != B@H_R=$B_HASH_AT_HR (oracle wrong?)"
+
+    HK_RMUH=$(hk_rpc gettxoutsetinfo "[\"muhash\", $REORG_H]")
+    if echo "$HK_RMUH" | grep -q '"result"' && [[ "$(jpy "$HK_RMUH" "d.get('result')")" != "None" ]]; then
+        RB_BEST=$(jpy   "$HK_RMUH" "d['result']['bestblock']")
+        RB_MUHASH=$(jpy "$HK_RMUH" "d['result'].get('muhash','')")
+        RB_HEIGHT=$(jpy "$HK_RMUH" "d['result']['height']")
+        log "reorg @H_R=$REORG_H: core(best=$RC_BEST muhash=$RC_MUHASH) haskoin(height=$RB_HEIGHT best=$RB_BEST muhash=$RB_MUHASH)"
+        if [[ "$RB_BEST" == "$A_HASH_AT_HR" ]]; then
+            REORG_OK="bad"; log "reorg DESYNC: haskoin bestblock@H_R=$RB_BEST is A's stale block (B@H_R=$B_HASH_AT_HR) — index did not reconnect B"
+        fi
+        [[ "$RB_HEIGHT" == "$REORG_H" ]] || { REORG_OK="bad"; log "reorg: haskoin height@H_R=$RB_HEIGHT != H_R=$REORG_H"; }
+        [[ "$RB_BEST" == "$B_HASH_AT_HR" && "$RB_BEST" == "$RC_BEST" ]] \
+            || { REORG_OK="bad"; log "reorg: bestblock@H_R mismatch (haskoin=$RB_BEST want B@H_R=$B_HASH_AT_HR core=$RC_BEST)"; }
+        [[ -n "$RB_MUHASH" && "$RB_MUHASH" == "$RC_MUHASH" ]] \
+            || { REORG_OK="bad"; log "reorg: muhash@H_R MISMATCH (haskoin=$RB_MUHASH core=$RC_MUHASH) — impl served stale chain-A index after reorg"; }
+    else
+        RR_EC=$(jpy "$HK_RMUH" "d['error']['code']")
+        RR_EM=$(jpy "$HK_RMUH" "d['error']['message']")
+        REORG_OK="bad"; log "reorg: haskoin gettxoutsetinfo muhash $REORG_H errored after reorg: code=$RR_EC msg='$RR_EM'"
+    fi
+fi
+
+[[ "$REORG_OK" == "ok" ]] || fail "reorg-safety gate failed at H_R=$REORG_H (impl muhash/bestblock did not follow reorg from A to B; coinstatsindex reconnects on connect+disconnect but NOT on reconnect of the new chain)"
+log "REORG OK @H_R=$REORG_H: haskoin muhash+bestblock match Core's B-chain values after reorg"
+
+# ── 10. Reached only if every at-height gate AND the reorg gate passed. ────
+log "PASS: haskoin gettxoutsetinfo AS-OF historical height + reorg-safety matches Core"
 pass
