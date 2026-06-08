@@ -45,7 +45,7 @@
 #     (match Core: -8 "Querying specific block heights requires coinstatsindex").
 #
 # Summary line (stdout) — EXACT:
-#   PASS: COINSTATSINDEX clearbit: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok
+#   PASS: COINSTATSINDEX clearbit: PASS atheight=ok txouts=ok amount=ok hash=ok bestblock=ok reorg=ok
 #   FAIL: COINSTATSINDEX clearbit: FAIL <reason>
 #   SKIP: COINSTATSINDEX clearbit: SKIP <reason>   (only for missing binary / replay)
 #
@@ -83,6 +83,9 @@ CORE_NOIDX_LOG="$CORE_NOIDX_DATADIR/core.log"
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to.
 SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 SECRET_WIF=""   # derived below via the Core test_framework
+# Deterministic chain-B mining secret (DISTINCT from SECRET so B blocks differ
+# from chain-A blocks at equal heights — real reorg, not a no-op).
+SECRET3="3333333333333333333333333333333333333333333333333333333333333334"
 
 NMATURE=150        # mine ~150 blocks (per the shared contract); H is well below
 HIST_H=100         # the HISTORICAL height we query (well below tip)
@@ -94,6 +97,7 @@ CORE_BG=""
 CORE_NOIDX_BG=""
 ADDR=""
 SEND_ADDR=""
+CHAIN_B_ADDR=""
 
 # ── Logging: noisy -> stderr/log, never stdout. ───────────────────────────
 log() { echo "[coinstatsindex:clearbit] $*" >&2; }
@@ -125,7 +129,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # ── Summary emitters. ─────────────────────────────────────────────────────
-pass() { echo "COINSTATSINDEX clearbit: PASS atheight=$1 txouts=$2 amount=$3 hash=$4 bestblock=$5"; exit 0; }
+pass() { echo "COINSTATSINDEX clearbit: PASS atheight=$1 txouts=$2 amount=$3 hash=$4 bestblock=$5 reorg=$6"; exit 0; }
 fail() { echo "COINSTATSINDEX clearbit: FAIL $*"; exit 1; }
 skip() { echo "COINSTATSINDEX clearbit: SKIP $*"; exit 0; }
 
@@ -176,7 +180,16 @@ from test_framework.address import key_to_p2wpkh
 k=ECKey(); k.set(bytes.fromhex('2222222222222222222222222222222222222222222222222222222222222223'),compressed=True)
 print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
 " 2>/dev/null) || fail "could not derive deterministic send address"
-log "mining address: $ADDR ; send address: $SEND_ADDR"
+CHAIN_B_ADDR=$(python3 -c "
+import sys; sys.path.insert(0,'$TF_PATH')
+from test_framework.key import ECKey
+from test_framework.address import key_to_p2wpkh
+k=ECKey(); k.set(bytes.fromhex('$SECRET3'),compressed=True)
+print(key_to_p2wpkh(k.get_pubkey().get_bytes(), main=False))
+" 2>/dev/null) || fail "could not derive deterministic chain-B address"
+[[ "$CHAIN_B_ADDR" == bcrt1* ]] || fail "derived chain-B address is not a regtest bech32 address: '$CHAIN_B_ADDR'"
+[[ "$CHAIN_B_ADDR" != "$ADDR" ]] || fail "chain-A and chain-B mining addresses collided"
+log "mining address: $ADDR ; send address: $SEND_ADDR ; chain-B address: $CHAIN_B_ADDR"
 
 # ── JSON-RPC helpers ──────────────────────────────────────────────────────
 core_cli() { "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" "$@"; }
@@ -459,7 +472,6 @@ log "default hash_type @H: clearbit err code=$CB_DEFERR ; core err code=$CORE_DE
 # ── 9. ERROR PARITY — coinstatsindex DISABLED, non-tip query MUST error. ──
 # Launch a SECOND short-lived Core WITHOUT coinstatsindex and confirm a non-tip
 # query yields -8 "Querying specific block heights requires coinstatsindex".
-# Then assert clearbit emits the same when run conceptually without the index.
 log "launching Core (NO coinstatsindex) for the error-parity baseline rpc=:$CORE_NOIDX_RPC"
 "$CORE_BIN" -regtest -datadir="$CORE_NOIDX_DATADIR" -rpcport="$CORE_NOIDX_RPC" -listen=0 \
     -fallbackfee=0.0002 >"$CORE_NOIDX_LOG" 2>&1 &
@@ -484,10 +496,158 @@ else
     log "NOTE: Core(no-idx) baseline did not come up; skipping the cross-impl error-parity baseline (the main coinstatsindex gate is authoritative)"
 fi
 
-# All five GATEs must be ok to PASS.
+# All five GATEs must be ok to proceed to the reorg phase.
 [[ "$ATHEIGHT_T" == "ok" && "$TXOUTS_T" == "ok" && "$AMOUNT_T" == "ok" \
    && "$HASH_T" == "ok" && "$BESTBLOCK_T" == "ok" ]] \
     || fail "one or more at-height gates failed (atheight=$ATHEIGHT_T txouts=$TXOUTS_T amount=$AMOUNT_T hash=$HASH_T bestblock=$BESTBLOCK_T)"
+log "PASS (linear): clearbit coinstatsindex matches Core at historical height H=$HIST_H + disabled-index error gate"
 
-# ── DONE ───────────────────────────────────────────────────────────────────
-pass "$ATHEIGHT_T" "$TXOUTS_T" "$AMOUNT_T" "$HASH_T" "$BESTBLOCK_T"
+# ── 10. REORG-SAFETY GATE ──────────────────────────────────────────────────
+# WHY: the at-height gate above only proves the impl maintains the per-height
+# MuHash on a LINEAR chain (connect-only). It CANNOT catch a reorg-desync — an
+# impl that reverses the index on disconnect but never RE-ADDS on reconnect of
+# the new chain's blocks will pass linear yet serve a stale (chain-A) muhash for
+# a height that was reorged onto chain B. Core's coinstatsindex (BaseIndex +
+# index/coinstatsindex.cpp: CustomAppend on connect, CustomRewind on disconnect)
+# re-runs CustomAppend when B's blocks reconnect, so its per-height MuHash tracks
+# the ACTIVE chain. This gate forces a reorg and asserts the impl agrees.
+#
+# REORG DESIGN (impl-agnostic; mirrors the committed rustoshi/blockbrew/nimrod/
+# hotbuns harnesses exactly):
+#   (1) Both nodes already share linear chain A at tip N (= $CORE_HEIGHT).
+#   (2) On the Core ORACLE only: invalidateblock(getblockhash(F+1)) for a fork
+#       point F < N. That disconnects A's F+1..N (Core runs CustomRemove for
+#       each). Then generatetoaddress a LONGER competing chain B from F to N+3
+#       to a DETERMINISTIC chain-B address (CHAIN_B_ADDR). B has strictly more
+#       work, so Core reorgs A->B and its index re-runs CustomAppend for
+#       B's F+1..N+3.
+#   (3) REORG TRIGGER via invalidateblock ON THE IMPL (Core-faithful). A naive
+#       submitblock of B's blocks onto A's tip N would be (correctly) rejected
+#       as a side-branch double-spend. So FIRST call invalidateblock(F+1) ON THE
+#       IMPL — rewinding it to fork F (disconnecting A's F+1..N) — THEN
+#       submitblock B's blocks F+1..N+3 in order; each now connects as a clean
+#       active-tip extension and the impl reorgs to B.
+#   (4) Pick H_R with F < H_R <= N — a height whose block DIFFERS between A and
+#       B. Call gettxoutsetinfo muhash H_R on BOTH and ASSERT
+#       impl.muhash@H_R == Core.muhash@H_R AND impl.bestblock@H_R ==
+#       Core.bestblock@H_R (the B-chain block at H_R, NOT A's). FAILS iff the
+#       impl's index did not reconnect B's blocks (the connect-on-reconnect gap).
+REORG_T="ok"
+REORG_DEPTH=5                                   # A's blocks F+1..N that get reorged out
+REORG_F=$(( CORE_HEIGHT - REORG_DEPTH ))        # fork point F (< N)
+REORG_NEWTIP=$(( CORE_HEIGHT + 3 ))             # B's tip height (N+3): strictly more work
+REORG_H=$CORE_HEIGHT                            # H_R: the OLD tip height (F < H_R <= N)
+[[ "$REORG_F" -gt "$HIST_H" ]] || log "note: fork point F=$REORG_F not above linear-H=$HIST_H (ok; reorg-H differs)"
+
+# clearbit must expose invalidateblock for the impl-side reorg trigger.
+CB_IB_PROBE=$(cb_rpc invalidateblock '[]')
+CB_IB_PROBE_M=$(jpy "$CB_IB_PROBE" "d.get('error',{}).get('message','')")
+if echo "$CB_IB_PROBE_M" | grep -qi "Method not found"; then
+    fail "reorg: clearbit has no invalidateblock RPC ('$CB_IB_PROBE_M') — cannot drive a Core-faithful reorg"
+fi
+
+# Record A's block hash at H_R (must change after the reorg, proving A!=B at H_R).
+A_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "reorg: Core getblockhash $REORG_H (chain A) failed"
+log "reorg: chain A tip N=$CORE_HEIGHT, fork F=$REORG_F, B newtip=$REORG_NEWTIP, reorg-H=$REORG_H (A@H_R=$A_HASH_AT_HR)"
+
+# (2) On the Core oracle: invalidate F+1 then build longer chain B to CHAIN_B_ADDR.
+FORK_CHILD=$(core_cli_retry getblockhash "$(( REORG_F + 1 ))") || fail "reorg: Core getblockhash F+1 failed"
+core_cli invalidateblock "$FORK_CHILD" >/dev/null 2>&1 || fail "reorg: Core invalidateblock $FORK_CHILD failed"
+INVAL_TIP=$(core_cli_retry getblockcount) || fail "reorg: Core getblockcount after invalidate failed"
+[[ "$INVAL_TIP" == "$REORG_F" ]] || fail "reorg: Core after invalidate is at $INVAL_TIP, expected fork F=$REORG_F"
+NB_B=$(( REORG_NEWTIP - REORG_F ))              # number of B blocks to generate (= depth+3)
+core_cli_retry generatetoaddress "$NB_B" "$CHAIN_B_ADDR" >/dev/null || fail "reorg: Core generatetoaddress (chain B) failed"
+CORE_BTIP_H=$(core_cli_retry getblockcount) || fail "reorg: Core getblockcount (B tip) failed"
+[[ "$CORE_BTIP_H" == "$REORG_NEWTIP" ]] || fail "reorg: Core B tip height $CORE_BTIP_H != expected $REORG_NEWTIP"
+CORE_BTIP=$(core_cli_retry getbestblockhash) || fail "reorg: Core getbestblockhash (B) failed"
+B_HASH_AT_HR=$(core_cli_retry getblockhash "$REORG_H") || fail "reorg: Core getblockhash $REORG_H (chain B) failed"
+[[ "$B_HASH_AT_HR" != "$A_HASH_AT_HR" ]] \
+    || fail "reorg sanity: block at H_R=$REORG_H unchanged after reorg (A=B=$A_HASH_AT_HR; not a real reorg)"
+log "reorg: Core reorged to B, tip=$CORE_BTIP @h$CORE_BTIP_H; B@H_R=$B_HASH_AT_HR (differs from A@H_R)"
+
+# (3) REORG TRIGGER: invalidateblock(F+1) ON CLEARBIT first, rewinding it to F.
+CB_FORK_CHILD=$(jpy "$(cb_rpc getblockhash "[$(( REORG_F + 1 ))]")" "d['result']")
+[[ "$CB_FORK_CHILD" == "$FORK_CHILD" ]] \
+    || fail "reorg: clearbit F+1 hash ($CB_FORK_CHILD) != Core F+1 hash ($FORK_CHILD) before invalidate"
+log "reorg: invalidateblock F+1=$CB_FORK_CHILD on clearbit (rewind to fork F=$REORG_F)"
+CB_IB_RESP=$(cb_rpc invalidateblock "[\"$CB_FORK_CHILD\"]")
+echo "$CB_IB_RESP" | grep -q '"error":null' || log "reorg: clearbit invalidateblock -> $CB_IB_RESP"
+# Poll until clearbit has actually rewound to fork point F.
+CB_AT_F=0
+for _ in $(seq 1 30); do
+    CB_INVAL_H=$(jpy "$(cb_rpc getblockcount '[]')" "d['result']")
+    if [[ "$CB_INVAL_H" == "$REORG_F" ]]; then CB_AT_F=1; break; fi
+    sleep 1
+done
+[[ "$CB_AT_F" == "1" ]] \
+    || fail "reorg: clearbit did not rewind to fork F=$REORG_F after invalidateblock (impl height=$CB_INVAL_H) — invalidateblock unsupported/ineffective"
+log "reorg: clearbit rewound to fork F=$REORG_F"
+
+# Mirror B to clearbit: submitblock B's blocks F+1..N+3 in order. Each now
+# connects as a clean active-tip extension; B carries strictly more work.
+log "reorg: mirroring B's blocks $(( REORG_F + 1 ))..$REORG_NEWTIP to clearbit via submitblock"
+for (( h=REORG_F+1; h<=REORG_NEWTIP; h++ )); do
+    kill -0 "$CB_PID" 2>/dev/null || fail "reorg: clearbit died during B replication at h=$h (see $CB_LOG)"
+    BBH=$(core_cli_retry getblockhash "$h") || fail "reorg: Core getblockhash $h (chain B) failed"
+    BRAW=$(core_cli_retry getblock "$BBH" 0) || fail "reorg: Core getblock $BBH 0 (chain B) failed"
+    [[ -n "$BRAW" ]] || fail "reorg: empty raw for chain-B block at h=$h"
+    BSUB=$(cb_rpc submitblock "[\"$BRAW\"]")
+    echo "$BSUB" | grep -q '"error":null' || log "reorg submitblock h=$h -> $BSUB"
+done
+
+# Poll until clearbit tip == Core tip (B). If clearbit never adopts B, that is
+# itself a reorg failure (it could not switch to the more-work chain).
+CB_REORG_DONE=0
+for _ in $(seq 1 30); do
+    CB_BTIP=$(jpy "$(cb_rpc getbestblockhash '[]')" "d['result']")
+    CB_BTIP_H=$(jpy "$(cb_rpc getblockcount '[]')" "d['result']")
+    if [[ "$CB_BTIP" == "$CORE_BTIP" && "$CB_BTIP_H" == "$CORE_BTIP_H" ]]; then CB_REORG_DONE=1; break; fi
+    sleep 1
+done
+[[ "$CB_REORG_DONE" == "1" ]] \
+    || fail "reorg: clearbit did not adopt chain B (impl tip=$CB_BTIP @h$CB_BTIP_H, Core B tip=$CORE_BTIP @h$CORE_BTIP_H) — reorg to more-work chain failed"
+log "reorg: clearbit adopted chain B (tip $CB_BTIP @h$CB_BTIP_H)"
+
+# (4) The reorg differential: gettxoutsetinfo muhash H_R on BOTH. Assert
+#     clearbit serves B's per-height MuHash + bestblock, NOT A's stale value.
+RB_MUH=$(core_cli_retry gettxoutsetinfo muhash "$REORG_H") || fail "reorg: Core gettxoutsetinfo muhash $REORG_H (post-reorg) failed"
+RC_HEIGHT=$(jpy "$RB_MUH" "d.get('height')")
+RC_BEST=$(jpy   "$RB_MUH" "d.get('bestblock')")
+RC_MUHASH=$(jpy "$RB_MUH" "d.get('muhash')")
+[[ "$RC_HEIGHT" == "$REORG_H" ]] || fail "reorg: Core post-reorg muhash@H_R height=$RC_HEIGHT != H_R=$REORG_H"
+[[ "$RC_BEST" == "$B_HASH_AT_HR" ]] || fail "reorg: Core post-reorg bestblock@H_R=$RC_BEST != B@H_R=$B_HASH_AT_HR (oracle wrong?)"
+[[ "$RC_MUHASH" =~ ^[0-9a-f]{64}$ ]] || fail "reorg: Core post-reorg muhash@H_R not 64-hex: '$RC_MUHASH'"
+
+CB_RB_RESP=$(cb_rpc gettxoutsetinfo "[\"muhash\", $REORG_H]")
+CB_RB_ERR_C=$(jpy "$CB_RB_RESP" "d.get('error',{}).get('code')")
+if [[ -n "$CB_RB_ERR_C" && "$CB_RB_ERR_C" != "None" ]]; then
+    fail "reorg: clearbit rejected gettxoutsetinfo muhash $REORG_H post-reorg (code=$CB_RB_ERR_C) — coinstatsindex not serving the reorged height"
+fi
+CB_RB_RES=$(jpy "$CB_RB_RESP" "json.dumps(d['result']) if d.get('result') is not None else ''")
+[[ -n "$CB_RB_RES" && "$CB_RB_RES" != "" ]] || fail "reorg: clearbit gettxoutsetinfo@H_R post-reorg returned no result (raw=$CB_RB_RESP)"
+
+RB_HEIGHT=$(jpy "$CB_RB_RES" "d.get('height')")
+RB_BEST=$(jpy   "$CB_RB_RES" "d.get('bestblock')")
+RB_MUHASH=$(jpy "$CB_RB_RES" "d.get('muhash')")
+log "reorg @H_R=$REORG_H: core(best=$RC_BEST muhash=$RC_MUHASH) clearbit(height=$RB_HEIGHT best=$RB_BEST muhash=$RB_MUHASH)"
+
+if [[ "$RB_BEST" == "$A_HASH_AT_HR" ]]; then
+    REORG_T="bad"; log "reorg DESYNC: clearbit bestblock@H_R=$RB_BEST is A's stale block (B@H_R=$B_HASH_AT_HR) — index did not reconnect B"
+fi
+[[ "$RB_HEIGHT" == "$REORG_H" ]] \
+    || { REORG_T="bad"; log "reorg: clearbit height@H_R=$RB_HEIGHT != H_R=$REORG_H"; }
+[[ "$RB_BEST" == "$B_HASH_AT_HR" && "$RB_BEST" == "$RC_BEST" ]] \
+    || { REORG_T="bad"; log "reorg: bestblock@H_R mismatch (clearbit=$RB_BEST want B@H_R=$B_HASH_AT_HR core=$RC_BEST)"; }
+[[ -n "$RB_MUHASH" && "$RB_MUHASH" == "$RC_MUHASH" ]] \
+    || { REORG_T="bad"; log "reorg: muhash@H_R MISMATCH (clearbit=$RB_MUHASH core=$RC_MUHASH) — impl served stale chain-A index after reorg"; }
+
+[[ "$REORG_T" == "ok" ]] || fail "reorg-safety gate failed at H_R=$REORG_H (clearbit muhash/bestblock did not follow reorg from A to B; coinstatsindex reverses on disconnect but does NOT reconnect on the new chain)"
+log "REORG OK @H_R=$REORG_H: clearbit muhash+bestblock match Core's B-chain values after reorg"
+
+# ── 11. Verdict. ──────────────────────────────────────────────────────────
+[[ "$ATHEIGHT_T" == "ok" && "$TXOUTS_T" == "ok" && "$AMOUNT_T" == "ok" \
+   && "$HASH_T" == "ok" && "$BESTBLOCK_T" == "ok" && "$REORG_T" == "ok" ]] \
+    || fail "internal: a gate flag was not set (atheight=$ATHEIGHT_T txouts=$TXOUTS_T amount=$AMOUNT_T hash=$HASH_T bestblock=$BESTBLOCK_T reorg=$REORG_T)"
+
+log "PASS: clearbit coinstatsindex at-height query matches Core on all gated fields (linear + reorg)"
+pass "$ATHEIGHT_T" "$TXOUTS_T" "$AMOUNT_T" "$HASH_T" "$BESTBLOCK_T" "$REORG_T"
