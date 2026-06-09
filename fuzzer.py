@@ -249,6 +249,12 @@ def stop_all():
     for name in list(processes.keys()):
         stop_node(name)
     log("All nodes stopped.")
+    # Self-clean the regtest scratch root so a completed run leaves ZERO
+    # scratch behind on the /tmp tmpfs (results live under ~/hashhog, not
+    # here). Set HASHHOG_KEEP_SCRATCH=1 to retain the datadirs for debugging.
+    if not os.environ.get("HASHHOG_KEEP_SCRATCH"):
+        import shutil
+        shutil.rmtree(FUZZ_DIR, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

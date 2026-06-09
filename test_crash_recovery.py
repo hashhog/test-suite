@@ -188,6 +188,14 @@ def stop_all():
     for name in list(processes.keys()):
         stop_node(name)
     log("All nodes stopped.")
+    # Self-clean the crash-test scratch root so a completed (or interrupted)
+    # run leaves ZERO scratch behind on the /tmp tmpfs. Per-node datadirs are
+    # already removed inside the test loop; this also reaps CRASH_DIR/core and
+    # the root itself, and runs on the interrupt/exception paths too. Results
+    # live under ~/hashhog. Set HASHHOG_KEEP_SCRATCH=1 to retain for debugging.
+    if not os.environ.get("HASHHOG_KEEP_SCRATCH"):
+        import shutil
+        shutil.rmtree(CRASH_DIR, ignore_errors=True)
 
 
 def get_block_raw(height):
@@ -494,6 +502,11 @@ def main():
     with open(RESULTS_FILE, "w") as f:
         json.dump(report, f, indent=2)
     log(f"Results written to {RESULTS_FILE}")
+
+    # Final teardown: stop any straggler nodes + wipe the scratch root so the
+    # normal-exit path also leaves ZERO scratch behind (the test loop only
+    # removes per-node datadirs, not CRASH_DIR/core or the root).
+    stop_all()
 
     return 0 if failed == 0 else 1
 

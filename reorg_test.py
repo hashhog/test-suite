@@ -303,6 +303,15 @@ def stop_all():
     for name in list(processes.keys()):
         stop_node(name)
     log("All nodes stopped.")
+    # Self-clean the regtest scratch root so a completed run leaves ZERO
+    # scratch behind on the /tmp tmpfs — now on EVERY exit path (main +
+    # the KeyboardInterrupt/Exception handlers all call stop_all), not just
+    # the normal path. Results live under ~/hashhog, not here. Set
+    # HASHHOG_KEEP_SCRATCH=1 to retain the datadirs for debugging.
+    if not os.environ.get("HASHHOG_KEEP_SCRATCH"):
+        import shutil
+        shutil.rmtree(REORG_DIR, ignore_errors=True)
+        log(f"Cleaned up {REORG_DIR}")
 
 
 # ---------------------------------------------------------------------------
@@ -1055,16 +1064,9 @@ def main():
     # Write summary
     _write_summary(results)
 
-    # Cleanup
+    # Cleanup — stop_all() now also wipes REORG_DIR (on every exit path).
     log("\n--- Cleanup ---")
     stop_all()
-
-    import shutil
-    try:
-        shutil.rmtree(REORG_DIR)
-        log(f"Cleaned up {REORG_DIR}")
-    except Exception as e:
-        log(f"Cleanup warning: {e}")
 
     return 0 if failed == 0 else 1
 

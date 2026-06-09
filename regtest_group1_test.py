@@ -215,6 +215,14 @@ def stop_all():
     for name in list(NODES.keys()):
         stop_node(name)
     log("All nodes stopped.")
+    # Self-clean the regtest scratch root so a completed run leaves ZERO
+    # scratch behind on the /tmp tmpfs (RESULTS_FILE lives under ~/hashhog,
+    # not here, so it survives). Runs on every exit path (main + the
+    # KeyboardInterrupt/Exception handlers all call stop_all). Set
+    # HASHHOG_KEEP_SCRATCH=1 to retain the datadirs for debugging.
+    if not os.environ.get("HASHHOG_KEEP_SCRATCH"):
+        import shutil
+        shutil.rmtree(REGTEST_DIR, ignore_errors=True)
 
 
 def get_block_raw(height):
