@@ -35,7 +35,7 @@
 #   PASS: SPEND camlcoin: PASS funded=<X> sent=<Y> recipient=<Y> sender_debited=<Y+fee> ...
 #   FAIL: SPEND camlcoin: FAIL <short reason>
 #
-# Touches ONLY /tmp/spendfleet-camlcoin/ and ports 39715 (RPC) / 39735 (P2P).
+# Touches ONLY /tmp/spendfleet-camlcoin/ and ports 21615 (RPC) / 21635 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -44,8 +44,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 NODE_BIN="$BASEDIR/camlcoin/_build/default/bin/main.exe"
 DATADIR="/tmp/spendfleet-camlcoin"
-RPC_PORT=39715
-P2P_PORT=39735
+RPC_PORT=21615
+P2P_PORT=21635
 RPC_URL="http://127.0.0.1:${RPC_PORT}/"
 LOGFILE="$DATADIR/spend-test.log"
 
@@ -95,8 +95,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -151,8 +149,9 @@ count_unspent() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 pkill -f "spendfleet-camlcoin" 2>/dev/null || true
 sleep 1
 rm -rf "$DATADIR"

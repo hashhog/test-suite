@@ -24,7 +24,7 @@
 #
 # Interface contract (the assembled nightly runner depends on it):
 #   - No required args. set -uo pipefail. Idempotent (wipes scratch + frees ports).
-#   - Scratch datadir /tmp/recreg-rustoshi/, RPC 39600, P2P 39630.
+#   - Scratch datadir /tmp/recreg-rustoshi/, RPC 21500, P2P 21530.
 #   - Always cleans up (trap): kills the node + rm -rf the scratch datadir.
 #   - Prints EXACTLY ONE summary line to stdout, all other output to stderr/log:
 #       PASS: RECOVERY rustoshi: PASS funded=<X> recovered=<X> addrs=match neg=0   (exit 0)
@@ -39,8 +39,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 BIN="$BASEDIR/rustoshi/target/release/rustoshi"
 DATADIR="/tmp/recreg-rustoshi"
-RPC_PORT=39600
-P2P_PORT=39630
+RPC_PORT=21500
+P2P_PORT=21530
 LOG="$DATADIR/node.log"
 RUNLOG="$DATADIR/recovery.log"   # noisy test output goes here / to stderr
 
@@ -78,9 +78,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: free the assigned ports (handles a node we lost track of).
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -127,8 +124,9 @@ except Exception:
 
 # ── Pre-flight: idempotent reset ────────────────────────────────────────────
 log "pre-flight: freeing ports + wiping scratch datadir"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR" 2>/dev/null || true
 mkdir -p "$DATADIR" || fail "cannot create scratch datadir $DATADIR"

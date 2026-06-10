@@ -52,8 +52,8 @@
 #   PASS: GETBLOCKHEADER haskoin: PASS hex=ok verbose=ok genesis=ok tip=ok errors=ok
 #   FAIL: GETBLOCKHEADER haskoin: FAIL <short reason>
 #
-# Touches ONLY /tmp/gbh-haskoin/ + /tmp/gbh-core/ and ports 40159/40179
-#   (haskoin RPC/P2P) + 40161/40181 (Core RPC/P2P).
+# Touches ONLY /tmp/gbh-haskoin/ + /tmp/gbh-core/ and ports 22059/22079
+#   (haskoin RPC/P2P) + 22061/22081 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -72,15 +72,15 @@ HK_BIN="$(find "$HK_DIR/dist-newstyle" -name haskoin -type f -executable 2>/dev/
 export LD_LIBRARY_PATH="/home/work/.local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 HK_DATADIR="/tmp/gbh-haskoin"
-HK_RPC=40159
-HK_P2P=40179
+HK_RPC=22059
+HK_P2P=22079
 HK_LOG="$HK_DATADIR/node.log"
 HK_COOKIE=""
 HK_PID=""
 
 CORE_DATADIR="/tmp/gbh-core"
-CORE_RPC=40161
-CORE_P2P=40181
+CORE_RPC=22061
+CORE_P2P=22081
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -111,10 +111,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -134,10 +130,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gbh-haskoin" >/dev/null 2>&1 || true
-fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HK_RPC}/${HK_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$HK_DATADIR" "$CORE_DATADIR"
 mkdir -p "$HK_DATADIR" "$CORE_DATADIR"
@@ -199,8 +200,18 @@ except Exception:
 # The sandbox SIGKILLs any bitcoind binding a 0.0.0.0 P2P listener ~2s after
 # load, so we MUST pass -listen=0 (RPC-only is fine). Retry up to 3 times.
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \
         -listen=0 -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &

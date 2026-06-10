@@ -50,7 +50,7 @@
 #   PASS: SPEND blockbrew: PASS funded=<X> sent=<Y> recipient=<Y> sender_debited=<...> mempool=clean
 #   FAIL: SPEND blockbrew: FAIL <short reason>
 #
-# Touches ONLY /tmp/spendfleet-blockbrew/ and ports 39713 (RPC) / 39733 (P2P).
+# Touches ONLY /tmp/spendfleet-blockbrew/ and ports 21613 (RPC) / 21633 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -59,8 +59,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 BIN="$BASEDIR/blockbrew/blockbrew"
 DATADIR="/tmp/spendfleet-blockbrew"
-RPC_PORT=39713
-P2P_PORT=39733
+RPC_PORT=21613
+P2P_PORT=21633
 LOGFILE="$DATADIR/spend-test.log"
 URL="http://127.0.0.1:${RPC_PORT}"
 
@@ -102,9 +102,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: free the ports in case a child lingers.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -171,8 +168,9 @@ count_unspent() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

@@ -77,8 +77,8 @@
 #   FAIL: POLICY blockbrew: FAIL <short reason> [dust=.. version=.. ...]
 #
 # Touches ONLY /tmp/policyfleet-blockbrew/ + /tmp/policyref-core-{strict,def}-bb/
-#   and ports 39943/39963 (blockbrew RPC/P2P), 39945/39965 (strict Core),
-#   39947/39967 (default Core).
+#   and ports 21843/21863 (blockbrew RPC/P2P), 21845/21865 (strict Core),
+#   21847/21867 (default Core).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -91,19 +91,19 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx builders)
 
 BB_DATADIR="/tmp/policyfleet-blockbrew"
-BB_RPC=39943
-BB_P2P=39963
+BB_RPC=21843
+BB_P2P=21863
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 
 CORE_DATADIR="/tmp/policyref-core-strict-bb"
-CORE_RPC=39945
-CORE_P2P=39965
+CORE_RPC=21845
+CORE_P2P=21865
 CORE_LOG="$CORE_DATADIR/core.log"
 
 CORE_DEF_DATADIR="/tmp/policyref-core-def-bb"
-CORE_DEF_RPC=39947
-CORE_DEF_P2P=39967
+CORE_DEF_RPC=21847
+CORE_DEF_P2P=21867
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 # Strict-policy flags so EVERY corpus violation rejects on the primary oracle.
@@ -143,12 +143,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"       2>/dev/null || true
-    fuser -k "${BB_P2P}/tcp"       2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -184,12 +178,9 @@ classify() {
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BB_RPC}/tcp"       2>/dev/null || true
-fuser -k "${BB_P2P}/tcp"       2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_DEF_RPC}/${CORE_DEF_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BB_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"

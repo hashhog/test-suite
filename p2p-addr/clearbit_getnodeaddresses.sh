@@ -52,7 +52,7 @@
 #   FAIL: GETNODEADDRESSES clearbit: FAIL <short reason>
 #
 # Touches ONLY /tmp/gna-clearbit/ + /tmp/gna-clearbit-core/ and ports
-#   40077/40097 (clearbit RPC/P2P) + 40177/40197 (Core oracle RPC/P2P, a
+#   21977/21997 (clearbit RPC/P2P) + 22077/22097 (Core oracle RPC/P2P, a
 #   clearbit-private +100 band so concurrent sibling cells never collide).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node (haskoin is
 #   mid-sync — left untouched).
@@ -67,21 +67,21 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 CB_DATADIR="/tmp/gna-clearbit"
 CB_NETDIR="$CB_DATADIR/regtest"
-CB_RPC=40077
-CB_P2P=40097
+CB_RPC=21977
+CB_P2P=21997
 CB_LOG="$CB_DATADIR/node.log"
 
 # Core oracle ports live in a clearbit-private +100 band keyed off clearbit's
-# assigned 40077/40097 (-> 40177/40197). The fan-out assigns each impl a base
-# slot in 40070+idx / 40090+idx; sibling cells run concurrently, so the Core
+# assigned 21977/21997 (-> 22077/22097). The fan-out assigns each impl a base
+# slot in 21970+idx / 21990+idx; sibling cells run concurrently, so the Core
 # oracle MUST NOT reuse a base-band port (another impl's clearbit-equivalent or
 # its own Core oracle). The +100 offset keeps this oracle collision-free across
 # the whole fleet. (bitcoind also opens a localhost control listener at <p2p>+1,
 # so the P2P slot has margin too.) The datadir is clearbit-specific to avoid a
 # shared /tmp/gna-core path racing a sibling's wipe.
 CORE_DATADIR="/tmp/gna-clearbit-core"
-CORE_RPC=40177
-CORE_P2P=40197
+CORE_RPC=22077
+CORE_P2P=22097
 CORE_LOG="$CORE_DATADIR/core.log"
 
 CB_PID=""
@@ -105,10 +105,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CB_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -131,10 +127,15 @@ core_cli() { "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gna-clearbit" 2>/dev/null || true
-fuser -k "${CB_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CB_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$CB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CB_DATADIR" "$CORE_DATADIR"

@@ -55,8 +55,8 @@
 #   PASS: GETRAWTRANSACTION rustoshi: PASS hex=ok decoded=ok confirmed=ok errors=ok
 #   FAIL: GETRAWTRANSACTION rustoshi: FAIL <short reason>
 #
-# Touches ONLY /tmp/grt-rustoshi/ + /tmp/grt-core/ and ports 40110/40130
-#   (rustoshi RPC/P2P) + 40112/40132 (Core RPC/P2P).
+# Touches ONLY /tmp/grt-rustoshi/ + /tmp/grt-core/ and ports 22010/22030
+#   (rustoshi RPC/P2P) + 22012/22032 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -76,13 +76,13 @@ SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 DEST_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 RS_DATADIR="/tmp/grt-rustoshi"
-RS_RPC=40110
-RS_P2P=40130
+RS_RPC=22010
+RS_P2P=22030
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/grt-core"
-CORE_RPC=40112
-CORE_P2P=40132
+CORE_RPC=22012
+CORE_P2P=22032
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=101        # exactly enough so block-1's coinbase is matured + spendable.
@@ -108,10 +108,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${RS_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -131,10 +127,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "grt-rustoshi" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${RS_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$RS_DATADIR" "$CORE_DATADIR"
 mkdir -p "$RS_DATADIR" "$CORE_DATADIR"
@@ -212,8 +213,18 @@ unq() { python3 -c "import sys,json; print(json.loads(sys.stdin.read()))" <<<"$1
 
 # ── 2. Launch the Core regtest oracle (RPC-only, txindex on). ─────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     # -listen=0: RPC-only — the sandbox SIGKILLs a 0.0.0.0 P2P listener.
     # -txindex=1: Core can answer getrawtransaction with no blockhash arg.

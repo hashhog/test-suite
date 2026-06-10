@@ -57,8 +57,8 @@
 #   GETNODEADDRESSES hotbuns: FAIL <short reason>
 #
 # Touches ONLY /tmp/gna-hotbuns/ and /tmp/gna-hotbuns-core/ and ports
-#   40074 (hotbuns RPC) / 40094 (hotbuns P2P) / 40078 (Core RPC) /
-#   40098 (Core P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live
+#   21974 (hotbuns RPC) / 21994 (hotbuns P2P) / 21978 (Core RPC) /
+#   21998 (Core P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live
 #   node (haskoin is mid-sync — left untouched).
 
 set -uo pipefail
@@ -70,13 +70,13 @@ BCD="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 HB_DATADIR="/tmp/gna-hotbuns"
-HB_RPC=40074
-HB_P2P=40094
+HB_RPC=21974
+HB_P2P=21994
 HB_LOG="$HB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gna-hotbuns-core"
-CORE_RPC=40078
-CORE_P2P=40098
+CORE_RPC=21978
+CORE_P2P=21998
 CORE_LOG="$CORE_DATADIR/core.log"
 
 INJECT_ADDR="8.8.8.8"
@@ -107,10 +107,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$HB_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$HB_PID" 2>/dev/null || true
     fi
-    fuser -k "${HB_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${HB_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -179,13 +175,12 @@ core_cli() {
 # NB: do NOT use `pkill -f <pattern>` for cleanup — the test harness wraps each
 # command in an `eval '<command-text>'`, so a loose `-f` pattern (e.g. a scratch
 # path substring) can match the harness's OWN wrapper command line and SIGKILL
-# the whole invocation. We rely on port-scoped `fuser -k` (surgical) + tracked
-# PIDs in cleanup() instead.
+# the whole invocation. We rely on tracked PIDs in cleanup() instead
+# (port-kills banned — 2026-06-10 fuser incident).
 log "resetting scratch state"
-fuser -k "${HB_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${HB_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HB_RPC}/${HB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$HB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$HB_DATADIR" "$CORE_DATADIR"
@@ -202,8 +197,18 @@ command -v python3 >/dev/null 2>&1 || fail "python3 not found on PATH"
 CORE_LAUNCH_TRIES=0
 launch_core() {
     CORE_LAUNCH_TRIES=$(( CORE_LAUNCH_TRIES + 1 ))
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_PID:-}" ]]; then
+        kill "$CORE_PID" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_PID" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_PID" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     sleep 1
     log "launching Core regtest oracle (attempt $CORE_LAUNCH_TRIES) rpc=:$CORE_RPC p2p=:$CORE_P2P -> $CORE_LOG"
     "$BCD" -regtest -datadir="$CORE_DATADIR" -port=$CORE_P2P -rpcport=$CORE_RPC \
@@ -248,8 +253,18 @@ HB_LAUNCH_TRIES=0
 launch_hotbuns() {
     HB_LAUNCH_TRIES=$(( HB_LAUNCH_TRIES + 1 ))
     HB_COOKIE=""
-    fuser -k "${HB_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${HB_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${HB_PID:-}" ]]; then
+        kill "$HB_PID" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$HB_PID" 2>/dev/null || break; sleep 1; done
+        kill -9 "$HB_PID" 2>/dev/null || true
+    fi
+    for __hp in "${HB_RPC}" "${HB_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     sleep 1
     log "launching hotbuns (regtest, attempt $HB_LAUNCH_TRIES) rpc=:$HB_RPC p2p=:$HB_P2P -> $HB_LOG"
     (

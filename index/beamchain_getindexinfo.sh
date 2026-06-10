@@ -42,7 +42,7 @@
 #   FAIL: GETINDEXINFO beamchain: FAIL <short reason>
 #
 # Touches ONLY /tmp/giifleet-beamchain/ + /tmp/giifleet-beamchain-core/ and ports
-#   40036/40056 (beamchain RPC/P2P), 40037/40057 (Core RPC/P2P).
+#   21936/21956 (beamchain RPC/P2P), 21937/21957 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -55,15 +55,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 BC_DATADIR="/tmp/giifleet-beamchain"
-BC_RPC=40036
-BC_P2P=40056
+BC_RPC=21936
+BC_P2P=21956
 BC_LOG="$BC_DATADIR/node.log"
 
 # Core-oracle scratch dir is namespaced to THIS harness (…-beamchain-…) so a
 # sibling getindexinfo run never shares a datadir.
 CORE_DATADIR="/tmp/giifleet-beamchain-core"
-CORE_RPC=40037
-CORE_P2P=40057
+CORE_RPC=21937
+CORE_P2P=21957
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120            # mine this many empty blocks on both nodes
@@ -103,11 +103,6 @@ cleanup() {
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     # beamchain runs under its own process group (setsid -w); reap stragglers.
     pkill -f "giifleet-beamchain" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"         2>/dev/null || true
-    fuser -k "${BC_P2P}/tcp"         2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"       2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"       2>/dev/null || true
-    fuser -k "$((CORE_P2P + 1))/tcp" 2>/dev/null || true   # Core onion listener (P2P+1)
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -116,11 +111,15 @@ trap cleanup EXIT INT TERM
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "giifleet-beamchain" 2>/dev/null || true
-fuser -k "${BC_RPC}/tcp"         2>/dev/null || true
-fuser -k "${BC_P2P}/tcp"         2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"       2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"       2>/dev/null || true
-fuser -k "$((CORE_P2P + 1))/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P}/$((CORE_P2P + 1)) already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"

@@ -60,9 +60,9 @@
 #   FAIL: RBF beamchain: FAIL <short reason>
 #   SKIP: RBF beamchain: SKIP <build/raw-tx gap>
 #
-# Touches ONLY /tmp/rbf-beamchain{,-core}/ and ports 40196/40216 (beamchain
-#   RPC/P2P), 40198/40218 (Core RPC/P2P). NEVER touches /data/nvme1/ or
-#   testnet4-data/ or any live node. Any `fuser -k` redirects stdout.
+# Touches ONLY /tmp/rbf-beamchain{,-core}/ and ports 22096/22116 (beamchain
+#   RPC/P2P), 22098/22118 (Core RPC/P2P). NEVER touches /data/nvme1/ or
+#   testnet4-data/ or any live node. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -74,18 +74,18 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx builders)
 
 BC_DATADIR="/tmp/rbf-beamchain"
-BC_RPC=40196
-BC_P2P=40216
+BC_RPC=22096
+BC_P2P=22116
 BC_LOG="$BC_DATADIR/node.log"
 
 # Core-oracle ports are deliberately placed in a DIFFERENT band (402xx) from
-# the brief's beamchain ports (40196/40216) so a sibling RBF cell that also
-# parks its Core oracle at 401xx (e.g. rbf-haskoin-core on :40198) never
-# collides with — or gets fuser-killed by — this run. The Core datadir name is
+# the brief's beamchain ports (22096/22116) so a sibling RBF cell that also
+# parks its Core oracle at 220xx (e.g. rbf-haskoin-core on :22098) never
+# collides with this run. The Core datadir name is
 # namespaced (-beamchain-) for the same reason.
 CORE_DATADIR="/tmp/rbf-beamchain-core"
-CORE_RPC=40296
-CORE_P2P=40316
+CORE_RPC=22196
+CORE_P2P=22216
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Fixed deterministic test secret (32 bytes) -> one p2wpkh keypair the whole
@@ -117,10 +117,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -156,10 +152,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "rbf-beamchain" >/dev/null 2>&1 || true
-fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"

@@ -53,8 +53,8 @@
 #   SKIP: if the impl binary is missing the FAIL reason contains "not found"
 #         (GAP_RE-compatible) so the runner downgrades to SKIP.
 #
-# Touches ONLY /tmp/scan-rustoshi/ + /tmp/scan-core/ and ports 40210/40230
-#   (rustoshi RPC/P2P) + 40212/40232 (Core RPC/P2P).
+# Touches ONLY /tmp/scan-rustoshi/ + /tmp/scan-core/ and ports 22110/22130
+#   (rustoshi RPC/P2P) + 22112/22132 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -73,13 +73,13 @@ SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 EMPTY_SECRET="3333333333333333333333333333333333333333333333333333333333333334"
 
 RS_DATADIR="/tmp/scan-rustoshi"
-RS_RPC=40210
-RS_P2P=40230
+RS_RPC=22110
+RS_P2P=22130
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/scan-core"
-CORE_RPC=40212
-CORE_P2P=40232
+CORE_RPC=22112
+CORE_P2P=22132
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=101        # 1 coinbase to MINE_ADDR + 100 maturity blocks (to a sink).
@@ -105,10 +105,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${RS_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -128,10 +124,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "scan-rustoshi" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${RS_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$RS_DATADIR" "$CORE_DATADIR"
 mkdir -p "$RS_DATADIR" "$CORE_DATADIR"
@@ -204,8 +205,18 @@ except Exception:
 
 # ── 2. Launch the Core regtest oracle (RPC-only). ─────────────────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     # -listen=0: RPC-only — the sandbox SIGKILLs a 0.0.0.0 P2P listener.
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \

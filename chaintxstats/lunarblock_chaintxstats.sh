@@ -62,7 +62,7 @@
 #   FAIL: CHAINTXSTATS lunarblock: FAIL <short reason> [txcount=.. window=.. ...]
 #
 # Touches ONLY /tmp/ctxstats-lunarblock + /tmp/ctxstats-core and ports
-#   39998/40018 (lunarblock RPC/P2P), 39996/40016 (Core RPC/P2P).
+#   21898/21918 (lunarblock RPC/P2P), 21896/21916 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -74,13 +74,13 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 LB_DATADIR="/tmp/ctxstats-lunarblock"
-LB_RPC=39998
-LB_P2P=40018
+LB_RPC=21898
+LB_P2P=21918
 LB_LOG="$LB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/ctxstats-core"
-CORE_RPC=39996
-CORE_P2P=40016
+CORE_RPC=21896
+CORE_P2P=21916
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120          # mine the SAME number of empty blocks on both nodes
@@ -107,10 +107,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${LB_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${LB_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$LB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -130,10 +126,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "ctxstats-lunarblock" 2>/dev/null || true
-fuser -k "${LB_RPC}/tcp"   2>/dev/null || true
-fuser -k "${LB_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${LB_RPC}/${LB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"

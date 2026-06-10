@@ -58,7 +58,7 @@
 #   FAIL: CHAINTXSTATS rustoshi: FAIL <short reason>
 #
 # Touches ONLY /tmp/ctxstats-rustoshi/ + /tmp/ctxstats-core/ and ports
-#   39990/40010 (rustoshi RPC/P2P) + 39992/40012 (Core RPC/P2P).
+#   21890/21910 (rustoshi RPC/P2P) + 21892/21912 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -71,13 +71,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 RS_DATADIR="/tmp/ctxstats-rustoshi"
-RS_RPC=39990
-RS_P2P=40010
+RS_RPC=21890
+RS_P2P=21910
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/ctxstats-core"
-CORE_RPC=39992
-CORE_P2P=40012
+CORE_RPC=21892
+CORE_P2P=21912
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to, so
@@ -109,10 +109,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${RS_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -132,10 +128,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "ctxstats-rustoshi" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp"   2>/dev/null || true
-fuser -k "${RS_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$RS_DATADIR" "$CORE_DATADIR"
 mkdir -p "$RS_DATADIR" "$CORE_DATADIR"
@@ -206,8 +207,18 @@ except Exception:
 # crossing port-cleanup / cookie-race during the startup window. Relaunch up
 # to 3 times before declaring failure, on a fresh datadir each attempt.
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \
         -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &

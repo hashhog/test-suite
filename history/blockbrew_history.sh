@@ -44,7 +44,7 @@
 #   PASS: HISTORY blockbrew: PASS sent_entry=yes recv_entries=<n> gettx=ok
 #   FAIL: HISTORY blockbrew: FAIL <short reason>
 #
-# Touches ONLY /tmp/histfleet-blockbrew/ and ports 39763 (RPC) / 39783 (P2P).
+# Touches ONLY /tmp/histfleet-blockbrew/ and ports 21663 (RPC) / 21683 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -53,8 +53,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 BIN="$BASEDIR/blockbrew/blockbrew"
 DATADIR="/tmp/histfleet-blockbrew"
-RPC_PORT=39763
-P2P_PORT=39783
+RPC_PORT=21663
+P2P_PORT=21683
 LOGFILE="$DATADIR/history-test.log"
 URL="http://127.0.0.1:${RPC_PORT}"
 
@@ -95,8 +95,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -140,8 +138,9 @@ PY=python3
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

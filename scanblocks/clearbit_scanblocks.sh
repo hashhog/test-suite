@@ -64,11 +64,11 @@
 #   SKIP: SCANBLOCKS clearbit: SKIP <no scanblocks RPC | no filter index>
 #
 # Touches ONLY /tmp/sblk-clearbit/ + /tmp/sblk-core/ and ports
-#   40434/40454 (clearbit RPC/P2P) + 40444/40464 (Core RPC; P2P unused, -listen=0).
+#   22334/22354 (clearbit RPC/P2P) + 22344/22364 (Core RPC; P2P unused, -listen=0).
 #   These ports are unique to this harness (rustoshi=4033x, blockbrew=4043x,
 #   lunarblock=4043x/4045x, hotbuns=4053x all use disjoint quadrants).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
-#   Any `fuser -k` redirects stdout: `fuser -k "<port>/tcp" >/dev/null 2>&1`.
+#   Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -80,13 +80,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
 CB_DATADIR="/tmp/sblk-clearbit/$$"
-CB_RPC=40434
-CB_P2P=40454
+CB_RPC=22334
+CB_P2P=22354
 CB_LOG="$CB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/sblk-core/$$"
-CORE_RPC=40444
-CORE_P2P=40464   # declared but Core launched -listen=0 (no P2P listener)
+CORE_RPC=22344
+CORE_P2P=22364   # declared but Core launched -listen=0 (no P2P listener)
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to.
@@ -119,10 +119,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -144,10 +140,9 @@ skip() {
 # ── 0. Idempotent reset (own ports + own PID scratch only). ───────────────
 log "resetting scratch state (pid=$$)"
 pkill -f "sblk-clearbit/$$" 2>/dev/null || true
-fuser -k "${CB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$CB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CB_DATADIR" "$CORE_DATADIR"
@@ -209,8 +204,18 @@ except Exception:
 
 # ── 3. Launch the Core regtest oracle (-listen=0 -blockfilterindex=basic). ─
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \
         -blockfilterindex=basic -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &
@@ -240,11 +245,15 @@ log "Core oracle ready (pid=$CORE_BG)"
 # Wait for the RPC port to be genuinely free first (a prior run's socket may
 # linger in TIME_WAIT / be reclaimed slowly under shared-box load — clearbit
 # fails to bind with error.AddressInUse and then never serves RPC).
-for _ in $(seq 1 20); do
-    ss -ltn 2>/dev/null | grep -qE ":${CB_RPC}\b" || break
-    fuser -k "${CB_RPC}/tcp" >/dev/null 2>&1 || true
+# Port-kill removed (2026-06-10 fuser incident): wait for the port to be
+# released; ABORT if a listener persists — never kill by port.
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":${CB_RPC} " || break
     sleep 1
 done
+if ss -tln 2>/dev/null | grep -qE ":${CB_RPC} "; then
+    fail "port ${CB_RPC} still LISTENING — refusing port-kill (2026-06-10 fuser incident)"
+fi
 # --metricsport=0 disables the Prometheus server (default 9332 collides with a
 # live mainnet clearbit on the shared box; the collision is non-fatal but noisy).
 log "launching clearbit (regtest, --blockfilterindex) rpc=:$CB_RPC p2p=:$CB_P2P -> $CB_LOG"

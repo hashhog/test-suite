@@ -65,7 +65,7 @@
 #   Run under: setsid -w bash camlcoin_gettxoutproof.sh
 #
 # Touches ONLY /tmp/txop-camlcoin/ + /tmp/txop-core-camlcoin/ and ports
-#   40475/40495 (camlcoin RPC/P2P) + 40477/40497 (Core RPC/P2P).
+#   22375/22395 (camlcoin RPC/P2P) + 22377/22397 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may be running);
 #   only frees its OWN fixed ports + scratch dir.
@@ -80,15 +80,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key + raw-tx builders)
 
 CC_DATADIR="/tmp/txop-camlcoin"
-CC_RPC=40475
-CC_P2P=40495
+CC_RPC=22375
+CC_P2P=22395
 CC_LOG="$CC_DATADIR/node.log"
 CC_COOKIE=""
 CC_PID=""
 
 CORE_DATADIR="/tmp/txop-core-camlcoin"
-CORE_RPC=40477
-CORE_P2P=40497
+CORE_RPC=22377
+CORE_P2P=22397
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -108,10 +108,11 @@ log() { echo "[gettxoutproof:camlcoin] $*" >&2; }
 # mainnet bitcoind may be running. Only our OWN datadir-scoped CLI stop + our
 # OWN fixed ports + our OWN child PID.
 free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
-    for _ in $(seq 1 15); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
+    for _ in $(seq 1 20); do
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
         sleep 1
     done
     return 0
@@ -149,6 +150,9 @@ free_port "$CC_RPC"
 free_port "$CC_P2P"
 free_port "$CORE_RPC"
 free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CC_RPC}/${CC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$CC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CC_DATADIR" "$CORE_DATADIR"
 

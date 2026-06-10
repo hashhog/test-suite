@@ -48,8 +48,8 @@
 #   PASS: CHAINTXSTATS beamchain: PASS txcount=ok window=ok shape=ok nblocks0=ok
 #   FAIL: CHAINTXSTATS beamchain: FAIL <short reason>
 #
-# Touches ONLY /tmp/ctxstats-beamchain{,-core}/ and ports 39996/40016
-#   (beamchain RPC/P2P), 39998/40018 (Core RPC/P2P). NEVER touches /data/nvme1/
+# Touches ONLY /tmp/ctxstats-beamchain{,-core}/ and ports 21896/21916
+#   (beamchain RPC/P2P), 21898/21918 (Core RPC/P2P). NEVER touches /data/nvme1/
 #   or testnet4-data/ or any live node (haskoin is mid-sync — left untouched).
 
 set -uo pipefail
@@ -62,8 +62,8 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/address)
 
 BC_DATADIR="/tmp/ctxstats-beamchain"
-BC_RPC=39996
-BC_P2P=40016
+BC_RPC=21896
+BC_P2P=21916
 BC_LOG="$BC_DATADIR/node.log"
 
 # Core-oracle scratch dir is namespaced to THIS harness (…-beamchain-core) so a
@@ -72,8 +72,8 @@ BC_LOG="$BC_DATADIR/node.log"
 # chaintxstats runs cluster their own nodes + Core smokes) into a quieter band
 # so a parallel sibling launch never races us onto the same listener.
 CORE_DATADIR="/tmp/ctxstats-beamchain-core"
-CORE_RPC=39896
-CORE_P2P=39916
+CORE_RPC=21796
+CORE_P2P=21816
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Fixed deterministic test secret -> one p2wpkh regtest address the coinbases
@@ -105,10 +105,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${BC_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -181,15 +177,14 @@ PYEOF
 # Free this harness's OWN ports only.  We deliberately do NOT pkill on the
 # datadir token: a bare-path `pkill -f` self-matches the shell wrapper /
 # ancestry that carries the harness path in its argv and SIGTERMs the harness
-# mid-reset.  Port-scoped `fuser -k` frees the only resources a stale prior run
-# could still hold (its bound RPC/P2P listeners) and can never self-match,
-# since the harness holds no port at reset time.  Anything else from a prior
+# mid-reset.  Port-kills (fuser -k) are BANNED (2026-06-10 incident): the reset
+# now ABORTS if our fixed ports are still LISTENING instead of killing the
+# holder.  Anything else from a prior
 # run is reaped by the trap cleanup that ran on that run's exit.
 log "resetting scratch state"
-fuser -k "${BC_RPC}/tcp"   2>/dev/null || true
-fuser -k "${BC_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"

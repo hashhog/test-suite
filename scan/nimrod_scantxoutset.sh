@@ -56,11 +56,11 @@
 #   FAIL: SCANTXOUTSET nimrod: FAIL <short reason>
 #   (binary missing -> a GAP_RE-compatible 'not found' message so the runner SKIPs)
 #
-# Touches ONLY /tmp/scan-nimrod/ + /tmp/scan-core-nimrod/ and ports 40411/40431
-#   (nimrod RPC/P2P) + 40413/40433 (Core RPC/P2P). NEVER touches /data/nvme1/ or
+# Touches ONLY /tmp/scan-nimrod/ + /tmp/scan-core-nimrod/ and ports 22311/22331
+#   (nimrod RPC/P2P) + 22313/22333 (Core RPC/P2P). NEVER touches /data/nvme1/ or
 #   testnet4-data/ or any live node. A live mainnet bitcoind may be running: we
 #   NEVER pkill bitcoind by name — only free our OWN fixed ports / scratch.
-#   Any `fuser -k` redirects stdout (`>/dev/null 2>&1`).
+#   Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -76,15 +76,15 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/add
 # signrawtransactionwithkey (WIF) + sendrawtransaction. All three are wallet-free.
 
 NR_DATADIR="/tmp/scan-nimrod"
-NR_RPC=40411
-NR_P2P=40431
+NR_RPC=22311
+NR_P2P=22331
 NR_LOG="$NR_DATADIR/node.log"
 
 # Node-unique Core datadir name (sibling scantxoutset harnesses for other impls
 # may run concurrently — a shared name causes mutual rm -rf destruction).
 CORE_DATADIR="/tmp/scan-core-nimrod"
-CORE_RPC=40413
-CORE_P2P=40433
+CORE_RPC=22313
+CORE_P2P=22333
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=110        # mine enough to mature a coinbase (>100) so we can spend
@@ -119,10 +119,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${NR_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${NR_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$NR_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -144,11 +140,12 @@ skip() {
 
 # ── Free a TCP port and POLL until it is actually free. ───────────────────
 free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -162,6 +159,9 @@ free_port "$NR_RPC"
 free_port "$NR_P2P"
 free_port "$CORE_RPC"
 free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${NR_RPC}|${NR_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${NR_RPC}/${NR_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$NR_DATADIR" "$CORE_DATADIR"
 mkdir -p "$NR_DATADIR" "$CORE_DATADIR"
 

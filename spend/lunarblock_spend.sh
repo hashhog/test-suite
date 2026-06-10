@@ -43,8 +43,8 @@
 #   luajit src/main.lua --network regtest --datadir <dd> --port <p2p> \
 #       --rpcport <rpc> --nov2transport
 #
-# STRICT: scratch datadir /tmp/spendref-lunarblock/ + ports 39701 (RPC) /
-# 39721 (P2P) ONLY. NEVER touches /data/nvme1/, testnet4-data/, or any live
+# STRICT: scratch datadir /tmp/spendref-lunarblock/ + ports 21601 (RPC) /
+# 21621 (P2P) ONLY. NEVER touches /data/nvme1/, testnet4-data/, or any live
 # node.
 #
 # Output: exactly ONE summary line on stdout, then exit.
@@ -59,8 +59,8 @@ REPO_ROOT="/home/work/hashhog"
 LB_DIR="$REPO_ROOT/lunarblock"
 SCRATCH="/tmp/spendref-lunarblock"
 NODE_LOG="$SCRATCH/node.log"
-RPC_PORT=39701
-P2P_PORT=39721
+RPC_PORT=21601
+P2P_PORT=21621
 RPC="http://127.0.0.1:${RPC_PORT}"
 
 # The canonical "abandon … about" BIP-39 test mnemonic — deterministic across
@@ -92,8 +92,6 @@ finish() {
 }
 
 kill_node() {
-  fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-  fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
   if [[ -n "$NODE_PID" ]]; then
     kill -TERM "-${NODE_PID}" 2>/dev/null || kill -TERM "$NODE_PID" 2>/dev/null || true
   fi
@@ -161,8 +159,9 @@ print('True' if res else 'False')"
 
 # ── 0. Idempotent reset ─────────────────────────────────────────────────────
 log "resetting scratch state (ports ${RPC_PORT}/${P2P_PORT}, datadir ${SCRATCH})"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+  finish FAIL "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 0.5
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH"

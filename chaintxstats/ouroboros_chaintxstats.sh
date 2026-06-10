@@ -37,7 +37,7 @@
 #   FAIL: CHAINTXSTATS ouroboros: FAIL <short reason>
 #
 # Touches ONLY /tmp/ctxstats-ouroboros + /tmp/ctxstats-core and ports
-#   39992/40012 (ouroboros RPC/P2P) + 39993/40013 (Core RPC/P2P).
+#   21892/21912 (ouroboros RPC/P2P) + 21893/21913 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -54,13 +54,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OURO_DIR="$REPO_ROOT/ouroboros"
 
 OU_DATADIR="/tmp/ctxstats-ouroboros"
-OU_RPC=39992
-OU_P2P=40012
+OU_RPC=21892
+OU_P2P=21912
 OU_LOG="$OU_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/ctxstats-core"
-CORE_RPC=39993
-CORE_P2P=40013
+CORE_RPC=21893
+CORE_P2P=21913
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic mining address (regtest bech32) so both nodes mine to the SAME
@@ -93,11 +93,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${OU_RPC}/tcp"            2>/dev/null || true
-    fuser -k "${OU_P2P}/tcp"            2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"          2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"          2>/dev/null || true
-    fuser -k "$((CORE_P2P + 1))/tcp"    2>/dev/null || true   # Core onion listener (P2P+1)
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -154,7 +149,7 @@ ou_rpc() {
 # port, then SETTLE — a back-to-back run can otherwise launch the new oracle
 # before the previous bitcoind has released its RPC/P2P sockets, which the
 # kernel reports as "exited during startup" on the new node. Killing by
-# datadir is the reliable handle (fuser only frees the port once the holder
+# datadir is the reliable handle (the port only frees once the holder
 # has actually exited).
 log "resetting scratch state"
 pkill -f "ctxstats-ouroboros" 2>/dev/null || true
@@ -165,11 +160,15 @@ for _ in $(seq 1 10); do
 done
 pkill -9 -f "ctxstats-ouroboros" 2>/dev/null || true
 pkill -9 -f "ctxstats-core"      2>/dev/null || true
-fuser -k "${OU_RPC}/tcp"            2>/dev/null || true
-fuser -k "${OU_P2P}/tcp"            2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"          2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"          2>/dev/null || true
-fuser -k "$((CORE_P2P + 1))/tcp"    2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P}/$((CORE_P2P + 1)) already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 2
 rm -rf "$OU_DATADIR" "$CORE_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR"

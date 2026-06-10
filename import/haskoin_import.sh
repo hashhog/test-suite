@@ -44,7 +44,7 @@
 #   PASS: IMPORT haskoin: PASS rescan=ok importprivkey=<ok|partial|absent> rediscovered=<M>
 #   FAIL: IMPORT haskoin: FAIL <short reason>
 #
-# Touches ONLY /tmp/importfleet-haskoin/ and ports 39818 (RPC) / 39838 (P2P).
+# Touches ONLY /tmp/importfleet-haskoin/ and ports 21718 (RPC) / 21738 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -53,8 +53,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 HASKOIN_REPO="$BASEDIR/haskoin"
 DATADIR="/tmp/importfleet-haskoin"
-RPC_PORT=39818
-P2P_PORT=39838
+RPC_PORT=21718
+P2P_PORT=21738
 LOGFILE="$DATADIR/import-test.log"
 
 # Same FIXED all-zero-entropy BIP-39 test mnemonic as the recovery / spend /
@@ -88,8 +88,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -145,8 +143,9 @@ addr_spk() {
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

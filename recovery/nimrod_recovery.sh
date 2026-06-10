@@ -25,7 +25,7 @@
 #   FAIL: RECOVERY nimrod: FAIL <short reason>
 # All noisy output goes to stderr / the log so stdout stays grep-clean.
 #
-# ⚠️ Touches ONLY /tmp/recreg-nimrod/ and ports 39601 (RPC) / 39631 (P2P).
+# ⚠️ Touches ONLY /tmp/recreg-nimrod/ and ports 21501 (RPC) / 21531 (P2P).
 #    Never touches /data/nvme1/, testnet4-data/, or any live node.
 # ============================================================================
 set -uo pipefail
@@ -36,8 +36,8 @@ BASEDIR="$(cd "$SCRIPT_DIR/../.." && pwd)"          # meta-repo root
 NIMROD_BIN="$BASEDIR/nimrod/bin/nimrod"
 
 DATADIR="/tmp/recreg-nimrod"
-RPC_PORT=39601
-P2P_PORT=39631
+RPC_PORT=21501
+P2P_PORT=21531
 NETWORK="regtest"
 COOKIE="$DATADIR/$NETWORK/.cookie"
 LOG="$DATADIR/node.log"
@@ -74,9 +74,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: free our ports in case a stray child lingers.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $rc
 }
@@ -84,8 +81,9 @@ trap cleanup EXIT INT TERM
 
 # Kill anything already bound to our ports, then wipe scratch datadir.
 kill_stale() {
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+    if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+        fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+    fi
     sleep 1
     rm -rf "$DATADIR" 2>/dev/null || true
     mkdir -p "$DATADIR"

@@ -26,7 +26,7 @@
 # missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY haskoin: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-haskoin/ and ports 41408 (RPC) / 41428
+# Touches ONLY /tmp/hashhog-wofleet-haskoin/ and ports 21408 (RPC) / 21428
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

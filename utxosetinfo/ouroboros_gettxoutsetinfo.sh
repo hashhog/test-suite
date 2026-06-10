@@ -58,7 +58,7 @@
 #   SKIP: GETTXOUTSETINFO ouroboros: SKIP <reason>
 #
 # Touches ONLY /tmp/gtxo-ouroboros/ + /tmp/gtxo-core/ and ports
-#   40272/40292 (ouroboros RPC/P2P) + 41272/41292 (Core RPC/P2P).
+#   22172/22192 (ouroboros RPC/P2P) + 22972/22992 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. A live
 #   mainnet bitcoind may be running — this script frees ONLY its OWN fixed
 #   ports / scratch dir, never broad-pkills bitcoind by name.
@@ -74,17 +74,17 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/address)
 
 OU_DATADIR="/tmp/gtxo-ouroboros"
-OU_RPC=40272
-OU_P2P=40292
+OU_RPC=22172
+OU_P2P=22192
 OU_LOG="$OU_DATADIR/node.log"
 
 # Core oracle ports live in the 41xxx band, OUT of the contended 4027x/4029x
 # range that sibling *_gettxoutsetinfo.sh cells use for their oracles. The
-# task fixes ouroboros's OWN ports (RPC 40272 / P2P 40292); the oracle pair is
+# task fixes ouroboros's OWN ports (RPC 22172 / P2P 22192); the oracle pair is
 # chosen here to never collide with a concurrently-running sibling cell.
 CORE_DATADIR="/tmp/gtxo-core"
-CORE_RPC=41272
-CORE_P2P=41292
+CORE_RPC=22972
+CORE_P2P=22992
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=110        # mature block-1's coinbase + a healthy coinbase-heavy set
@@ -108,10 +108,10 @@ log() { echo "[gettxoutsetinfo:ouroboros] $*" >&2; }
 
 # ── Port-free poll: wait until a tcp port is actually released. ───────────
 wait_port_free() {  # <port>
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): NEVER kills by port.
     local port="$1"
-    for _ in $(seq 1 20); do
-        if ! fuser "${port}/tcp" >/dev/null 2>&1; then return 0; fi
-        fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    for _ in $(seq 1 30); do
+        ss -tln 2>/dev/null | grep -qE ":${port} " || return 0
         sleep 1
     done
     return 0
@@ -132,11 +132,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    # Free ONLY our OWN fixed ports — never broad-pkill bitcoind by name.
-    fuser -k "${OU_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${OU_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -163,6 +158,9 @@ wait_port_free "$OU_RPC"
 wait_port_free "$OU_P2P"
 wait_port_free "$CORE_RPC"
 wait_port_free "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$OU_DATADIR" "$CORE_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR"
 

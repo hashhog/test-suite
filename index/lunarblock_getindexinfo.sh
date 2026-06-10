@@ -50,7 +50,7 @@
 #   FAIL: GETINDEXINFO lunarblock: FAIL <short reason>
 #
 # Touches ONLY /tmp/giifleet-lunarblock + /tmp/giifleet-core and ports
-#   40038/40058 (lunarblock RPC/P2P), 40032/40052 (Core RPC/P2P).
+#   21938/21958 (lunarblock RPC/P2P), 21932/21952 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -63,16 +63,16 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 LB_DATADIR="/tmp/giifleet-lunarblock"
-LB_RPC=40038
-LB_P2P=40058
+LB_RPC=21938
+LB_P2P=21958
 LB_LOG="$LB_DATADIR/node.log"
 
 # Core oracle scratch is namespaced per-impl (giifleet-lunarblock-core) so it
 # never collides with a sibling getindexinfo agent's Core datadir/ports during
-# a parallel fanout. Core ports are paired off lunarblock's (40039/40059).
+# a parallel fanout. Core ports are paired off lunarblock's (21939/21959).
 CORE_DATADIR="/tmp/giifleet-lunarblock-core"
-CORE_RPC=40039
-CORE_P2P=40059
+CORE_RPC=21939
+CORE_P2P=21959
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120            # mine this many EMPTY blocks on BOTH nodes
@@ -98,10 +98,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${LB_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${LB_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$LB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -129,10 +125,15 @@ lb_rpc() {  # lb_rpc <method> <json-params-array>
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "giifleet-lunarblock" 2>/dev/null || true
-fuser -k "${LB_RPC}/tcp"   2>/dev/null || true
-fuser -k "${LB_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${LB_RPC}/${LB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"

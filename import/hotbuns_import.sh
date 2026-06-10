@@ -30,7 +30,7 @@
 #   PASS: IMPORT hotbuns: PASS rescan=ok importprivkey=<ok|partial|absent> rediscovered=<M>
 #   FAIL: IMPORT hotbuns: FAIL <short reason>
 #
-# Touches ONLY /tmp/importfleet-hotbuns/ and ports 39814 (RPC) / 39834 (P2P).
+# Touches ONLY /tmp/importfleet-hotbuns/ and ports 21714 (RPC) / 21734 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -39,8 +39,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 NODE_DIR="$BASEDIR/hotbuns"
 DATADIR="/tmp/importfleet-hotbuns"
-RPC_PORT=39814
-P2P_PORT=39834
+RPC_PORT=21714
+P2P_PORT=21734
 LOGFILE="$DATADIR/node.log"
 
 # Canonical BIP-39 all-zero-entropy 12-word test mnemonic (valid checksum) —
@@ -74,8 +74,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -129,8 +127,9 @@ command -v python3 >/dev/null 2>&1 && HAVE_PY=1
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"
 

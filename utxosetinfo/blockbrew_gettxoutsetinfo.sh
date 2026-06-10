@@ -69,11 +69,10 @@
 #   SKIP: GETTXOUTSETINFO blockbrew: SKIP <reason>
 #
 # Touches ONLY /tmp/gtxo-blockbrew/ + /tmp/gtxo-core/ and ports
-#   40273/40293 (blockbrew RPC/P2P) + 40275/40295 (Core RPC/P2P).
+#   22173/22193 (blockbrew RPC/P2P) + 22175/22195 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may be running);
-#   only frees its OWN fixed ports + scratch dir. All fuser -k redirect to
-#   /dev/null and we POLL until the port is free before launching.
+#   only frees its OWN fixed ports + scratch dir. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -91,15 +90,15 @@ MINE_SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 DST_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 BB_DATADIR="/tmp/gtxo-blockbrew"
-BB_RPC=40273
-BB_P2P=40293
+BB_RPC=22173
+BB_P2P=22193
 BB_LOG="$BB_DATADIR/node.log"
 BB_COOKIE=""
 BB_PID=""
 
 CORE_DATADIR="/tmp/gtxo-core"
-CORE_RPC=40275
-CORE_P2P=40295
+CORE_RPC=22175
+CORE_P2P=22195
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -110,12 +109,12 @@ log() { echo "[gettxoutsetinfo:blockbrew] $*" >&2; }
 
 # ── Port helpers: free a port and POLL until it's actually released. ───────
 free_port() {
-    local port="$1"
-    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
-    local i
-    for i in $(seq 1 20); do
-        fuser "${port}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
+    local p="$1"
+    for _ in $(seq 1 20); do
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -157,6 +156,9 @@ free_port "$BB_RPC"
 free_port "$BB_P2P"
 free_port "$CORE_RPC"
 free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"
 

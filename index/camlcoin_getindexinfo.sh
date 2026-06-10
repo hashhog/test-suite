@@ -76,14 +76,14 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address
 
 # camlcoin scratch + ports (unique, per the cell spec).
 CC_DATADIR="/tmp/giifleet-camlcoin"
-CC_RPC=40035
-CC_P2P=40055
+CC_RPC=21935
+CC_P2P=21955
 CC_LOG="$CC_DATADIR/node.log"
 
 # bitcoind oracle scratch + ports (own scratch + ports).
 BC_DATADIR="/tmp/giifleet-core"
-BC_RPC=40037
-BC_P2P=40057
+BC_RPC=21937
+BC_P2P=21957
 
 # Deterministic regtest p2wpkh address to mine to (bitcoind here is built
 # WITHOUT wallet support, so we cannot getnewaddress). Derived from a fixed
@@ -115,10 +115,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$CC_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$CC_PID" 2>/dev/null || true
     fi
-    fuser -k "${CC_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CC_P2P}/tcp" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${BC_P2P}/tcp" 2>/dev/null || true
     rm -rf "$CC_DATADIR" "$BC_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -132,7 +128,15 @@ fail() { echo "GETINDEXINFO camlcoin: FAIL $*"; exit 1; }
 log "resetting scratch state (camlcoin $CC_DATADIR :$CC_RPC/$CC_P2P, core $BC_DATADIR :$BC_RPC/$BC_P2P)"
 pkill -f "giifleet-camlcoin" 2>/dev/null || true
 pkill -f "giifleet-core"     2>/dev/null || true
-fuser -k "${CC_RPC}/tcp" "${CC_P2P}/tcp" "${BC_RPC}/tcp" "${BC_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${BC_RPC}|${BC_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${BC_RPC}|${BC_P2P}) "; then
+    fail "port ${CC_RPC}/${CC_P2P}/${BC_RPC}/${BC_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$CC_DATADIR" "$BC_DATADIR"
 mkdir -p "$CC_DATADIR" "$BC_DATADIR"

@@ -23,8 +23,8 @@
 # vocabulary; missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY lunarblock: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-lunarblock/ and ports 41409 (RPC) /
-# 41429 (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
+# Touches ONLY /tmp/hashhog-wofleet-lunarblock/ and ports 21409 (RPC) /
+# 21429 (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
 

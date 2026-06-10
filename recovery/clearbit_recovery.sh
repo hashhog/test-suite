@@ -27,15 +27,15 @@
 #       FAIL: RECOVERY clearbit: FAIL <short reason>
 #   - exit 0 on PASS, exit 1 on FAIL
 #
-# SAFETY: only ever touches /tmp/recreg-clearbit/ and ports 39607/39637.
+# SAFETY: only ever touches /tmp/recreg-clearbit/ and ports 21507/21537.
 #         NEVER /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
 
 # ── Fixed config (the recipe from tools/smoke-harness.sh + last session) ─────
 IMPL="clearbit"
-RPC_PORT=39607
-P2P_PORT=39637
+RPC_PORT=21507
+P2P_PORT=21537
 SCRATCH="/tmp/recreg-clearbit"
 NETDIR="$SCRATCH/regtest"          # clearbit appends the network subdir
 COOKIE_FILE="$NETDIR/.cookie"
@@ -70,9 +70,15 @@ fail() {
 
 # ── Idempotent teardown (entry + trap-on-exit) ───────────────────────────────
 kill_port() {
-    # Kill whatever holds our assigned ports — defensive against a prior run.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+    # Port-kill removed (2026-06-10 fuser incident): wait briefly for OUR ports to be
+    # released after the PID-scoped kill. NEVER kills by port.
+    local __hp
+    for __hp in "$RPC_PORT" "$P2P_PORT"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
 }
 
 cleanup() {
@@ -113,6 +119,9 @@ log "starting; scratch=$SCRATCH rpc=$RPC_PORT p2p=$P2P_PORT"
 
 # Idempotent: clear any prior node + scratch BEFORE we start.
 kill_port
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH" || fail "cannot create scratch $SCRATCH"
 

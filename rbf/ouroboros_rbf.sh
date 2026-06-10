@@ -60,8 +60,8 @@
 #   FAIL:  RBF ouroboros: FAIL <short reason>
 #   SKIP:  RBF ouroboros: SKIP <build/raw-tx gap>
 #
-# Touches ONLY /tmp/rbf-ouroboros/ + /tmp/rbf-core/ and ports 40192/40212
-#   (ouroboros RPC/P2P) + 40193/40213 (Core RPC/P2P).
+# Touches ONLY /tmp/rbf-ouroboros/ + /tmp/rbf-core/ and ports 22092/22112
+#   (ouroboros RPC/P2P) + 22093/22113 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -77,13 +77,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OURO_DIR="$REPO_ROOT/ouroboros"
 
 OU_DATADIR="/tmp/rbf-ouroboros"
-OU_RPC=40192
-OU_P2P=40212
+OU_RPC=22092
+OU_P2P=22112
 OU_LOG="$OU_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/rbf-core"
-CORE_RPC=40193
-CORE_P2P=40213
+CORE_RPC=22093
+CORE_P2P=22113
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Fixed deterministic 32-byte secret -> one p2wpkh keypair for the whole run.
@@ -123,11 +123,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${OU_RPC}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${OU_P2P}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "$((CORE_P2P + 1))/tcp" >/dev/null 2>&1 || true   # Core onion listener (P2P+1)
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -152,11 +147,15 @@ classify() {
 log "resetting scratch state"
 pkill -f "rbf-ouroboros"   2>/dev/null || true
 pkill -f "ouroboros.cli.*${OU_RPC}" 2>/dev/null || true
-fuser -k "${OU_RPC}/tcp"         >/dev/null 2>&1 || true
-fuser -k "${OU_P2P}/tcp"         >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp"       >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp"       >/dev/null 2>&1 || true
-fuser -k "$((CORE_P2P + 1))/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P}/$((CORE_P2P + 1)) already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$OU_DATADIR" "$CORE_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR"

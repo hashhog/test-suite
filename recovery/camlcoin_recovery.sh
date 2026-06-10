@@ -35,8 +35,8 @@ NODE="camlcoin"
 BASEDIR="/home/work/hashhog"
 BIN="$BASEDIR/camlcoin/_build/default/bin/main.exe"
 DATADIR="/tmp/recreg-camlcoin"
-RPC_PORT=39605
-P2P_PORT=39635
+RPC_PORT=21505
+P2P_PORT=21535
 RPC_URL="http://127.0.0.1:${RPC_PORT}/"
 LOG="$DATADIR/recovery-test.log"
 
@@ -76,9 +76,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: reap anything still bound to our dedicated ports / datadir.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     pkill -f "recreg-camlcoin" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
 }
@@ -123,8 +120,9 @@ extract_total_sats() {
 # =============================================================================
 # 0. idempotent reset: kill stale node on our ports + wipe scratch datadir
 # =============================================================================
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 pkill -f "recreg-camlcoin" 2>/dev/null || true
 sleep 1
 rm -rf "$DATADIR"

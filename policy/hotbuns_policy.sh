@@ -68,7 +68,7 @@
 #   PASS: POLICY hotbuns: PASS dust=ok version=ok min-relay=ok control=accept bare-multisig=ok-default op_return=ok-default
 #   FAIL: POLICY hotbuns: FAIL <short reason> [dust=.. version=.. min-relay=.. ...]
 #
-# Touches ONLY /tmp/policyfleet-hotbuns/ and ports 39944 (RPC) / 39964 (P2P).
+# Touches ONLY /tmp/policyfleet-hotbuns/ and ports 21844 (RPC) / 21864 (P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -79,8 +79,8 @@ NODE_DIR="$BASEDIR/hotbuns"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx builders)
 
 HB_DATADIR="/tmp/policyfleet-hotbuns"
-HB_RPC=39944
-HB_P2P=39964
+HB_RPC=21844
+HB_P2P=21864
 HB_LOG="$HB_DATADIR/node.log"
 
 # Fixed deterministic test secret (32 bytes) -> one p2wpkh keypair the whole
@@ -104,8 +104,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$HB_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$HB_PID" 2>/dev/null || true
     fi
-    fuser -k "${HB_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${HB_P2P}/tcp" 2>/dev/null || true
     rm -rf "$HB_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -157,8 +155,15 @@ FLOOR_CASES=(dust bad-version below-min-relay)
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "policyfleet-hotbuns" 2>/dev/null || true
-fuser -k "${HB_RPC}/tcp" 2>/dev/null || true
-fuser -k "${HB_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}) "; then
+    fail "port ${HB_RPC}/${HB_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$HB_DATADIR"
 mkdir -p "$HB_DATADIR"

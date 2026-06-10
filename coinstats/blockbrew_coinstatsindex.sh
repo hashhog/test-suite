@@ -57,7 +57,7 @@
 # at-historical-height gates above.
 #
 # Touches ONLY /tmp/csi-blockbrew/ + /tmp/csi-core/ and ports
-#   40373/40393 (blockbrew RPC/P2P) + 40375/40395 (Core RPC/P2P).
+#   22273/22293 (blockbrew RPC/P2P) + 22275/22295 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may run);
 #   only frees its OWN fixed ports + scratch dir.
@@ -76,23 +76,23 @@ MINE_SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 DST_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 BB_DATADIR="/tmp/csi-blockbrew"
-BB_RPC=40373
-BB_P2P=40393
+BB_RPC=22273
+BB_P2P=22293
 BB_LOG="$BB_DATADIR/node.log"
 BB_COOKIE=""
 BB_PID=""
 
 CORE_DATADIR="/tmp/csi-core"
-CORE_RPC=40375
-CORE_P2P=40395
+CORE_RPC=22275
+CORE_P2P=22295
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
 # Disabled-coinstatsindex error-gate node: a SECOND blockbrew + Core launched
 # WITHOUT -coinstatsindex, to assert the non-tip query rejects with -8.
 NOIDX_BB_DATADIR="/tmp/csi-blockbrew-noidx"
-NOIDX_BB_RPC=40377
-NOIDX_BB_P2P=40397
+NOIDX_BB_RPC=22277
+NOIDX_BB_P2P=22297
 NOIDX_BB_LOG="$NOIDX_BB_DATADIR/node.log"
 NOIDX_BB_COOKIE=""
 NOIDX_BB_PID=""
@@ -105,12 +105,12 @@ log() { echo "[coinstatsindex:blockbrew] $*" >&2; }
 
 # ── Port helpers: free a port and POLL until it's actually released. ───────
 free_port() {
-    local port="$1"
-    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
-    local i
-    for i in $(seq 1 20); do
-        fuser "${port}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
+    local p="$1"
+    for _ in $(seq 1 20); do
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -149,6 +149,9 @@ log "resetting scratch state"
 free_port "$BB_RPC"; free_port "$BB_P2P"
 free_port "$NOIDX_BB_RPC"; free_port "$NOIDX_BB_P2P"
 free_port "$CORE_RPC"; free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${NOIDX_BB_RPC}|${NOIDX_BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${NOIDX_BB_RPC}/${NOIDX_BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$BB_DATADIR" "$NOIDX_BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"
 

@@ -37,7 +37,7 @@
 #   PASS: SPEND hotbuns: PASS funded=<X> sent=<Y> recipient=<Y> sender_debited=<Y+fee> ...
 #   FAIL: SPEND hotbuns: FAIL <short reason>
 #
-# Touches ONLY /tmp/spendfleet-hotbuns/ and ports 39714 (RPC) / 39734 (P2P).
+# Touches ONLY /tmp/spendfleet-hotbuns/ and ports 21614 (RPC) / 21634 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -46,8 +46,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 NODE_DIR="$BASEDIR/hotbuns"
 DATADIR="/tmp/spendfleet-hotbuns"
-RPC_PORT=39714
-P2P_PORT=39734
+RPC_PORT=21614
+P2P_PORT=21634
 LOGFILE="$DATADIR/node.log"
 
 # Canonical BIP-39 all-zero-entropy 12-word test mnemonic (valid checksum).
@@ -86,9 +86,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: free the ports in case a child/bun worker lingers.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -155,8 +152,9 @@ count_unspent() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"
 

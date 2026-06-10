@@ -46,7 +46,7 @@
 # STRICT UNIFORM INTERFACE: set -uo pipefail, idempotent, trap cleanup, scratch
 #   /tmp datadirs + unique ports, ONE clean summary line on stdout, all noise ->
 #   stderr/logfile, exit 0/1. Touches ONLY /tmp/csi-haskoin/ + /tmp/csi-core/
-#   and ports 40379/40399 (haskoin RPC/P2P) + 40381/40401 (Core RPC/P2P).
+#   and ports 22279/22299 (haskoin RPC/P2P) + 22281/22301 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node; never
 #   broad-pkills bitcoind by name (a live mainnet bitcoind may be running).
 
@@ -65,22 +65,22 @@ HK_BIN="$(find "$HK_DIR/dist-newstyle" -name haskoin -type f -executable 2>/dev/
 export LD_LIBRARY_PATH="/home/work/.local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 HK_DATADIR="/tmp/csi-haskoin"
-HK_RPC=40379
-HK_P2P=40399
+HK_RPC=22279
+HK_P2P=22299
 HK_LOG="$HK_DATADIR/node.log"
 HK_COOKIE=""
 HK_PID=""
 
 CORE_DATADIR="/tmp/csi-core"
-CORE_RPC=40381
-CORE_P2P=40401
+CORE_RPC=22281
+CORE_P2P=22301
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
 # Separate Core instance used ONLY for the "coinstatsindex DISABLED" error gate.
 CORE_NOIDX_DATADIR="/tmp/csi-core-noidx"
-CORE_NOIDX_RPC=40383
-CORE_NOIDX_P2P=40403
+CORE_NOIDX_RPC=22283
+CORE_NOIDX_P2P=22303
 CORE_NOIDX_LOG="$CORE_NOIDX_DATADIR/core.log"
 CORE_NOIDX_BG=""
 
@@ -98,11 +98,12 @@ log() { echo "[coinstatsindex:haskoin] $*" >&2; }
 
 # ── free_port: kill OUR port holder and POLL until the socket is free. ─────
 free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -157,6 +158,9 @@ free_port "$CORE_RPC"
 free_port "$CORE_P2P"
 free_port "$CORE_NOIDX_RPC"
 free_port "$CORE_NOIDX_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_NOIDX_RPC}|${CORE_NOIDX_P2P}) "; then
+    fail "port ${HK_RPC}/${HK_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_NOIDX_RPC}/${CORE_NOIDX_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$HK_DATADIR" "$CORE_DATADIR" "$CORE_NOIDX_DATADIR"
 mkdir -p "$HK_DATADIR" "$CORE_DATADIR" "$CORE_NOIDX_DATADIR"
 

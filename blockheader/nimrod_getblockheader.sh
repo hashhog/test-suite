@@ -63,8 +63,8 @@
 #   PASS: GETBLOCKHEADER nimrod: PASS hex=ok verbose=ok genesis=ok tip=ok errors=ok
 #   FAIL: GETBLOCKHEADER nimrod: FAIL <short reason>
 #
-# Touches ONLY /tmp/gbh-nimrod/ + /tmp/gbh-core/ and ports 40151/40171 (nimrod
-#   RPC/P2P) + 40153/40173 (Core RPC/P2P). NEVER touches /data/nvme1/ or
+# Touches ONLY /tmp/gbh-nimrod/ + /tmp/gbh-core/ and ports 22051/22071 (nimrod
+#   RPC/P2P) + 22053/22073 (Core RPC/P2P). NEVER touches /data/nvme1/ or
 #   testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -77,8 +77,8 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 NR_DATADIR="/tmp/gbh-nimrod"
-NR_RPC=40151
-NR_P2P=40171
+NR_RPC=22051
+NR_P2P=22071
 NR_LOG="$NR_DATADIR/node.log"
 
 # NOTE: datadir name is node-unique (`-nimrod` suffix), NOT the generic
@@ -86,8 +86,8 @@ NR_LOG="$NR_DATADIR/node.log"
 # concurrently on this box and a shared datadir name causes mutual rm -rf
 # destruction. Keep this isolated.
 CORE_DATADIR="/tmp/gbh-core-nimrod"
-CORE_RPC=40153
-CORE_P2P=40173
+CORE_RPC=22053
+CORE_P2P=22073
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to, so
@@ -119,10 +119,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${NR_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${NR_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$NR_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -142,10 +138,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gbh-nimrod" 2>/dev/null || true
-fuser -k "${NR_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${NR_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${NR_RPC}|${NR_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${NR_RPC}|${NR_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${NR_RPC}/${NR_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$NR_DATADIR" "$CORE_DATADIR"
 mkdir -p "$NR_DATADIR" "$CORE_DATADIR"
@@ -207,8 +208,18 @@ except Exception:
 
 # ── 3. Launch the Core regtest oracle (RPC-only, -listen=0). ──────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     # -listen=0 (no P2P listener) + -rpcbind=127.0.0.1: the sandbox SIGKILLs any
     # bitcoind that binds a 0.0.0.0 P2P listener ~2s after load; an RPC-only,

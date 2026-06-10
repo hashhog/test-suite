@@ -53,7 +53,7 @@
 # assertions are swapped to the at-height GATE above.
 #
 # Touches ONLY /tmp/csidx-beamchain/ + /tmp/csidx-beamchain-core/ and ports
-#   40277/40297 (beamchain RPC/P2P) + 41277/41297 (Core RPC/P2P).
+#   22177/22197 (beamchain RPC/P2P) + 22977/22997 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may run); only
 #   frees its OWN fixed ports + its OWN scratch dir.
@@ -67,8 +67,8 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 BC_DATADIR="/tmp/csidx-beamchain"
-BC_RPC=40277
-BC_P2P=40297
+BC_RPC=22177
+BC_P2P=22197
 BC_LOG="$BC_DATADIR/node.log"
 BC_SYS="$BC_DATADIR/sys.config"
 BC_VM="$BC_DATADIR/vm.args"
@@ -80,14 +80,14 @@ BC_P2P_HOLDER=""
 #   1. the MAIN oracle launched WITH -coinstatsindex=1 (the at-height GATE).
 #   2. a throwaway Core launched WITHOUT coinstatsindex (the ERROR gate).
 CORE_DATADIR="/tmp/csidx-beamchain-core"
-CORE_RPC=41277
-CORE_P2P=41297
+CORE_RPC=22977
+CORE_P2P=22997
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
 # A second Core (no coinstatsindex) for the disabled-error gate. Own ports/dir.
 CORE_NOIDX_DATADIR="/tmp/csidx-beamchain-core-noidx"
-CORE_NOIDX_RPC=41278
+CORE_NOIDX_RPC=22978
 CORE_NOIDX_LOG="$CORE_NOIDX_DATADIR/core.log"
 CORE_NOIDX_BG=""
 
@@ -119,11 +119,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]]       && kill "$CORE_BG"       2>/dev/null || true
     [[ -n "$CORE_NOIDX_BG" ]] && kill "$CORE_NOIDX_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${BC_P2P}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "${CORE_NOIDX_RPC}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" "$CORE_NOIDX_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -139,7 +134,15 @@ log "resetting scratch state"
 pkill -9 -f "csidx_beamchain_" 2>/dev/null || true
 pkill -9 -f "csidx-beamchain"  2>/dev/null || true
 for p in "$BC_RPC" "$BC_P2P" "$CORE_RPC" "$CORE_P2P" "$CORE_NOIDX_RPC"; do
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
+    # Wait briefly for the pkill'd prior run to release its sockets, then
+    # ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+    for _ in $(seq 1 30); do
+        ss -tln 2>/dev/null | grep -qE ":(${p}) " || break
+        sleep 1
+    done
+    if ss -tln 2>/dev/null | grep -qE ":(${p}) "; then
+        fail "port ${p} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+    fi
 done
 sleep 3
 for _ in $(seq 1 20); do
@@ -212,8 +215,18 @@ bc_haskey()  { jpy "$(bc_rpc "$1" "$2")" "('$3' in d['result'])"; }
 
 # ── 2. Launch the Core regtest oracle (WITH coinstatsindex). ──────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     # -listen=0: the sandbox SIGKILLs any bitcoind binding a 0.0.0.0 listener.
     # -coinstatsindex=1 -txindex=1: the capability under test.

@@ -25,7 +25,7 @@
 # GROUND TRUTH = the box's REAL bitcoind (Bitcoin Core) regtest oracle on its
 #   own scratch + ports, launched -listen=0 (sandbox SIGKILLs a 0.0.0.0 P2P
 #   listener) and -txindex=1 (so gettxoutproof can locate any confirmed tx).
-#   haskoin runs on regtest scratch /tmp/gtp-haskoin (RPC 40121, P2P 40141).
+#   haskoin runs on regtest scratch /tmp/gtp-haskoin (RPC 22021, P2P 22041).
 #   To give BOTH nodes the IDENTICAL chain (so the SAME tx sits in the SAME
 #   block on both, hence a byte-identical merkleblock), every block Core mines
 #   is REPLAYED to haskoin via submitblock. We create+sign a real spend on Core
@@ -51,8 +51,8 @@
 # If the haskoin binary is missing, prints a GAP_RE-compatible "not built"
 # message so the cross-impl runner can SKIP.
 #
-# Touches ONLY /tmp/gtp-haskoin* + /tmp/gtp-core* and ports 40121/40141
-#   (haskoin RPC/P2P) + 40221/40241 (Core RPC/P2P). NEVER touches /data/nvme1/
+# Touches ONLY /tmp/gtp-haskoin* + /tmp/gtp-core* and ports 22021/22041
+#   (haskoin RPC/P2P) + 22121/22141 (Core RPC/P2P). NEVER touches /data/nvme1/
 #   or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -67,14 +67,14 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 export haskoin_datadir="$BASEDIR/haskoin"   # BIP-39 wordlist resolution at runtime
 
 HK_DATADIR="/tmp/gtp-haskoin"
-HK_RPC=40121
-HK_P2P=40141
+HK_RPC=22021
+HK_P2P=22041
 HK_LOG="$HK_DATADIR/node.log"
 HK_COOKIE=""
 
 CORE_DATADIR="/tmp/gtp-core"
-CORE_RPC=40221
-CORE_P2P=40241
+CORE_RPC=22121
+CORE_P2P=22141
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic mining key (32-byte secret) we control, so we can sign a spend.
@@ -105,10 +105,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -127,10 +123,15 @@ fail() {
 log "resetting scratch state"
 pkill -f "datadir=$HK_DATADIR" 2>/dev/null || true
 pkill -f "datadir=$CORE_DATADIR" 2>/dev/null || true
-fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HK_RPC}/${HK_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$HK_DATADIR" "$CORE_DATADIR"
 mkdir -p "$HK_DATADIR" "$CORE_DATADIR"
@@ -200,8 +201,18 @@ except Exception:
 
 # ── 3. Launch Core regtest oracle (-listen=0 -txindex=1). ─────────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \
         -listen=0 -txindex=1 -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &

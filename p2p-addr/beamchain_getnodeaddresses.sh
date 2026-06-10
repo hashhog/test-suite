@@ -40,8 +40,8 @@
 #   PASS: GETNODEADDRESSES beamchain: PASS shape=ok errors=ok count=ok netfilter=ok
 #   FAIL: GETNODEADDRESSES beamchain: FAIL <short reason>
 #
-# Touches ONLY /tmp/gna-beamchain{,-core}/ and ports 40076/40096 (beamchain
-#   RPC/P2P) + 40078/40098 (Core RPC/P2P). NEVER touches /data/nvme1/ or
+# Touches ONLY /tmp/gna-beamchain{,-core}/ and ports 21976/21996 (beamchain
+#   RPC/P2P) + 21978/21998 (Core RPC/P2P). NEVER touches /data/nvme1/ or
 #   testnet4-data/ or any live node (haskoin is mid-sync — left alone).
 
 set -uo pipefail
@@ -53,13 +53,13 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 BC_DATADIR="/tmp/gna-beamchain"
-BC_RPC=40076
-BC_P2P=40096
+BC_RPC=21976
+BC_P2P=21996
 BC_LOG="$BC_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gna-beamchain-core"
-CORE_RPC=40078
-CORE_P2P=40098
+CORE_RPC=21978
+CORE_P2P=21998
 CORE_LOG="$CORE_DATADIR/core.log"
 
 BC_PID=""
@@ -98,10 +98,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${BC_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -110,10 +106,15 @@ trap cleanup EXIT INT TERM
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gna-beamchain" 2>/dev/null || true
-fuser -k "${BC_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${BC_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"

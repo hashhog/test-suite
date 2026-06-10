@@ -31,13 +31,13 @@ SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 SINK_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 OU_DATADIR="/tmp/gto-ouroboros-impl"
-OU_RPC=40648
-OU_P2P=40668
+OU_RPC=22548
+OU_P2P=22568
 OU_LOG="$OU_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gto-ouroboros-core"
-CORE_RPC=40650
-CORE_P2P=40670
+CORE_RPC=22550
+CORE_P2P=22570
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=6
@@ -65,10 +65,6 @@ cleanup() {
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     pkill -9 -f "gto-ouroboros-impl" >/dev/null 2>&1 || true
     pkill -9 -f "gto-ouroboros-core" >/dev/null 2>&1 || true
-    fuser -k "${OU_RPC}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${OU_P2P}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"       >/dev/null 2>&1 || true
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -124,10 +120,15 @@ log "resetting scratch state"
 pkill -f "gto-ouroboros-impl" 2>/dev/null || true
 pkill -f "gto-ouroboros-core" 2>/dev/null || true
 sleep 2
-fuser -k "${OU_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${OU_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$OU_DATADIR" "$CORE_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR"

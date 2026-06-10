@@ -39,7 +39,7 @@
 #     GETNODEADDRESSES camlcoin: FAIL <short reason>
 #
 # Touches ONLY /tmp/gna-camlcoin/ + /tmp/gna-core/ and ports
-#   40075/40095 (camlcoin RPC/P2P) + 40076/40096 (Core RPC/P2P).
+#   21975/21995 (camlcoin RPC/P2P) + 21976/21996 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -51,15 +51,15 @@ BITCOIND="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 BITCOINCLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 CC_DATADIR="/tmp/gna-camlcoin"
-CC_RPC=40075
-CC_P2P=40095
+CC_RPC=21975
+CC_P2P=21995
 CC_LOG="$CC_DATADIR/node.log"
 
 # camlcoin-specific Core scratch dir (avoid colliding with sibling fan-out
 # agents that also use /tmp/gna-core for their own oracle).
 CORE_DATADIR="/tmp/gna-core-camlcoin"
-CORE_RPC=40076
-CORE_P2P=40096
+CORE_RPC=21976
+CORE_P2P=21996
 
 CC_PID=""
 CC_COOKIE=""

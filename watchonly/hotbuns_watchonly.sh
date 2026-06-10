@@ -18,7 +18,7 @@
 # missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY hotbuns: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-hotbuns/ and ports 41404 (RPC) / 41424
+# Touches ONLY /tmp/hashhog-wofleet-hotbuns/ and ports 21404 (RPC) / 21424
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

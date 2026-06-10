@@ -50,8 +50,8 @@
 #   GETINDEXINFO clearbit: PASS shape=ok height=ok filter=ok empty=ok
 #   GETINDEXINFO clearbit: FAIL <short reason>
 #
-# Touches ONLY /tmp/gii-clearbit/ + /tmp/gii-core/ and ports 40037/40057
-#   (clearbit RPC/P2P) + 40038/40058 (Core RPC/P2P).
+# Touches ONLY /tmp/gii-clearbit/ + /tmp/gii-core/ and ports 21937/21957
+#   (clearbit RPC/P2P) + 21938/21958 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -64,13 +64,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 CB_DATADIR="/tmp/gii-clearbit"
 CB_NETDIR="$CB_DATADIR/regtest"      # clearbit appends the network subdir
-CB_RPC=40037
-CB_P2P=40057
+CB_RPC=21937
+CB_P2P=21957
 CB_LOG="$CB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gii-core"
-CORE_RPC=40038
-CORE_P2P=40058
+CORE_RPC=21938
+CORE_P2P=21958
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120
@@ -115,10 +115,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${CB_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -128,10 +124,15 @@ trap cleanup EXIT INT TERM
 log "resetting scratch state"
 pkill -f "gii-clearbit" 2>/dev/null || true
 pkill -f "gii-core"     2>/dev/null || true
-fuser -k "${CB_RPC}/tcp"   2>/dev/null || true
-fuser -k "${CB_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$CB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CB_DATADIR" "$CORE_DATADIR"

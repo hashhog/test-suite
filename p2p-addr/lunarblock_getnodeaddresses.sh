@@ -50,8 +50,8 @@
 #   PASS: GETNODEADDRESSES lunarblock: PASS shape=ok errors=ok count=ok netfilter=ok
 #   FAIL: GETNODEADDRESSES lunarblock: FAIL <short reason>
 #
-# Touches ONLY /tmp/gna-lunarblock + /tmp/gna-core and ports 40078/40098
-#   (lunarblock RPC/P2P), 40080/40100 (Core RPC/P2P).
+# Touches ONLY /tmp/gna-lunarblock + /tmp/gna-core and ports 21978/21998
+#   (lunarblock RPC/P2P), 21980/22000 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -65,8 +65,8 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 LB_DATADIR="/tmp/gna-lunarblock"
-LB_RPC=40078
-LB_P2P=40098
+LB_RPC=21978
+LB_P2P=21998
 LB_LOG="$LB_DATADIR/node.log"
 
 # Core oracle uses a lunarblock-SPECIFIC scratch datadir so it never shares a
@@ -75,8 +75,8 @@ LB_LOG="$LB_DATADIR/node.log"
 # otherwise produces "Authorization failed: Incorrect rpcuser or rpcpassword"
 # when bitcoin-cli reads a sibling-rewritten .cookie).
 CORE_DATADIR="/tmp/gna-core-lunarblock"
-CORE_RPC=40080
-CORE_P2P=40100
+CORE_RPC=21980
+CORE_P2P=22000
 CORE_LOG="$CORE_DATADIR/core.log"
 
 VDIR=""   # validator-scripts dir (under LB_DATADIR, set after mkdir)
@@ -111,10 +111,6 @@ cleanup() {
         done
         [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
         [[ -n "$CORE_BG" ]] && wait "$CORE_BG" 2>/dev/null || true
-        fuser -k "${LB_RPC}/tcp" >/dev/null 2>&1 || true
-        fuser -k "${LB_P2P}/tcp" >/dev/null 2>&1 || true
-        fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-        fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
         rm -rf "$LB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     } >&2
     # Emit the single summary line LAST, on stdout, after all reaping is done.
@@ -153,10 +149,15 @@ core_call() {
 log "resetting scratch state"
 pkill -f -- "datadir $LB_DATADIR " 2>/dev/null || true
 pkill -f -- "-datadir=$CORE_DATADIR " 2>/dev/null || true
-fuser -k "${LB_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${LB_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${LB_RPC}/${LB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"
@@ -327,7 +328,17 @@ for attempt in 1 2; do
     log "launching lunarblock (regtest, attempt $attempt) rpc=:$LB_RPC p2p=:$LB_P2P -> $LB_LOG"
     # If a prior attempt left the RPC/P2P ports in TIME_WAIT or a half-dead
     # process, clear them before re-binding.
-    fuser -k "${LB_RPC}/tcp" "${LB_P2P}/tcp" >/dev/null 2>&1 || true
+    # Port-kill removed (2026-06-10 fuser incident): wait for OUR stopped node to release
+    # the port; never kill by port.
+    for __hp in "${LB_RPC}" "${LB_P2P}"; do
+        for _ in $(seq 1 30); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+        if ss -tln 2>/dev/null | grep -qE ":${__hp} "; then
+            fail "port ${__hp} still LISTENING after our own stop — refusing port-kill (2026-06-10 fuser incident)"
+        fi
+    done
     sleep 1
     setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
         --network regtest --datadir '$LB_DATADIR' \
@@ -349,6 +360,12 @@ for attempt in 1 2; do
     [[ "$lb_up" -eq 1 ]] && break
     log "attempt $attempt did not bring lunarblock RPC up (exited=$lb_exited); retrying"
     tail -n 10 "$LB_LOG" >&2 2>/dev/null || true
+    # PID-scoped reap of the half-dead attempt (port-kill banned — 2026-06-10).
+    if [[ -n "$LB_PID" ]]; then
+        kill "$LB_PID" 2>/dev/null || true
+        for _ in $(seq 1 10); do kill -0 "$LB_PID" 2>/dev/null || break; sleep 1; done
+        kill -9 "$LB_PID" 2>/dev/null || true
+    fi
     LB_PID=""
 done
 [[ "$lb_up" -eq 1 ]] || { tail -n 20 "$LB_LOG" >&2 2>/dev/null || true; fail "lunarblock RPC never reported chain=regtest within 90s (2 attempts)"; }

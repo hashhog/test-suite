@@ -61,9 +61,9 @@
 #   SKIP: GETTXOUTSETINFO clearbit: SKIP <reason>
 #
 # Touches ONLY /tmp/gtxo-clearbit/ + /tmp/gtxo-core/ and ports
-#   40277/40297 (clearbit RPC/P2P) + 40279/40299 (Core RPC; P2P unused -listen=0).
+#   22177/22197 (clearbit RPC/P2P) + 22179/22199 (Core RPC; P2P unused -listen=0).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Does NOT
-#   broad-pkill bitcoind/clearbit by name. Any `fuser -k` redirects stdout.
+#   broad-pkill bitcoind/clearbit by name. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -75,13 +75,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 CB_DATADIR="/tmp/gtxo-clearbit/$$"
-CB_RPC=40277
-CB_P2P=40297
+CB_RPC=22177
+CB_P2P=22197
 CB_LOG="$CB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gtxo-core/$$"
-CORE_RPC=40279
-CORE_P2P=40299   # declared but Core launched -listen=0 (no P2P listener)
+CORE_RPC=22179
+CORE_P2P=22199   # declared but Core launched -listen=0 (no P2P listener)
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to.
@@ -117,10 +117,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -137,17 +133,20 @@ skip() { echo "GETTXOUTSETINFO clearbit: SKIP $*"; exit 0; }
 # (catastrophically) the live mainnet bitcoind/clearbit on /data/nvme1.
 log "resetting scratch state (pid=$$)"
 pkill -f "gtxo-clearbit/$$" 2>/dev/null || true
-free_port() {  # poll until the port is actually free (a just-killed node can hold it briefly)
+free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
-        fuser -k "${p}/tcp" >/dev/null 2>&1 || true
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
         sleep 1
     done
     return 0
 }
 free_port "$CB_RPC"; free_port "$CB_P2P"; free_port "$CORE_RPC"; free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$CB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CB_DATADIR" "$CORE_DATADIR"
 

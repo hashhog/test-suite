@@ -49,7 +49,7 @@
 # + -txindex=1 added to BOTH launches and the at-height assertions swapped in.
 #
 # Touches ONLY /tmp/csidx-camlcoin/ + /tmp/csidx-core-camlcoin/ and ports
-#   40285/40305 (camlcoin RPC/P2P) + 40287/40307 (Core RPC/P2P).
+#   22185/22205 (camlcoin RPC/P2P) + 22187/22207 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may run); only
 #   frees its OWN fixed ports + scratch dir.
@@ -64,16 +64,16 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key + raw-tx builders)
 
 CC_DATADIR="/tmp/csidx-camlcoin"
-CC_RPC=40285
-CC_P2P=40305
+CC_RPC=22185
+CC_P2P=22205
 CC_LOG="$CC_DATADIR/node.log"
 CC_COOKIE=""
 CC_PID=""
 CC_TOOK_CSIDX_FLAG=0     # 1 iff camlcoin accepted -coinstatsindex=1 at launch
 
 CORE_DATADIR="/tmp/csidx-core-camlcoin"
-CORE_RPC=40287
-CORE_P2P=40307
+CORE_RPC=22187
+CORE_P2P=22207
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -86,10 +86,11 @@ log() { echo "[coinstatsindex:camlcoin] $*" >&2; }
 
 # ── Cleanup: kill OWN nodes + free OWN ports + wipe scratch on any exit. ───
 free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
-    for _ in $(seq 1 15); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
+    for _ in $(seq 1 20); do
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
         sleep 1
     done
     return 0
@@ -127,6 +128,9 @@ free_port "$CC_RPC"
 free_port "$CC_P2P"
 free_port "$CORE_RPC"
 free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CC_RPC}/${CC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$CC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CC_DATADIR" "$CORE_DATADIR"
 

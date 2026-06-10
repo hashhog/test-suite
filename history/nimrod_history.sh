@@ -39,7 +39,7 @@
 #   PASS: HISTORY nimrod: PASS sent_entry=yes recv_entries=<n> gettx=ok
 #   FAIL: HISTORY nimrod: FAIL <short reason>
 #
-# Touches ONLY /tmp/histfleet-nimrod/ and ports 39761 (RPC) / 39781 (P2P).
+# Touches ONLY /tmp/histfleet-nimrod/ and ports 21661 (RPC) / 21681 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -50,8 +50,8 @@ BASEDIR="$(cd "$SCRIPT_DIR/../.." && pwd)"          # meta-repo root
 NIMROD_BIN="$BASEDIR/nimrod/bin/nimrod"
 
 DATADIR="/tmp/histfleet-nimrod"
-RPC_PORT=39761
-P2P_PORT=39781
+RPC_PORT=21661
+P2P_PORT=21681
 NETWORK="regtest"
 COOKIE_FILE="$DATADIR/$NETWORK/.cookie"
 LOGFILE="$DATADIR/node.log"
@@ -96,8 +96,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -186,8 +184,9 @@ command -v python3 >/dev/null 2>&1 || fail "python3 not available"
 
 # ── 1. Idempotent reset + launch. ───────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

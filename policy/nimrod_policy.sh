@@ -74,8 +74,8 @@
 #   FAIL: POLICY nimrod: FAIL <short reason> [dust=.. version=.. min-relay=.. ...]
 #
 # Touches ONLY /tmp/policyfleet-nimrod/ + /tmp/policyfleet-core-{strict,def}/
-#   and ports 39941/39961 (nimrod RPC/P2P), 39942/39962 (strict Core RPC/P2P),
-#   39944/39964 (default Core RPC/P2P).
+#   and ports 21841/21861 (nimrod RPC/P2P), 21842/21862 (strict Core RPC/P2P),
+#   21844/21864 (default Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -89,19 +89,19 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx builders)
 
 NM_DATADIR="/tmp/policyfleet-nimrod"
-NM_RPC=39941
-NM_P2P=39961
+NM_RPC=21841
+NM_P2P=21861
 NM_LOG="$NM_DATADIR/node.log"
 NM_COOKIE_FILE="$NM_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/policyfleet-core-strict"
-CORE_RPC=39942
-CORE_P2P=39962
+CORE_RPC=21842
+CORE_P2P=21862
 CORE_LOG="$CORE_DATADIR/core.log"
 
 CORE_DEF_DATADIR="/tmp/policyfleet-core-def"
-CORE_DEF_RPC=39944
-CORE_DEF_P2P=39964
+CORE_DEF_RPC=21844
+CORE_DEF_P2P=21864
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 # Strict-policy flags so EVERY corpus violation rejects on the primary oracle.
@@ -140,12 +140,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
-    fuser -k "${NM_RPC}/tcp"       2>/dev/null || true
-    fuser -k "${NM_P2P}/tcp"       2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
     rm -rf "$NM_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -182,12 +176,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "policyfleet-nimrod" 2>/dev/null || true
-fuser -k "${NM_RPC}/tcp"       2>/dev/null || true
-fuser -k "${NM_P2P}/tcp"       2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) "; then
+    fail "port ${NM_RPC}/${NM_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_DEF_RPC}/${CORE_DEF_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$NM_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"
 mkdir -p "$NM_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"

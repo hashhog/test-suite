@@ -23,7 +23,7 @@
 # missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY camlcoin: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-camlcoin/ and ports 41405 (RPC) / 41425
+# Touches ONLY /tmp/hashhog-wofleet-camlcoin/ and ports 21405 (RPC) / 21425
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

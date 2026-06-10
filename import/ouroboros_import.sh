@@ -40,14 +40,14 @@
 #   FAIL: IMPORT ouroboros: FAIL <short reason>
 # Green REQUIRES rescan=ok. exit 0 = PASS, exit 1 = FAIL.
 #
-# Touches ONLY /tmp/importfleet-ouroboros/ and ports 39812 (RPC) / 39832 (P2P).
+# Touches ONLY /tmp/importfleet-ouroboros/ and ports 21712 (RPC) / 21732 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
 
 # ── Config ───────────────────────────────────────────────────────────────
-RPC_PORT=39812
-P2P_PORT=39832
+RPC_PORT=21712
+P2P_PORT=21732
 DATADIR="/tmp/importfleet-ouroboros"
 LOGFILE="$DATADIR/node.log"
 
@@ -87,8 +87,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -132,8 +130,9 @@ result_num() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

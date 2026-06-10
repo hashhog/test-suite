@@ -39,7 +39,7 @@
 #   FAIL: POLICY haskoin: FAIL <short reason> [dust=.. version=.. ...]
 #
 # Touches ONLY /tmp/hk-policy/ + /tmp/hk-policy-core-{strict,def}/ and ports
-#   41040/41060 (haskoin RPC/P2P), 41042/41062 (strict Core), 41044/41064 (default Core).
+#   22740/22760 (haskoin RPC/P2P), 22742/22762 (strict Core), 22744/22764 (default Core).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -54,20 +54,20 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 export haskoin_datadir="$BASEDIR/haskoin"
 
 HK_DATADIR="/tmp/hk-policy"
-HK_RPC=41040
-HK_P2P=41060
+HK_RPC=22740
+HK_P2P=22760
 HK_LOG="$HK_DATADIR/node.log"
 HK_URL="http://127.0.0.1:${HK_RPC}"
 HK_COOKIE=""
 
 CORE_DATADIR="/tmp/hk-policy-core-strict"
-CORE_RPC=41042
-CORE_P2P=41062
+CORE_RPC=22742
+CORE_P2P=22762
 CORE_LOG="$CORE_DATADIR/core.log"
 
 CORE_DEF_DATADIR="/tmp/hk-policy-core-def"
-CORE_DEF_RPC=41044
-CORE_DEF_P2P=41064
+CORE_DEF_RPC=22744
+CORE_DEF_P2P=22764
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 CORE_STRICT_FLAGS=(-permitbaremultisig=0 -datacarriersize=80)
@@ -98,12 +98,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
-    fuser -k "${HK_RPC}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "${HK_P2P}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"     >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"     >/dev/null 2>&1 || true
-    fuser -k "${CORE_DEF_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_DEF_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -135,12 +129,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "hk-policy" 2>/dev/null || true
-fuser -k "${HK_RPC}/tcp"       >/dev/null 2>&1 || true
-fuser -k "${HK_P2P}/tcp"       >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp"     >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp"     >/dev/null 2>&1 || true
-fuser -k "${CORE_DEF_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_DEF_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) "; then
+    fail "port ${HK_RPC}/${HK_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_DEF_RPC}/${CORE_DEF_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$HK_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"
 mkdir -p "$HK_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"

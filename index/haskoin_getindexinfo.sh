@@ -34,7 +34,7 @@
 #   FAIL: GETINDEXINFO haskoin: FAIL <short reason>
 #
 # Touches ONLY /tmp/hk-getindexinfo/ + /tmp/hk-getindexinfo-core/ and ports
-#   41030/41050 (haskoin RPC/P2P), 41031/41051 (Core RPC/P2P).
+#   22730/22750 (haskoin RPC/P2P), 22731/22751 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -48,14 +48,14 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 export haskoin_datadir="$BASEDIR/haskoin"
 
 HK_DATADIR="/tmp/hk-getindexinfo"
-HK_RPC=41030
-HK_P2P=41050
+HK_RPC=22730
+HK_P2P=22750
 HK_LOG="$HK_DATADIR/node.log"
 HK_COOKIE=""
 
 CORE_DATADIR="/tmp/hk-getindexinfo-core"
-CORE_RPC=41031
-CORE_P2P=41051
+CORE_RPC=22731
+CORE_P2P=22751
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120
@@ -83,10 +83,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -95,10 +91,15 @@ trap cleanup EXIT INT TERM
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "hk-getindexinfo" 2>/dev/null || true
-fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HK_RPC}/${HK_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 2
 rm -rf "$HK_DATADIR" "$CORE_DATADIR"
 mkdir -p "$HK_DATADIR" "$CORE_DATADIR"

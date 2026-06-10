@@ -58,7 +58,7 @@
 #   SKIP: GETTXOUTSETINFO lunarblock: SKIP <reason>
 #
 # Touches ONLY /tmp/gtxo-lunarblock + /tmp/gtxo-core and ports
-#   40278/40298 (lunarblock RPC/P2P) + 40276/40296 (Core RPC/P2P).
+#   22178/22198 (lunarblock RPC/P2P) + 22176/22196 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Never
 #   broad-pkills bitcoind by name; only frees its OWN fixed ports / scratch dir.
 
@@ -71,13 +71,13 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 LB_DATADIR="/tmp/gtxo-lunarblock"
-LB_RPC=40278
-LB_P2P=40298
+LB_RPC=22178
+LB_P2P=22198
 LB_LOG="$LB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gtxo-core"
-CORE_RPC=40276
-CORE_P2P=40296
+CORE_RPC=22176
+CORE_P2P=22196
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Chain shape: 1 OP_TRUE coinbase block, then 100 maturity blocks, then 1
@@ -95,11 +95,12 @@ log() { echo "[gettxoutsetinfo:lunarblock] $*" >&2; }
 
 # ── Port free helper: kill + POLL until the socket is actually released. ──
 free_port() {
-    local port="$1"
-    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
+    local p="$1"
     for _ in $(seq 1 20); do
-        fuser "${port}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -149,6 +150,9 @@ free_port "$LB_RPC"
 free_port "$LB_P2P"
 free_port "$CORE_RPC"
 free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${LB_RPC}/${LB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"
 

@@ -35,15 +35,15 @@ SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 SINK_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 BB_DATADIR="/tmp/gto-blockbrew"
-BB_RPC=40604
-BB_P2P=40624
+BB_RPC=22504
+BB_P2P=22524
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 BB_COOKIE_FILE="$BB_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/gto-core-bb"
-CORE_RPC=40606
-CORE_P2P=40626
+CORE_RPC=22506
+CORE_P2P=22526
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=6
@@ -69,10 +69,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -90,10 +86,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gto-blockbrew" 2>/dev/null || true
-fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"

@@ -61,7 +61,7 @@
 #   SKIP: GETBLOCKFILTER blockbrew: SKIP <no filter index>
 #
 # Touches ONLY /tmp/gbf-blockbrew/ + /tmp/gbf-core/ and ports
-#   40233/40253 (blockbrew RPC/P2P) + 40235/40255 (Core RPC/P2P).
+#   22133/22153 (blockbrew RPC/P2P) + 22135/22155 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may be running);
 #   only frees its OWN fixed ports + scratch dir.
@@ -84,15 +84,15 @@ MINE_SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 DST_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 BB_DATADIR="/tmp/gbf-blockbrew"
-BB_RPC=40233
-BB_P2P=40253
+BB_RPC=22133
+BB_P2P=22153
 BB_LOG="$BB_DATADIR/node.log"
 BB_COOKIE=""
 BB_PID=""
 
 CORE_DATADIR="/tmp/gbf-core"
-CORE_RPC=40235
-CORE_P2P=40255
+CORE_RPC=22135
+CORE_P2P=22155
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -120,10 +120,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -136,10 +132,9 @@ skip() { echo "GETBLOCKFILTER blockbrew: SKIP $*"; exit 0; }
 
 # ── 0. Idempotent reset (OWN ports only). ─────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"
@@ -210,8 +205,18 @@ bb_field() { jpy "$(bb_rpc "$1" "$2")" "d['result']['$3']"; }
 
 # ── 2. Launch the Core regtest oracle with -blockfilterindex=basic. ───────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \
         -blockfilterindex=basic -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &
@@ -240,7 +245,18 @@ log "Core oracle ready (pid=$CORE_BG)"
 # ── 3. Launch blockbrew on regtest WITH -blockfilterindex enabled. ────────
 launch_bb_once() {
     BB_COOKIE=""
-    fuser -k "${BB_RPC}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${BB_PID:-}" ]]; then
+        kill "$BB_PID" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$BB_PID" 2>/dev/null || break; sleep 1; done
+        kill -9 "$BB_PID" 2>/dev/null || true
+    fi
+    for __hp in "${BB_RPC}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$BB_DATADIR"; mkdir -p "$BB_DATADIR"
     "$NODE_BIN" -network=regtest -datadir="$BB_DATADIR" \
         -rpcbind="127.0.0.1:$BB_RPC" -nolisten -blockfilterindex \

@@ -39,8 +39,8 @@
 #   PASS: GETNODEADDRESSES nimrod: PASS shape=ok errors=ok count=ok netfilter=ok
 #   FAIL: GETNODEADDRESSES nimrod: FAIL <short reason>
 #
-# Touches ONLY /tmp/gna-nimrod/ + /tmp/gna-core/ and ports 40071/40091 (nimrod
-#   RPC/P2P), 40072/40092 (Core RPC/P2P). NEVER touches /data/nvme1/ or
+# Touches ONLY /tmp/gna-nimrod/ + /tmp/gna-core/ and ports 21971/21991 (nimrod
+#   RPC/P2P), 21972/21992 (Core RPC/P2P). NEVER touches /data/nvme1/ or
 #   testnet4-data/ or any live node (haskoin is mid-sync — left alone).
 
 set -uo pipefail
@@ -53,21 +53,21 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 NM_DATADIR="/tmp/gna-nimrod"
-NM_RPC=40071
-NM_P2P=40091
+NM_RPC=21971
+NM_P2P=21991
 NM_LOG="$NM_DATADIR/node.log"
 NM_COOKIE_FILE="$NM_DATADIR/regtest/.cookie"
 
-# NOTE: the Core oracle ports live in a HIGH, collision-free range (4017x/4019x).
-# The fanout's 4007x/4009x band is shared by sibling impls whose reset/cleanup
-# run `fuser -k "<their CORE port>/tcp"`; rustoshi + ouroboros both happen to use
-# 40072/40092 there, which would otherwise SIGKILL this test's Core oracle (and
-# nimrod) mid-run under parallel fanout. Keeping Core out of that band makes this
-# script robust when neighbors are running. nimrod's own ports (RPC 40071 / P2P
-# 40091) are unused by any sibling's kill set and stay as assigned.
+# NOTE: the Core oracle ports live in a separate, collision-free range (2207x/2209x).
+# The fanout's 2197x/2199x band is shared by sibling impls; rustoshi + ouroboros
+# both happen to use 21972/21992 there, which would otherwise bind-collide with
+# this test's Core oracle (and nimrod) mid-run under parallel fanout. (Sibling
+# port-kills are gone — port-kills were banned after the 2026-06-10 fuser
+# incident.) Keeping Core out of that band keeps this robust under parallelism. nimrod's own ports (RPC 21971 / P2P
+# 21991) are unused by any sibling's kill set and stay as assigned.
 CORE_DATADIR="/tmp/gna-nimrod-core"
-CORE_RPC=40172
-CORE_P2P=40192
+CORE_RPC=22072
+CORE_P2P=22092
 CORE_LOG="$CORE_DATADIR/core.log"
 
 INJ_ADDR="8.8.8.8"
@@ -94,10 +94,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${NM_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${NM_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$NM_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -116,10 +112,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gna-nimrod" 2>/dev/null || true
-fuser -k "${NM_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${NM_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${NM_RPC}/${NM_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$NM_DATADIR" "$CORE_DATADIR"
 mkdir -p "$NM_DATADIR" "$CORE_DATADIR"

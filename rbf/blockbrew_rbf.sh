@@ -55,8 +55,8 @@
 #   FAIL: RBF blockbrew: FAIL <short reason>
 #   SKIP: RBF blockbrew: SKIP <build/raw-tx gap>
 #
-# Touches ONLY /tmp/rbf-blockbrew/ + /tmp/rbf-core-bb/ and ports 40193/40213
-# (blockbrew RPC/P2P), 40195/40215 (Core RPC/P2P).
+# Touches ONLY /tmp/rbf-blockbrew/ + /tmp/rbf-core-bb/ and ports 22093/22113
+# (blockbrew RPC/P2P), 22095/22115 (Core RPC/P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -69,15 +69,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework
 
 BB_DATADIR="/tmp/rbf-blockbrew"
-BB_RPC=40193
-BB_P2P=40213
+BB_RPC=22093
+BB_P2P=22113
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 BB_COOKIE_FILE="$BB_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/rbf-core-bb"
-CORE_RPC=40195
-CORE_P2P=40215
+CORE_RPC=22095
+CORE_P2P=22115
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Align Rule-4 thresholds: 0.00001 BTC/kvB = 1000 sat/kvB = 1 sat/vB =
@@ -135,10 +135,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -146,10 +142,9 @@ trap cleanup EXIT INT TERM
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"

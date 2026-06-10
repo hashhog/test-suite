@@ -63,8 +63,8 @@
 #   FAIL: SCANBLOCKS haskoin: FAIL <short reason>
 #   SKIP: SCANBLOCKS haskoin: SKIP <no scanblocks RPC | no filter index>
 #
-# Touches ONLY /tmp/sblk-haskoin/ + /tmp/sblk-core/ and ports 40238/40258
-#   (haskoin RPC/P2P) + 40240/40260 (Core RPC; P2P unused, -listen=0).
+# Touches ONLY /tmp/sblk-haskoin/ + /tmp/sblk-core/ and ports 22138/22158
+#   (haskoin RPC/P2P) + 22140/22160 (Core RPC; P2P unused, -listen=0).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node; never
 #   broad-pkills bitcoind by name (a live mainnet bitcoind may be running).
 
@@ -82,15 +82,15 @@ HK_BIN="$(find "$HK_DIR/dist-newstyle" -name haskoin -type f -executable 2>/dev/
 export LD_LIBRARY_PATH="/home/work/.local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 HK_DATADIR="/tmp/sblk-haskoin"
-HK_RPC=40238
-HK_P2P=40258
+HK_RPC=22138
+HK_P2P=22158
 HK_LOG="$HK_DATADIR/node.log"
 HK_COOKIE=""
 HK_PID=""
 
 CORE_DATADIR="/tmp/sblk-core"
-CORE_RPC=40240
-CORE_P2P=40260   # declared but Core launched -listen=0 (no P2P listener)
+CORE_RPC=22140
+CORE_P2P=22160   # declared but Core launched -listen=0 (no P2P listener)
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -123,10 +123,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -148,10 +144,15 @@ skip() {
 # ── 0. Idempotent reset (own ports + own scratch markers only). ───────────
 log "resetting scratch state"
 pkill -f "sblk-haskoin" >/dev/null 2>&1 || true
-fuser -k "${HK_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${HK_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HK_RPC}/${HK_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$HK_DATADIR" "$CORE_DATADIR"
 mkdir -p "$HK_DATADIR" "$CORE_DATADIR"
@@ -213,8 +214,18 @@ except Exception:
 
 # ── 3. Launch the Core regtest oracle (-listen=0 -blockfilterindex=basic). ─
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \
         -blockfilterindex=basic -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &

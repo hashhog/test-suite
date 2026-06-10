@@ -60,9 +60,9 @@
 #   SKIP: GETTXOUTSETINFO rustoshi: SKIP <reason>
 #
 # Touches ONLY /tmp/gtxo-rustoshi/ + /tmp/gtxo-core/ and ports
-#   40270/40290 (rustoshi RPC/P2P) + 40272/40292 (Core RPC; P2P unused, -listen=0).
+#   22170/22190 (rustoshi RPC/P2P) + 22172/22192 (Core RPC; P2P unused, -listen=0).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Does NOT
-#   broad-pkill bitcoind by name. Any `fuser -k` redirects stdout.
+#   broad-pkill bitcoind by name. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -74,13 +74,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
 RS_DATADIR="/tmp/gtxo-rustoshi/$$"
-RS_RPC=40270
-RS_P2P=40290
+RS_RPC=22170
+RS_P2P=22190
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gtxo-core/$$"
-CORE_RPC=40272
-CORE_P2P=40292   # declared but Core launched -listen=0 (no P2P listener)
+CORE_RPC=22172
+CORE_P2P=22192   # declared but Core launched -listen=0 (no P2P listener)
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to.
@@ -109,10 +109,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${RS_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -147,10 +143,9 @@ wait_port_free() {
 # ── 0. Idempotent reset (own ports + own PID scratch only). ───────────────
 log "resetting scratch state (pid=$$)"
 pkill -f "gtxo-rustoshi/$$" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${RS_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 wait_port_free "$RS_RPC"; wait_port_free "$RS_P2P"
 wait_port_free "$CORE_RPC"; wait_port_free "$CORE_P2P"
 rm -rf "$RS_DATADIR" "$CORE_DATADIR"
@@ -207,8 +202,18 @@ except Exception:
 
 # ── 3. Launch the Core regtest oracle (-listen=0). ────────────────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     wait_port_free "$CORE_RPC"
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \

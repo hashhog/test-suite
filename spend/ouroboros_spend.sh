@@ -36,14 +36,14 @@
 #   PASS: SPEND ouroboros: PASS funded=<X> sent=<Y> recipient=<Y> sender_debited=<...> mempool=clean
 #   FAIL: SPEND ouroboros: FAIL <short reason>
 #
-# Touches ONLY /tmp/spendfleet-ouroboros/ and ports 39712 (RPC) / 39732 (P2P).
+# Touches ONLY /tmp/spendfleet-ouroboros/ and ports 21612 (RPC) / 21632 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
 
 # ── Config ───────────────────────────────────────────────────────────────
-RPC_PORT=39712
-P2P_PORT=39732
+RPC_PORT=21612
+P2P_PORT=21632
 DATADIR="/tmp/spendfleet-ouroboros"
 LOGFILE="$DATADIR/node.log"
 
@@ -85,8 +85,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -145,8 +143,9 @@ count_unspent() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

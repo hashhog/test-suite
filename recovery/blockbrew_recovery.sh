@@ -32,7 +32,7 @@
 #   PASS: RECOVERY blockbrew: PASS funded=<X> recovered=<X> addrs=match neg=0
 #   FAIL: RECOVERY blockbrew: FAIL <short reason>
 #
-# Touches ONLY /tmp/recreg-blockbrew/ and ports 39603 (RPC) / 39633 (P2P).
+# Touches ONLY /tmp/recreg-blockbrew/ and ports 21503 (RPC) / 21533 (P2P).
 # Never touches /data/nvme1/, testnet4-data/, or any live node.
 
 set -uo pipefail
@@ -41,8 +41,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 BIN="$BASEDIR/blockbrew/blockbrew"
 DATADIR="/tmp/recreg-blockbrew"
-RPC_PORT=39603
-P2P_PORT=39633
+RPC_PORT=21503
+P2P_PORT=21533
 LOG="/tmp/recreg-blockbrew.log"
 URL="http://127.0.0.1:${RPC_PORT}/"
 
@@ -71,8 +71,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: free the ports in case a prior orphan lingers.
-    fuser -k "${RPC_PORT}/tcp" "${P2P_PORT}/tcp" >/dev/null 2>&1 || true
     rm -rf "$DATADIR" "$LOG" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -83,7 +81,9 @@ command -v curl  >/dev/null 2>&1 || fail "curl not available"
 command -v python3 >/dev/null 2>&1 || fail "python3 not available"
 
 # Kill any prior node still holding our ports, wipe scratch datadir.
-fuser -k "${RPC_PORT}/tcp" "${P2P_PORT}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR" "$LOG"
 mkdir -p "$DATADIR"

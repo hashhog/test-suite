@@ -45,7 +45,7 @@
 #   FAIL: GETINDEXINFO rustoshi: FAIL <short reason>
 #
 # Touches ONLY /tmp/giifleet-rustoshi/ + /tmp/giifleet-core-rs/ and ports
-#   40030/40050 (rustoshi RPC/P2P), 40031/40051 (Core RPC/P2P).
+#   21930/21950 (rustoshi RPC/P2P), 21931/21951 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -58,13 +58,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 RS_DATADIR="/tmp/giifleet-rustoshi"
-RS_RPC=40030
-RS_P2P=40050
+RS_RPC=21930
+RS_P2P=21950
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/giifleet-core-rs"
-CORE_RPC=40031
-CORE_P2P=40051
+CORE_RPC=21931
+CORE_P2P=21951
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120            # mine this many empty blocks on both nodes
@@ -102,11 +102,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp"         2>/dev/null || true
-    fuser -k "${RS_P2P}/tcp"         2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"       2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"       2>/dev/null || true
-    fuser -k "$((CORE_P2P + 1))/tcp" 2>/dev/null || true   # Core onion listener (P2P+1)
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -115,11 +110,15 @@ trap cleanup EXIT INT TERM
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "giifleet-rustoshi" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp"         2>/dev/null || true
-fuser -k "${RS_P2P}/tcp"         2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"       2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"       2>/dev/null || true
-fuser -k "$((CORE_P2P + 1))/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P}/$((CORE_P2P + 1)) already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 2
 rm -rf "$RS_DATADIR" "$CORE_DATADIR"
 mkdir -p "$RS_DATADIR" "$CORE_DATADIR"

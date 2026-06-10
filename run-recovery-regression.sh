@@ -61,7 +61,7 @@ for impl in $IMPLS; do
   log="$LOGDIR/${impl}.log"
   tmpout="$(mktemp)"
   # setsid -w: run each test in its OWN session / process group so its cleanup trap
-  # (fuser -k PORT / pkill -f recreg-<impl>) can never signal THIS runner. camlcoin's
+  # (pkill -f recreg-<impl>) can never signal THIS runner. camlcoin's
   # trap signals its process group; under plain command-substitution that reached the
   # parent shell (exit 144). setsid -w isolates it and still propagates the child's
   # exit status. NOTE: do NOT capture via out=$(bash "$script") — that reintroduces

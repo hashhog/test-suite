@@ -52,7 +52,7 @@
 #   FAIL: GETBLOCKHEADER beamchain: FAIL <short reason>
 #
 # Touches ONLY /tmp/gbh-beamchain/ + /tmp/gbh-core/ and ports
-#   40156/40176 (beamchain RPC/P2P) + 40158/40178 (Core RPC/P2P).
+#   22056/22076 (beamchain RPC/P2P) + 22058/22078 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -65,8 +65,8 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (addr builder)
 
 BC_DATADIR="/tmp/gbh-beamchain"
-BC_RPC=40156
-BC_P2P=40176
+BC_RPC=22056
+BC_P2P=22076
 BC_LOG="$BC_DATADIR/node.log"
 BC_SYS="$BC_DATADIR/sys.config"
 BC_VM="$BC_DATADIR/vm.args"
@@ -75,8 +75,8 @@ BC_VM="$BC_DATADIR/vm.args"
 # shared /tmp/gbh-core + 4015x/4017x cluster that sibling RPC-cell harnesses
 # use, so concurrent test runs do not collide.
 CORE_DATADIR="/tmp/gbh-beamchain-core"
-CORE_RPC=41156
-CORE_P2P=41176
+CORE_RPC=22856
+CORE_P2P=22876
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address Core mines to. The exact
@@ -118,10 +118,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -142,10 +138,15 @@ fail() {
 log "resetting scratch state"
 pkill -9 -f "gbh_beamchain_" 2>/dev/null || true
 pkill -9 -f "gbh-beamchain"  2>/dev/null || true
-fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 # Wait for the RPC/P2P ports to actually release (a SIGKILLed beam VM can hold
 # the socket in TIME_WAIT/CLOSING briefly) before we relaunch on them.
@@ -160,7 +161,7 @@ done
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"
 
-# beamchain's RPC + P2P ports are MANDATED (40156 / 40176) and cannot be moved,
+# beamchain's RPC + P2P ports are MANDATED (22056 / 22076) and cannot be moved,
 # so a concurrent sibling RPC-cell harness that squats them transiently would
 # otherwise wedge our launch. Wait (bounded) for the mandated ports to clear
 # before proceeding; fail loudly only if a foreign process holds them too long.
@@ -247,8 +248,18 @@ except Exception:
 
 # ── 3. Launch the Core regtest oracle. ────────────────────────────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     # -listen=0: the sandbox SIGKILLs any bitcoind binding a 0.0.0.0 P2P listener
     # ~2s after load; RPC-only is fine for an oracle.

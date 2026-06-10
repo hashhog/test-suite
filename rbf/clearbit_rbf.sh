@@ -63,7 +63,7 @@
 #   SKIP: RBF clearbit: SKIP <build/raw-tx gap>
 #
 # Touches ONLY /tmp/rbf-clearbit/ (clearbit) + /tmp/rbf-clearbit-core/ (Core
-#   oracle) and ports 40197/40217 (clearbit RPC/P2P), 40199/40219 (Core
+#   oracle) and ports 22097/22117 (clearbit RPC/P2P), 22099/22119 (Core
 #   RPC/P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -77,13 +77,13 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx 
 
 CB_DATADIR="/tmp/rbf-clearbit"
 CB_NETDIR="$CB_DATADIR/regtest"                    # clearbit appends the network subdir
-CB_RPC=40197
-CB_P2P=40217
+CB_RPC=22097
+CB_P2P=22117
 CB_LOG="$CB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/rbf-clearbit-core"
-CORE_RPC=40199
-CORE_P2P=40219
+CORE_RPC=22099
+CORE_P2P=22119
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Fixed deterministic test secret (32 bytes) -> one p2wpkh keypair the whole
@@ -123,10 +123,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -162,10 +158,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "rbf-clearbit" >/dev/null 2>&1 || true
-fuser -k "${CB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 # Settle: give a prior run's daemons time to release ports + datadir locks.
 sleep 3
 rm -rf "$CB_DATADIR" "$CORE_DATADIR"

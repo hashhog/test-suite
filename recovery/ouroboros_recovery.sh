@@ -26,13 +26,13 @@
 # All noisy output goes to stderr / the log so the runner can grep the summary.
 #
 # NEVER touches /data/nvme1/ or testnet4-data/ or live nodes — only the scratch
-# datadir /tmp/recreg-ouroboros and the assigned ports 39602 (RPC) / 39632 (P2P).
+# datadir /tmp/recreg-ouroboros and the assigned ports 21502 (RPC) / 21532 (P2P).
 
 set -uo pipefail
 
 # ── Fixed configuration (matches the proven green-cell flow) ─────────────
-RPC_PORT=39602
-P2P_PORT=39632
+RPC_PORT=21502
+P2P_PORT=21532
 DATADIR="/tmp/recreg-ouroboros"
 LOGFILE="/tmp/recreg-ouroboros-node.log"
 SCRATCH_LOG="/tmp/recreg-ouroboros-test.log"
@@ -73,17 +73,15 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: free the ports regardless of how the node was started.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR"
     return $rc
 }
 trap cleanup EXIT INT TERM
 
 # ── Pre-flight: scrub any prior run on these ports + scratch datadir ─────
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+  emit_fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

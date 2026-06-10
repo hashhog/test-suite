@@ -66,10 +66,10 @@
 #   SKIP: GETTXOUTSETINFO beamchain: SKIP <reason>
 #
 # Touches ONLY /tmp/gtxo-beamchain/ + /tmp/gtxo-beamchain-core/ and ports
-#   40276/40296 (beamchain RPC/P2P) + 41276/41296 (Core RPC/P2P).
+#   22176/22196 (beamchain RPC/P2P) + 22976/22996 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may be running);
-#   only frees its OWN fixed ports + scratch dir. Every fuser -k redirects.
+#   only frees its OWN fixed ports + scratch dir. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -80,8 +80,8 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 BC_DATADIR="/tmp/gtxo-beamchain"
-BC_RPC=40276
-BC_P2P=40296
+BC_RPC=22176
+BC_P2P=22196
 BC_LOG="$BC_DATADIR/node.log"
 BC_SYS="$BC_DATADIR/sys.config"
 BC_VM="$BC_DATADIR/vm.args"
@@ -92,8 +92,8 @@ BC_P2P_HOLDER=""   # loopback holder PID that keeps beamchain from binding 0.0.0
 # Core oracle: a beamchain-test-private datadir + ports, chosen far from the
 # sibling RPC-cell harness cluster so concurrent test runs do not collide.
 CORE_DATADIR="/tmp/gtxo-beamchain-core"
-CORE_RPC=41276
-CORE_P2P=41296
+CORE_RPC=22976
+CORE_P2P=22996
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -128,10 +128,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -146,10 +142,15 @@ skip() { echo "GETTXOUTSETINFO beamchain: SKIP $*"; exit 0; }
 log "resetting scratch state"
 pkill -9 -f "gtxo_beamchain_" 2>/dev/null || true
 pkill -9 -f "gtxo-beamchain"  2>/dev/null || true
-fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 # Wait for the RPC/P2P ports to actually release (a SIGKILLed beam VM can hold
 # the socket in TIME_WAIT/CLOSING briefly) before we relaunch on them.
@@ -164,7 +165,7 @@ done
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"
 
-# beamchain's RPC + P2P ports are MANDATED (40276 / 40296) and cannot be moved,
+# beamchain's RPC + P2P ports are MANDATED (22176 / 22196) and cannot be moved,
 # so a concurrent sibling harness that squats them transiently would otherwise
 # wedge our launch. Wait (bounded) for the mandated ports to clear before
 # proceeding; fail loudly only if a foreign process holds them too long.
@@ -230,8 +231,18 @@ bc_haskey()  { jpy "$(bc_rpc "$1" "$2")" "('$3' in d['result'])"; }
 
 # ── 2. Launch the Core regtest oracle. ────────────────────────────────────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     # -listen=0: the sandbox SIGKILLs any bitcoind binding a 0.0.0.0 P2P listener
     # ~2s after load; RPC-only is fine for an oracle.

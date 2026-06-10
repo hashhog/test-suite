@@ -47,7 +47,7 @@
 #   FAIL: GETINDEXINFO blockbrew: FAIL <short reason>
 #
 # Touches ONLY /tmp/giifleet-blockbrew/ + /tmp/giiref-core-bb/ and ports
-#   40033/40053 (blockbrew RPC/P2P), 40034/40054 (Core RPC/P2P).
+#   21933/21953 (blockbrew RPC/P2P), 21934/21954 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -59,15 +59,15 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 BB_DATADIR="/tmp/giifleet-blockbrew"
-BB_RPC=40033
-BB_P2P=40053
+BB_RPC=21933
+BB_P2P=21953
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 BB_COOKIE_FILE="$BB_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/giiref-core-bb"
-CORE_RPC=40034
-CORE_P2P=40054
+CORE_RPC=21934
+CORE_P2P=21954
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120            # mine 120 empty blocks; tip height == 120
@@ -93,10 +93,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${BB_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -114,10 +110,9 @@ fail() {
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BB_RPC}/tcp"   2>/dev/null || true
-fuser -k "${BB_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"

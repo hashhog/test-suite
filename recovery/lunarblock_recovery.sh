@@ -27,7 +27,7 @@
 # Launch recipe mirrors tools/smoke-harness.sh (lunarblock arm, ~line 330):
 #   luajit src/main.lua --network regtest --datadir <dd> --port <p2p> --rpcport <rpc> --nov2transport
 #
-# STRICT: scratch datadir /tmp/recreg-lunarblock/ + ports 39608 (RPC) / 39638
+# STRICT: scratch datadir /tmp/recreg-lunarblock/ + ports 21508 (RPC) / 21538
 # (P2P) ONLY. NEVER touches /data/nvme1/, testnet4-data/, or any live node.
 #
 # Output: exactly ONE summary line on stdout, then exit.
@@ -42,8 +42,8 @@ REPO_ROOT="/home/work/hashhog"
 LB_DIR="$REPO_ROOT/lunarblock"
 SCRATCH="/tmp/recreg-lunarblock"
 NODE_LOG="$SCRATCH/node.log"
-RPC_PORT=39608
-P2P_PORT=39638
+RPC_PORT=21508
+P2P_PORT=21538
 RPC="http://127.0.0.1:${RPC_PORT}"
 
 # A fixed, well-known BIP-39 12-word test mnemonic (the canonical
@@ -88,8 +88,6 @@ finish() {
 # "Killed  <pid>" job-completion notice on stdout when it dies, keeping stdout
 # to exactly the one summary line. Best-effort, never fatal.
 kill_node() {
-  fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-  fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
   if [[ -n "$NODE_PID" ]]; then
     kill -TERM "-${NODE_PID}" 2>/dev/null || kill -TERM "$NODE_PID" 2>/dev/null || true
   fi
@@ -150,8 +148,9 @@ except Exception as e:
 
 # ── 0. Idempotent reset ─────────────────────────────────────────────────────
 log "resetting scratch state (ports ${RPC_PORT}/${P2P_PORT}, datadir ${SCRATCH})"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+  finish FAIL "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 0.5
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH"

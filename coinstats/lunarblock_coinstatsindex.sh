@@ -40,7 +40,7 @@
 #   SKIP: COINSTATSINDEX lunarblock: SKIP <reason>   (missing binary only)
 #
 # Touches ONLY /tmp/csi-lunarblock-$$ + /tmp/csi-core-$$ and ports
-#   40470/40490 (lunarblock RPC/P2P) + 40471/40491 (Core RPC; -listen=0).
+#   22370/22390 (lunarblock RPC/P2P) + 22371/22391 (Core RPC; -listen=0).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -53,13 +53,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
 LB_DATADIR="/tmp/csi-lunarblock-$$"
-LB_RPC=40470
-LB_P2P=40490
+LB_RPC=22370
+LB_P2P=22390
 LB_LOG="$LB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/csi-core-$$"
-CORE_RPC=40471
-CORE_P2P=40491
+CORE_RPC=22371
+CORE_P2P=22391
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> p2wpkh bcrt1 address for chain-A mining.
@@ -85,11 +85,11 @@ log() { echo "[coinstatsindex:lunarblock] $*" >&2; }
 
 # ── Port free helper ──────────────────────────────────────────────────────────
 free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
-        fuser -k "${p}/tcp" >/dev/null 2>&1 || true
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
         sleep 1
     done
     return 0
@@ -116,8 +116,8 @@ cleanup() {
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     free_port "$LB_RPC"
     free_port "$LB_P2P"
-    free_port "40472"
-    free_port "40493"
+    free_port "22372"
+    free_port "22393"
     free_port "$CORE_RPC"
     free_port "$CORE_P2P"
     rm -rf "$LB_DATADIR" "$CORE_DATADIR" "/tmp/csi-lunarblock2-$$" 2>/dev/null || true
@@ -134,7 +134,10 @@ skip() { echo "COINSTATSINDEX lunarblock: SKIP $*"; exit 0; }
 log "resetting scratch state (pid=$$)"
 pkill -f "csi-lunarblock-$$" 2>/dev/null || true
 free_port "$LB_RPC"; free_port "$LB_P2P"; free_port "$CORE_RPC"; free_port "$CORE_P2P"
-free_port "40472"; free_port "40493"
+free_port "22372"; free_port "22393"
+if ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${LB_RPC}/${LB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$LB_DATADIR" "$CORE_DATADIR" "/tmp/csi-lunarblock2-$$"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"
 
@@ -449,10 +452,10 @@ log "hash_serialized_3@H: lb err=$CB_DEFERR ; core err=$CORE_DEFCODE"
 # ── 9. INERT-WHEN-DISABLED CHECK ──────────────────────────────────────────────
 # Launch a second lunarblock WITHOUT --coinstatsindex; verify historical query
 # errors -8 and getindexinfo does NOT list coinstatsindex.
-log "inert-path check: launching lunarblock WITHOUT --coinstatsindex on port 40472"
+log "inert-path check: launching lunarblock WITHOUT --coinstatsindex on port 22372"
 LB2_DATADIR="/tmp/csi-lunarblock2-$$"
-LB2_RPC=40472
-LB2_P2P=40493
+LB2_RPC=22372
+LB2_P2P=22393
 LB2_LOG="$LB2_DATADIR/node.log"
 rm -rf "$LB2_DATADIR"; mkdir -p "$LB2_DATADIR"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \

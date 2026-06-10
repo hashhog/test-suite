@@ -51,7 +51,7 @@
 # Touches ONLY /tmp/csidx-nimrod/ + /tmp/csidx-core-nimrod/ and fixed scratch
 #   ports. NEVER touches /data/nvme1/ or testnet4-data/ or any live node. A live
 #   mainnet bitcoind may be running: we NEVER pkill bitcoind by name — only free
-#   our OWN fixed ports / scratch. Any `fuser -k` redirects stdout.
+#   our OWN fixed ports / scratch. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 #
 # Boilerplate (node launch + Core oracle + chain mirror + teardown) is lifted
 #   from test-suite/utxosetinfo/nimrod_gettxoutsetinfo.sh, with -coinstatsindex=1
@@ -68,19 +68,19 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/addr/WIF)
 
 NR_DATADIR="/tmp/csidx-nimrod"
-NR_RPC=40471
-NR_P2P=40491
+NR_RPC=22371
+NR_P2P=22391
 NR_LOG="$NR_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/csidx-core-nimrod"
-CORE_RPC=40473
-CORE_P2P=40493
+CORE_RPC=22373
+CORE_P2P=22393
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Second short-lived Core instance for the ERROR gate (coinstatsindex DISABLED).
 CORE2_DATADIR="/tmp/csidx-core2-nimrod"
-CORE2_RPC=40475
-CORE2_P2P=40495
+CORE2_RPC=22375
+CORE2_P2P=22395
 CORE2_LOG="$CORE2_DATADIR/core.log"
 
 NBLOCKS=150        # well above 100 so coinbase outputs mature and H=100 is historical
@@ -117,12 +117,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG"  ]] && kill "$CORE_BG"  2>/dev/null || true
     [[ -n "$CORE2_BG" ]] && kill "$CORE2_BG" 2>/dev/null || true
-    fuser -k "${NR_RPC}/tcp"    >/dev/null 2>&1 || true
-    fuser -k "${NR_P2P}/tcp"    >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"  >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"  >/dev/null 2>&1 || true
-    fuser -k "${CORE2_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE2_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$NR_DATADIR" "$CORE_DATADIR" "$CORE2_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -144,11 +138,12 @@ skip() {
 
 # ── Free a TCP port and POLL until it is actually free. ───────────────────
 free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -159,6 +154,15 @@ pkill -f "csidx-nimrod" 2>/dev/null || true
 free_port "$NR_RPC";    free_port "$NR_P2P"
 free_port "$CORE_RPC";  free_port "$CORE_P2P"
 free_port "$CORE2_RPC"; free_port "$CORE2_P2P"
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${NR_RPC}|${NR_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE2_RPC}|${CORE2_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${NR_RPC}|${NR_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE2_RPC}|${CORE2_P2P}) "; then
+    fail "port ${NR_RPC}/${NR_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE2_RPC}/${CORE2_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$NR_DATADIR" "$CORE_DATADIR" "$CORE2_DATADIR"
 mkdir -p "$NR_DATADIR" "$CORE_DATADIR" "$CORE2_DATADIR"
 

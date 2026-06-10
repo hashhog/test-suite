@@ -46,13 +46,13 @@
 #   FAIL: GETRAWTRANSACTION ouroboros: FAIL <short reason>
 #
 # Touches ONLY /tmp/grt-ouroboros-impl + /tmp/grt-ouroboros-core and ports
-#   40112/40132 (ouroboros RPC/P2P) + 40122/40142 (Core RPC/P2P). The datadir
+#   22012/22032 (ouroboros RPC/P2P) + 22022/22042 (Core RPC/P2P). The datadir
 #   names + the reset/cleanup scoping are keyed to "grt-ouroboros" so this test
 #   runs SAFELY in parallel with the sibling per-impl getrawtransaction tests
 #   (which share the generic /tmp/grt-core scratch).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #
-# Any fuser -k redirects stdout (it prints killed PIDs to STDOUT).
+# Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -69,13 +69,13 @@ OURO_DIR="$REPO_ROOT/ouroboros"
 # with — or rm -rf — a sibling per-impl test's scratch (e.g. the generic
 # /tmp/grt-core shared by other rawtx tests).
 OU_DATADIR="/tmp/grt-ouroboros-impl"
-OU_RPC=40112
-OU_P2P=40132
+OU_RPC=22012
+OU_P2P=22032
 OU_LOG="$OU_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/grt-ouroboros-core"
-CORE_RPC=40122
-CORE_P2P=40142
+CORE_RPC=22022
+CORE_P2P=22042
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test keypair (privkey 0x11..11). We mine coinbase rewards to
@@ -110,11 +110,6 @@ cleanup() {
     # Scope process kills to OUR datadirs only — never a sibling test's.
     pkill -9 -f "grt-ouroboros-impl" >/dev/null 2>&1 || true
     pkill -9 -f "grt-ouroboros-core" >/dev/null 2>&1 || true
-    fuser -k "${OU_RPC}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${OU_P2P}/tcp"         >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"       >/dev/null 2>&1 || true
-    fuser -k "$((CORE_P2P + 1))/tcp" >/dev/null 2>&1 || true
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -194,11 +189,15 @@ for _ in $(seq 1 10); do
 done
 pkill -9 -f "grt-ouroboros-impl" 2>/dev/null || true
 pkill -9 -f "grt-ouroboros-core" 2>/dev/null || true
-fuser -k "${OU_RPC}/tcp"         >/dev/null 2>&1 || true
-fuser -k "${OU_P2P}/tcp"         >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp"       >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp"       >/dev/null 2>&1 || true
-fuser -k "$((CORE_P2P + 1))/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P}/$((CORE_P2P + 1)) already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 2
 rm -rf "$OU_DATADIR" "$CORE_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR"

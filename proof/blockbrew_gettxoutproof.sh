@@ -63,7 +63,7 @@
 #   GAP : GETTXOUTPROOF blockbrew: FAIL blockbrew binary not found ...  (GAP_RE -> runner SKIP)
 #
 # Touches ONLY /tmp/proof-blockbrew/ + /tmp/proof-core-bb/ and ports
-#   40413/40433 (blockbrew RPC/P2P), 40415/40435 (Core RPC/P2P).
+#   22313/22333 (blockbrew RPC/P2P), 22315/22335 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Core is launched -listen=0 (RPC only): the sandbox SIGKILLs any bitcoind
 #   binding a 0.0.0.0 P2P listener ~2s after load.
@@ -77,15 +77,15 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 BB_DATADIR="/tmp/proof-blockbrew"
-BB_RPC=40413
-BB_P2P=40433
+BB_RPC=22313
+BB_P2P=22333
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 BB_COOKIE_FILE="$BB_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/proof-core-bb"
-CORE_RPC=40415
-CORE_P2P=40435
+CORE_RPC=22315
+CORE_P2P=22335
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS_MINE=120     # mature coinbase funds for the wallet spend
@@ -111,10 +111,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -188,10 +184,9 @@ PY
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"

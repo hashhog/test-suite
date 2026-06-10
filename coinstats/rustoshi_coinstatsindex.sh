@@ -46,9 +46,9 @@
 #   COINSTATSINDEX rustoshi: SKIP <reason>     # only for a missing/unbuilt binary
 #
 # Touches ONLY /tmp/csidx-rustoshi/ + /tmp/csidx-core/ and ports
-#   40370/40390 (rustoshi RPC/P2P) + 40372/40392 (Core RPC; P2P unused, -listen=0).
+#   22270/22290 (rustoshi RPC/P2P) + 22272/22292 (Core RPC; P2P unused, -listen=0).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Does NOT
-#   broad-pkill bitcoind by name. Any `fuser -k` redirects stdout.
+#   broad-pkill bitcoind by name. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -60,19 +60,19 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
 RS_DATADIR="/tmp/csidx-rustoshi/$$"
-RS_RPC=40370
-RS_P2P=40390
+RS_RPC=22270
+RS_P2P=22290
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/csidx-core/$$"
-CORE_RPC=40372
-CORE_P2P=40392   # declared but Core launched -listen=0 (no P2P listener)
+CORE_RPC=22272
+CORE_P2P=22292   # declared but Core launched -listen=0 (no P2P listener)
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # A SECOND Core datadir/instance is used for the DISABLED-index ERROR gate so
 # the main oracle keeps its index intact.
 CORE2_DATADIR="/tmp/csidx-core2/$$"
-CORE2_RPC=40374
+CORE2_RPC=22274
 CORE2_LOG="$CORE2_DATADIR/core2.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to.
@@ -110,11 +110,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]]  && kill "$CORE_BG"  2>/dev/null || true
     [[ -n "$CORE2_BG" ]] && kill "$CORE2_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp"    >/dev/null 2>&1 || true
-    fuser -k "${RS_P2P}/tcp"    >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"  >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"  >/dev/null 2>&1 || true
-    fuser -k "${CORE2_RPC}/tcp" >/dev/null 2>&1 || true
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" "$CORE2_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -149,11 +144,9 @@ wait_port_free() {
 # ── 0. Idempotent reset (own ports + own PID scratch only). ───────────────
 log "resetting scratch state (pid=$$)"
 pkill -f "csidx-rustoshi/$$" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp"    >/dev/null 2>&1 || true
-fuser -k "${RS_P2P}/tcp"    >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp"  >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp"  >/dev/null 2>&1 || true
-fuser -k "${CORE2_RPC}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE2_RPC}) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE2_RPC} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 wait_port_free "$RS_RPC"; wait_port_free "$RS_P2P"
 wait_port_free "$CORE_RPC"; wait_port_free "$CORE_P2P"; wait_port_free "$CORE2_RPC"
 rm -rf "$RS_DATADIR" "$CORE_DATADIR" "$CORE2_DATADIR"
@@ -227,8 +220,18 @@ rs_field()  { jpy "$(rs_rpc "$1" "$2")" "d['result']['$3']"; }
 
 # ── 3. Launch the Core regtest oracle (-listen=0, -coinstatsindex=1 -txindex=1).
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     wait_port_free "$CORE_RPC"
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \

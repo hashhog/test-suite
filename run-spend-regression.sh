@@ -59,7 +59,7 @@ for impl in $IMPLS; do
   fi
   log="$LOGDIR/${impl}.log"
   tmpout="$(mktemp)"
-  # setsid -w: own session/process group so a per-test cleanup trap (fuser -k / pkill) can
+  # setsid -w: own session/process group so a per-test cleanup trap (pkill) can
   # never signal this runner. Do NOT capture via out=$(bash "$script") — that reintroduces
   # the same-process-group footgun (see the recovery runner's camlcoin exit-144 note).
   setsid -w bash "$script" >"$tmpout" 2>"$log"; rc=$?

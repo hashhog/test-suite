@@ -47,15 +47,15 @@
 #   FAIL: IMPORT clearbit: FAIL <short reason>
 # Green REQUIRES rescan=ok (exit 0). Any rescan failure -> FAIL (exit 1).
 #
-# Touches ONLY /tmp/importfleet-clearbit/ and ports 39817 (RPC) / 39837 (P2P).
+# Touches ONLY /tmp/importfleet-clearbit/ and ports 21717 (RPC) / 21737 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
 
 # ── Config ───────────────────────────────────────────────────────────────
 IMPL="clearbit"
-RPC_PORT=39817
-P2P_PORT=39837
+RPC_PORT=21717
+P2P_PORT=21737
 DATADIR="/tmp/importfleet-clearbit"
 NETDIR="$DATADIR/regtest"          # clearbit appends the network subdir
 COOKIE_FILE="$NETDIR/.cookie"
@@ -85,8 +85,15 @@ log() { echo "[import] $*" >&2; }
 
 # ── Cleanup trap: always kill node + wipe scratch datadir on any exit. ─────
 kill_port() {
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+    # Port-kill removed (2026-06-10 fuser incident): wait briefly for OUR ports to be
+    # released after the PID-scoped kill. NEVER kills by port.
+    local __hp
+    for __hp in "$RPC_PORT" "$P2P_PORT"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
 }
 cleanup() {
     local ec=$?
@@ -147,6 +154,9 @@ sys.exit(0 if abs(a - b) < 1e-6 else 1)
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
 kill_port
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR" || fail "cannot create scratch $DATADIR"

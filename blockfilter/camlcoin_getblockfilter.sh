@@ -62,7 +62,7 @@
 #   SKIP: GETBLOCKFILTER camlcoin: SKIP <no filter index>
 #
 # Touches ONLY /tmp/gbf-camlcoin/ + /tmp/gbf-core-camlcoin/ and ports
-#   40235/40255 (camlcoin RPC/P2P) + 40237/40257 (Core RPC/P2P).
+#   22135/22155 (camlcoin RPC/P2P) + 22137/22157 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may be running);
 #   only frees its OWN fixed ports + scratch dir.
@@ -77,15 +77,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key + raw-tx builders)
 
 CC_DATADIR="/tmp/gbf-camlcoin"
-CC_RPC=40235
-CC_P2P=40255
+CC_RPC=22135
+CC_P2P=22155
 CC_LOG="$CC_DATADIR/node.log"
 CC_COOKIE=""
 CC_PID=""
 
 CORE_DATADIR="/tmp/gbf-core-camlcoin"
-CORE_RPC=40237
-CORE_P2P=40257
+CORE_RPC=22137
+CORE_P2P=22157
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -113,10 +113,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -129,10 +125,9 @@ skip() { echo "GETBLOCKFILTER camlcoin: SKIP $*"; exit 0; }
 
 # ── 0. Idempotent reset (OWN ports only). ─────────────────────────────────
 log "resetting scratch state"
-fuser -k "${CC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CC_RPC}/${CC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$CC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CC_DATADIR" "$CORE_DATADIR"
@@ -194,8 +189,18 @@ cc_field() { jpy "$(cc_rpc "$1" "$2")" "d['result']['$3']"; }
 
 # ── 2. Launch the Core regtest oracle with -blockfilterindex=basic. ───────
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     # NOTE: do NOT pass -port. Even with -listen=0, supplying an explicit P2P
     # -port makes the sandbox watchdog SIGKILL bitcoind a few seconds after
@@ -230,8 +235,18 @@ log "Core oracle ready (pid=$CORE_BG)"
 # a 9332 collision with any other camlcoin instance.
 launch_cc_once() {
     CC_COOKIE=""
-    fuser -k "${CC_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CC_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CC_PID:-}" ]]; then
+        kill "$CC_PID" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CC_PID" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CC_PID" 2>/dev/null || true
+    fi
+    for __hp in "${CC_RPC}" "${CC_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CC_DATADIR"; mkdir -p "$CC_DATADIR"
     "$NODE_BIN" --network regtest --datadir "$CC_DATADIR" \
         --port "$CC_P2P" --rpcport "$CC_RPC" --metricsport 0 \

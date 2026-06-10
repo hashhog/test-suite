@@ -52,8 +52,8 @@
 #   SKIP: GETTXOUTPROOF beamchain: FAIL beamchain release binary not found ...
 #         (GAP_RE-compatible 'not found'/'not built' so the runner can SKIP)
 #
-# Touches ONLY /tmp/proof-beamchain{,-core}/ and ports 40226/40246 (beamchain
-#   RPC/P2P) + 40228/40248 (Core RPC/P2P). NEVER touches /data/nvme1/ or
+# Touches ONLY /tmp/proof-beamchain{,-core}/ and ports 22126/22146 (beamchain
+#   RPC/P2P) + 22128/22148 (Core RPC/P2P). NEVER touches /data/nvme1/ or
 #   testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -66,13 +66,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/addr)
 
 BC_DATADIR="/tmp/proof-beamchain"
-BC_RPC=40226
-BC_P2P=40246
+BC_RPC=22126
+BC_P2P=22146
 BC_LOG="$BC_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/proof-beamchain-core"
-CORE_RPC=40228
-CORE_P2P=40248
+CORE_RPC=22128
+CORE_P2P=22148
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Fixed deterministic test secret -> one p2wpkh regtest address the coinbases
@@ -105,10 +105,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -158,10 +154,9 @@ PYEOF
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"
@@ -209,8 +204,18 @@ wait_core_ready() {
 # locate any confirmed tx without a wallet. Wrapped in a small retry loop to
 # ride out a transient sandbox kill at startup.
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \
         -bind="127.0.0.1:$CORE_P2P" -txindex -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &

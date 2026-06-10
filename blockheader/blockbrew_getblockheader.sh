@@ -58,7 +58,7 @@
 #   FAIL: GETBLOCKHEADER blockbrew: FAIL <short reason>
 #
 # Touches ONLY /tmp/gbh-blockbrew/ + /tmp/gbh-core/ and ports
-#   40153/40173 (blockbrew RPC/P2P) + 40155/40175 (Core RPC/P2P).
+#   22053/22073 (blockbrew RPC/P2P) + 22055/22075 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -71,15 +71,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 BB_DATADIR="/tmp/gbh-blockbrew"
-BB_RPC=40153
-BB_P2P=40173
+BB_RPC=22053
+BB_P2P=22073
 BB_LOG="$BB_DATADIR/node.log"
 BB_COOKIE=""
 BB_PID=""
 
 CORE_DATADIR="/tmp/gbh-core"
-CORE_RPC=40155
-CORE_P2P=40175
+CORE_RPC=22055
+CORE_P2P=22075
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -108,10 +108,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -131,10 +127,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gbh-blockbrew" 2>/dev/null || true
-fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"
@@ -207,8 +208,18 @@ bb_errcode() { jpy "$(bb_rpc "$1" "$2")" "d['error']['code']"; }
 # load, so launch with -listen=0 (RPC-only is fine). Retry up to 3 times on a
 # fresh datadir to absorb crossing port-cleanup / cookie races.
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \
         -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &
@@ -244,7 +255,18 @@ log "Core oracle ready (pid=$CORE_BG)"
 # sandbox can OOM/SIGKILL a freshly-launched node during its startup window.
 launch_bb_once() {
     BB_COOKIE=""
-    fuser -k "${BB_RPC}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${BB_PID:-}" ]]; then
+        kill "$BB_PID" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$BB_PID" 2>/dev/null || break; sleep 1; done
+        kill -9 "$BB_PID" 2>/dev/null || true
+    fi
+    for __hp in "${BB_RPC}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$BB_DATADIR"; mkdir -p "$BB_DATADIR"
     "$NODE_BIN" -network=regtest -datadir="$BB_DATADIR" \
         -rpcbind="127.0.0.1:$BB_RPC" -nolisten \

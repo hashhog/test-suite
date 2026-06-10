@@ -51,8 +51,8 @@
 #   FAIL: GETTXOUTSETINFO haskoin: FAIL <short reason>
 #   SKIP: GETTXOUTSETINFO haskoin: SKIP <reason>
 #
-# Touches ONLY /tmp/gtxo-haskoin/ + /tmp/gtxo-core/ and ports 40279/40299
-#   (haskoin RPC/P2P) + 40281/40301 (Core RPC/P2P).
+# Touches ONLY /tmp/gtxo-haskoin/ + /tmp/gtxo-core/ and ports 22179/22199
+#   (haskoin RPC/P2P) + 22181/22201 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node; never
 #   broad-pkills bitcoind by name (a live mainnet bitcoind may be running).
 
@@ -71,15 +71,15 @@ HK_BIN="$(find "$HK_DIR/dist-newstyle" -name haskoin -type f -executable 2>/dev/
 export LD_LIBRARY_PATH="/home/work/.local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 HK_DATADIR="/tmp/gtxo-haskoin"
-HK_RPC=40279
-HK_P2P=40299
+HK_RPC=22179
+HK_P2P=22199
 HK_LOG="$HK_DATADIR/node.log"
 HK_COOKIE=""
 HK_PID=""
 
 CORE_DATADIR="/tmp/gtxo-core"
-CORE_RPC=40281
-CORE_P2P=40301
+CORE_RPC=22181
+CORE_P2P=22201
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -97,11 +97,12 @@ log() { echo "[gettxoutsetinfo:haskoin] $*" >&2; }
 
 # ── free_port: kill OUR port holder and POLL until the socket is free. ─────
 free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -150,6 +151,9 @@ free_port "$HK_RPC"
 free_port "$HK_P2P"
 free_port "$CORE_RPC"
 free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HK_RPC}/${HK_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$HK_DATADIR" "$CORE_DATADIR"
 mkdir -p "$HK_DATADIR" "$CORE_DATADIR"
 

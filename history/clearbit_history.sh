@@ -40,15 +40,15 @@
 #   PASS: HISTORY clearbit: PASS sent_entry=yes recv_entries=<n> gettx=ok
 #   FAIL: HISTORY clearbit: FAIL <short reason>
 #
-# Touches ONLY /tmp/histfleet-clearbit/ and ports 39767 (RPC) / 39787 (P2P).
+# Touches ONLY /tmp/histfleet-clearbit/ and ports 21667 (RPC) / 21687 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
 
 # ── Config ───────────────────────────────────────────────────────────────
 IMPL="clearbit"
-RPC_PORT=39767
-P2P_PORT=39787
+RPC_PORT=21667
+P2P_PORT=21687
 DATADIR="/tmp/histfleet-clearbit"
 NETDIR="$DATADIR/regtest"          # clearbit appends the network subdir
 COOKIE_FILE="$NETDIR/.cookie"
@@ -81,8 +81,15 @@ log() { echo "[history] $*" >&2; }
 
 # ── Cleanup trap: always kill node + wipe scratch datadir on any exit. ─────
 kill_port() {
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+    # Port-kill removed (2026-06-10 fuser incident): wait briefly for OUR ports to be
+    # released after the PID-scoped kill. NEVER kills by port.
+    local __hp
+    for __hp in "$RPC_PORT" "$P2P_PORT"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
 }
 cleanup() {
     local ec=$?
@@ -139,6 +146,9 @@ entry_for_txid() {
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
 kill_port
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"
 

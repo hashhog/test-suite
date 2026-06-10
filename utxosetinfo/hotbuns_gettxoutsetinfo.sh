@@ -64,11 +64,10 @@
 #   SKIP: GETTXOUTSETINFO hotbuns: SKIP <reason>
 #
 # Touches ONLY /tmp/gtxo-hotbuns/ + /tmp/gtxo-hotbuns-core/ and ports
-#   40274/40294 (hotbuns RPC/P2P) + 40276/40296 (Core RPC/P2P).
+#   22174/22194 (hotbuns RPC/P2P) + 22176/22196 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Does NOT
 #   broad-pkill bitcoind by name (a live mainnet bitcoind may be running) —
-#   only frees its OWN fixed ports / scratch dir. Every `fuser -k` redirects
-#   stdout: `fuser -k "<port>/tcp" >/dev/null 2>&1`.
+#   only frees its OWN fixed ports / scratch dir. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -80,13 +79,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/addr/WIF)
 
 HB_DATADIR="/tmp/gtxo-hotbuns"
-HB_RPC=40274
-HB_P2P=40294
+HB_RPC=22174
+HB_P2P=22194
 HB_LOG="/tmp/gtxo-hotbuns-node.log"               # outside the trap-wiped datadir
 
 CORE_DATADIR="/tmp/gtxo-hotbuns-core"
-CORE_RPC=40276
-CORE_P2P=40296
+CORE_RPC=22176
+CORE_P2P=22196
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic mining key -> p2wpkh coinbase outputs we can later spend.
@@ -108,11 +107,10 @@ log() { echo "[gettxoutsetinfo:hotbuns] $*" >&2; }
 
 # ── Port-free poll: wait until a TCP port is actually free. ───────────────
 wait_port_free() {
-    local port="$1" deadline=$(( $(date +%s) + 20 ))
-    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
-    while (( $(date +%s) < deadline )); do
-        fuser "${port}/tcp" >/dev/null 2>&1 || return 0
-        fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): NEVER kills by port.
+    local port="$1"
+    for _ in $(seq 1 30); do
+        ss -tln 2>/dev/null | grep -qE ":${port} " || return 0
         sleep 1
     done
     return 0
@@ -134,11 +132,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    # Free ONLY our own ports — never broad-pkill bitcoind by name.
-    fuser -k "${HB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${HB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HB_DATADIR" "$CORE_DATADIR" "$HB_LOG" 2>/dev/null || true
     return $ec
 }
@@ -155,6 +148,9 @@ wait_port_free "$HB_RPC"
 wait_port_free "$HB_P2P"
 wait_port_free "$CORE_RPC"
 wait_port_free "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HB_RPC}/${HB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$HB_DATADIR" "$CORE_DATADIR" "$HB_LOG"
 mkdir -p "$HB_DATADIR" "$CORE_DATADIR"
 

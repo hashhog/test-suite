@@ -52,8 +52,8 @@
 #   PASS: GETNODEADDRESSES rustoshi: PASS shape=ok errors=ok count=ok netfilter=ok
 #   FAIL: GETNODEADDRESSES rustoshi: FAIL <short reason>
 #
-# Touches ONLY /tmp/gna-rustoshi/ + /tmp/gna-core/ and ports 40070/40090
-#   (rustoshi RPC/P2P) + 40072/40092 (Core RPC/P2P).
+# Touches ONLY /tmp/gna-rustoshi/ + /tmp/gna-core/ and ports 21970/21990
+#   (rustoshi RPC/P2P) + 21972/21992 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -65,13 +65,13 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 RS_DATADIR="/tmp/gna-rustoshi"
-RS_RPC=40070
-RS_P2P=40090
+RS_RPC=21970
+RS_P2P=21990
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gna-core"
-CORE_RPC=40072
-CORE_P2P=40092
+CORE_RPC=21972
+CORE_P2P=21992
 CORE_LOG="$CORE_DATADIR/core.log"
 
 RS_PID=""
@@ -96,10 +96,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${RS_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -128,10 +124,15 @@ core_rpc() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gna-rustoshi" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${RS_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$RS_DATADIR" "$CORE_DATADIR"
 mkdir -p "$RS_DATADIR" "$CORE_DATADIR"

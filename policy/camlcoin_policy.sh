@@ -78,7 +78,7 @@
 #   PASS: POLICY camlcoin: PASS dust=ok version=ok min-relay=ok control=accept bare-multisig=ok-default op_return=ok-default
 #   FAIL: POLICY camlcoin: FAIL <short reason> [dust=.. version=.. ...]
 #
-# Touches ONLY /tmp/policyfleet-camlcoin/ and ports 39945 (RPC) / 39965 (P2P).
+# Touches ONLY /tmp/policyfleet-camlcoin/ and ports 21845 (RPC) / 21865 (P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -89,8 +89,8 @@ NODE_BIN="$BASEDIR/camlcoin/_build/default/bin/main.exe"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx builders)
 
 CC_DATADIR="/tmp/policyfleet-camlcoin"
-CC_RPC=39945
-CC_P2P=39965
+CC_RPC=21845
+CC_P2P=21865
 CC_LOG="$CC_DATADIR/node.log"
 
 # Fixed deterministic test secret (32 bytes) -> one p2wpkh keypair the whole
@@ -114,8 +114,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$CC_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$CC_PID" 2>/dev/null || true
     fi
-    fuser -k "${CC_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CC_P2P}/tcp" 2>/dev/null || true
     rm -rf "$CC_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -166,8 +164,15 @@ ORACLE_CAT[oversize-op_return]=datacarrier ; ORACLE_DEFAULT[oversize-op_return]=
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state ($CC_DATADIR, ports $CC_RPC/$CC_P2P)"
 pkill -f "policyfleet-camlcoin" 2>/dev/null || true
-fuser -k "${CC_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CC_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}) "; then
+    fail "port ${CC_RPC}/${CC_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$CC_DATADIR"
 mkdir -p "$CC_DATADIR"

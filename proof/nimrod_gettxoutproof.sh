@@ -74,11 +74,10 @@
 #   (binary missing -> a GAP_RE-compatible 'not found'/'not built' message so the
 #    runner classifies a missing nimrod build as SKIP, not a real failure)
 #
-# Touches ONLY /tmp/gtop-nimrod/ + /tmp/gtop-nimrod-core/ and ports 40211/40231
-#   (nimrod) + 40213/40233 (Core). NEVER touches /data/nvme1/ or testnet4-data/
+# Touches ONLY /tmp/gtop-nimrod/ + /tmp/gtop-nimrod-core/ and ports 22111/22131
+#   (nimrod) + 22113/22133 (Core). NEVER touches /data/nvme1/ or testnet4-data/
 #   or any live node. A live mainnet bitcoind may be running: we NEVER pkill
-#   bitcoind by name — only free our OWN fixed ports / scratch. Any `fuser -k`
-#   redirects stdout (it prints killed PIDs).
+#   bitcoind by name — only free our OWN fixed ports / scratch. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -91,15 +90,15 @@ BITCOINCLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"     # test_framework: key/script/tx
 
 NM_DATADIR="/tmp/gtop-nimrod"
-NM_RPC=40211
-NM_P2P=40231
+NM_RPC=22111
+NM_P2P=22131
 NM_LOG="$NM_DATADIR/node.log"
 NM_COOKIE_FILE="$NM_DATADIR/regtest/.cookie"
 NM_URL="http://127.0.0.1:$NM_RPC"
 
 CORE_DATADIR="/tmp/gtop-nimrod-core"
-CORE_RPC=40213
-CORE_P2P=40233
+CORE_RPC=22113
+CORE_P2P=22133
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS_MINE=110       # mature a coinbase (regtest maturity = 100) with margin
@@ -136,10 +135,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$NM_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$NM_PID" 2>/dev/null || true
     fi
-    fuser -k "${NM_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${NM_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$NM_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -176,10 +171,15 @@ PY
 log "resetting scratch state"
 pkill -f "gtop-nimrod-core" >/dev/null 2>&1 || true
 pkill -f "gtop-nimrod"      >/dev/null 2>&1 || true
-fuser -k "${NM_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${NM_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${NM_RPC}/${NM_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$NM_DATADIR" "$CORE_DATADIR"
 mkdir -p "$NM_DATADIR" "$CORE_DATADIR"

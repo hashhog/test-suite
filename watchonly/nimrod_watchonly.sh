@@ -19,7 +19,7 @@
 # ("not found"/"cannot boot"); missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY nimrod: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-nimrod/ and ports 41401 (RPC) / 41421
+# Touches ONLY /tmp/hashhog-wofleet-nimrod/ and ports 21401 (RPC) / 21421
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

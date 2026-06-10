@@ -62,8 +62,8 @@
 #   FAIL: POLICY ouroboros: FAIL <short reason> [dust=.. version=.. ...]
 #
 # Touches ONLY /tmp/policyfleet-ouroboros/ + /tmp/policyfleet-core-{strict,def}/
-#   and ports 39942/39962 (ouroboros RPC/P2P), 39943/39963 (strict Core),
-#   39944/39964 (default Core).
+#   and ports 21842/21862 (ouroboros RPC/P2P), 21843/21863 (strict Core),
+#   21844/21864 (default Core).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -81,18 +81,18 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OURO_DIR="$REPO_ROOT/ouroboros"
 
 OU_DATADIR="/tmp/policyfleet-ouroboros"
-OU_RPC=39942
-OU_P2P=39962
+OU_RPC=21842
+OU_P2P=21862
 OU_LOG="$OU_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/policyfleet-core-strict"
-CORE_RPC=39943
-CORE_P2P=39965    # Core auto-binds P2P+1 (onion listener); keep all P2P ports
-CORE_LOG="$CORE_DATADIR/core.log"   # >= 2 apart and clear of ouroboros 39962.
+CORE_RPC=21843
+CORE_P2P=21865    # Core auto-binds P2P+1 (onion listener); keep all P2P ports
+CORE_LOG="$CORE_DATADIR/core.log"   # >= 2 apart and clear of ouroboros 21862.
 
 CORE_DEF_DATADIR="/tmp/policyfleet-core-def"
-CORE_DEF_RPC=39944
-CORE_DEF_P2P=39967    # P2P+1 = 39968; no collision with strict's 39965/39966.
+CORE_DEF_RPC=21844
+CORE_DEF_P2P=21867    # P2P+1 = 21868; no collision with strict's 21865/21866.
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 # Strict-policy flags so EVERY corpus violation rejects on the primary oracle.
@@ -131,14 +131,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
-    fuser -k "${OU_RPC}/tcp"            2>/dev/null || true
-    fuser -k "${OU_P2P}/tcp"            2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"          2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"          2>/dev/null || true
-    fuser -k "$((CORE_P2P + 1))/tcp"    2>/dev/null || true   # Core onion listener (P2P+1)
-    fuser -k "${CORE_DEF_RPC}/tcp"      2>/dev/null || true
-    fuser -k "${CORE_DEF_P2P}/tcp"      2>/dev/null || true
-    fuser -k "$((CORE_DEF_P2P + 1))/tcp" 2>/dev/null || true  # Core onion listener (P2P+1)
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -175,14 +167,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "policyfleet-ouroboros" 2>/dev/null || true
-fuser -k "${OU_RPC}/tcp"            2>/dev/null || true
-fuser -k "${OU_P2P}/tcp"            2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"          2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"          2>/dev/null || true
-fuser -k "$((CORE_P2P + 1))/tcp"    2>/dev/null || true
-fuser -k "${CORE_DEF_RPC}/tcp"      2>/dev/null || true
-fuser -k "${CORE_DEF_P2P}/tcp"      2>/dev/null || true
-fuser -k "$((CORE_DEF_P2P + 1))/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))|${CORE_DEF_RPC}|${CORE_DEF_P2P}|$((CORE_DEF_P2P + 1))) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))|${CORE_DEF_RPC}|${CORE_DEF_P2P}|$((CORE_DEF_P2P + 1))) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P}/$((CORE_P2P + 1))/${CORE_DEF_RPC}/${CORE_DEF_P2P}/$((CORE_DEF_P2P + 1)) already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$OU_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"

@@ -43,7 +43,7 @@
 #   PASS: HISTORY rustoshi: PASS sent_entry=yes recv_entries=<n> gettx=ok
 #   FAIL: HISTORY rustoshi: FAIL <short reason>
 #
-# Touches ONLY /tmp/histfleet-rustoshi/ and ports 39760 (RPC) / 39780 (P2P).
+# Touches ONLY /tmp/histfleet-rustoshi/ and ports 21660 (RPC) / 21680 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -52,8 +52,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 BIN="$BASEDIR/rustoshi/target/release/rustoshi"
 DATADIR="/tmp/histfleet-rustoshi"
-RPC_PORT=39760
-P2P_PORT=39780
+RPC_PORT=21660
+P2P_PORT=21680
 LOG="$DATADIR/node.log"
 
 # FIXED 64-byte master seed (128 hex chars) — the same seed the recovery +
@@ -97,8 +97,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -139,8 +137,9 @@ btc_to_sats() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR" || fail "cannot create scratch datadir $DATADIR"

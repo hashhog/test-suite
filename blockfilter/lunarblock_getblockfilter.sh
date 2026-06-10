@@ -59,7 +59,7 @@
 #   SKIP: GETBLOCKFILTER lunarblock: SKIP <no filter index>
 #
 # Touches ONLY /tmp/gbf-lunarblock + /tmp/gbf-core and ports
-#   40238/40258 (lunarblock RPC/P2P) + 40236/40256 (Core RPC/P2P).
+#   22138/22158 (lunarblock RPC/P2P) + 22136/22156 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Never
 #   broad-pkills bitcoind; only frees its OWN fixed ports / scratch dir.
 
@@ -72,13 +72,13 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 LB_DATADIR="/tmp/gbf-lunarblock"
-LB_RPC=40238
-LB_P2P=40258
+LB_RPC=22138
+LB_P2P=22158
 LB_LOG="$LB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gbf-core"
-CORE_RPC=40236
-CORE_P2P=40256
+CORE_RPC=22136
+CORE_P2P=22156
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Chain shape: 1 OP_TRUE coinbase block, then 100 maturity blocks, then 1
@@ -108,10 +108,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${LB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${LB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$LB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -135,10 +131,15 @@ skip() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gbf-lunarblock" 2>/dev/null || true
-fuser -k "${LB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${LB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${LB_RPC}/${LB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"
@@ -245,8 +246,18 @@ except Exception:
 
 # ── 2. Launch the Core regtest oracle (-blockfilterindex=basic, -listen=0). ─
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \
         -listen=0 -blockfilterindex=basic -acceptnonstdtxn=1 -fallbackfee=0.0002 \

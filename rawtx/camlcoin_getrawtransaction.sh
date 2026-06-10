@@ -69,7 +69,7 @@
 #   FAIL: GETRAWTRANSACTION camlcoin: FAIL <short reason>
 #
 # Touches ONLY /tmp/grt-camlcoin/ + /tmp/grt-core-camlcoin/ and ports
-#   40115/40135 (camlcoin RPC/P2P) + 40113/40133 (Core RPC/P2P).
+#   22015/22035 (camlcoin RPC/P2P) + 22013/22033 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -81,13 +81,13 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 CC_DATADIR="/tmp/grt-camlcoin"
-CC_RPC=40115
-CC_P2P=40135
+CC_RPC=22015
+CC_P2P=22035
 CC_LOG="$CC_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/grt-core-camlcoin"
-CORE_RPC=40113
-CORE_P2P=40133
+CORE_RPC=22013
+CORE_P2P=22033
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # regtest genesis coinbase txid (== genesis merkle root), DISPLAY byte order.
@@ -105,10 +105,10 @@ log() { echo "[getrawtransaction:camlcoin] $*" >&2; }
 
 # ── Wait (up to ~30s) for a TCP port to become free before binding. ────────
 wait_port_free() {  # wait_port_free <port>
-    local port="$1" i
-    for i in $(seq 1 30); do
-        if ! ss -ltn 2>/dev/null | grep -q ":${port} "; then return 0; fi
-        fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): NEVER kills by port.
+    local port="$1"
+    for _ in $(seq 1 30); do
+        ss -tln 2>/dev/null | grep -qE ":${port} " || return 0
         sleep 1
     done
     return 1
@@ -128,10 +128,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -150,10 +146,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "grt-camlcoin" >/dev/null 2>&1 || true
-fuser -k "${CC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CC_RPC}/${CC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$CC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CC_DATADIR" "$CORE_DATADIR"

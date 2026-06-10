@@ -40,8 +40,8 @@
 #   PASS: GETNODEADDRESSES blockbrew: PASS shape=ok errors=ok count=ok netfilter=ok
 #   FAIL: GETNODEADDRESSES blockbrew: FAIL <short reason>
 #
-# Touches ONLY /tmp/gna-blockbrew/ + /tmp/gna-core-bb/ and ports 40073/40093
-#   (blockbrew RPC/P2P) + 40075/40095 (Core RPC/P2P).
+# Touches ONLY /tmp/gna-blockbrew/ + /tmp/gna-core-bb/ and ports 21973/21993
+#   (blockbrew RPC/P2P) + 21975/21995 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -53,15 +53,15 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 BB_DATADIR="/tmp/gna-blockbrew"
-BB_RPC=40073
-BB_P2P=40093
+BB_RPC=21973
+BB_P2P=21993
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 BB_COOKIE_FILE="$BB_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/gna-core-bb"
-CORE_RPC=40075
-CORE_P2P=40095
+CORE_RPC=21975
+CORE_P2P=21995
 CORE_LOG="$CORE_DATADIR/core.log"
 
 BB_PID=""
@@ -85,10 +85,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${BB_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -115,7 +111,9 @@ log "resetting scratch state"
 # then vanish mid-test). Then SIGKILL any remaining holder of our fixed ports.
 "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" stop >/dev/null 2>&1 || true
 for p in "$BB_RPC" "$BB_P2P" "$CORE_RPC" "$CORE_P2P"; do
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
+    if ss -tln 2>/dev/null | grep -qE ":(${p}) "; then
+        fail "port ${p} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+    fi
 done
 for _ in $(seq 1 20); do
     busy=0

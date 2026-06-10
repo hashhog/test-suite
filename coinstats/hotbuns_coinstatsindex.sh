@@ -49,8 +49,8 @@
 #   COINSTATSINDEX hotbuns: SKIP <reason>
 #
 # Touches ONLY /tmp/csidx-hotbuns/ + /tmp/csidx-hotbuns-core/ +
-#   /tmp/csidx-hotbuns-coredis/ and ports 40474/40494 (hotbuns RPC/P2P) +
-#   40476/40496 (Core oracle RPC/P2P) + 40478/40498 (Core disabled-index probe).
+#   /tmp/csidx-hotbuns-coredis/ and ports 22374/22394 (hotbuns RPC/P2P) +
+#   22376/22396 (Core oracle RPC/P2P) + 22378/22398 (Core disabled-index probe).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Does NOT
 #   broad-pkill bitcoind by name — only frees its OWN fixed ports / scratch dir.
 
@@ -64,20 +64,20 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/addr/WIF)
 
 HB_DATADIR="/tmp/csidx-hotbuns"
-HB_RPC=40474
-HB_P2P=40494
+HB_RPC=22374
+HB_P2P=22394
 HB_LOG="/tmp/csidx-hotbuns-node.log"               # outside the trap-wiped datadir
 
 CORE_DATADIR="/tmp/csidx-hotbuns-core"
-CORE_RPC=40476
-CORE_P2P=40496
+CORE_RPC=22376
+CORE_P2P=22396
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Separate Core instance with coinstatsindex DISABLED, for the ERROR gate. Its
 # own datadir/ports so it never collides with the main oracle.
 CORED_DATADIR="/tmp/csidx-hotbuns-coredis"
-CORED_RPC=40478
-CORED_P2P=40498
+CORED_RPC=22378
+CORED_P2P=22398
 CORED_LOG="$CORED_DATADIR/core.log"
 
 # Deterministic mining key -> p2wpkh coinbase outputs we can later spend.
@@ -106,11 +106,10 @@ log() { echo "[coinstatsindex:hotbuns] $*" >&2; }
 
 # ── Port-free poll: wait until a TCP port is actually free. ───────────────
 wait_port_free() {
-    local port="$1" deadline=$(( $(date +%s) + 20 ))
-    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
-    while (( $(date +%s) < deadline )); do
-        fuser "${port}/tcp" >/dev/null 2>&1 || return 0
-        fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): NEVER kills by port.
+    local port="$1"
+    for _ in $(seq 1 30); do
+        ss -tln 2>/dev/null | grep -qE ":${port} " || return 0
         sleep 1
     done
     return 0
@@ -135,13 +134,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG"  ]] && kill "$CORE_BG"  2>/dev/null || true
     [[ -n "$CORED_BG" ]] && kill "$CORED_BG" 2>/dev/null || true
-    # Free ONLY our own ports — never broad-pkill bitcoind by name.
-    fuser -k "${HB_RPC}/tcp"    >/dev/null 2>&1 || true
-    fuser -k "${HB_P2P}/tcp"    >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"  >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"  >/dev/null 2>&1 || true
-    fuser -k "${CORED_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORED_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HB_DATADIR" "$CORE_DATADIR" "$CORED_DATADIR" "$HB_LOG" 2>/dev/null || true
     return $ec
 }
@@ -160,6 +152,9 @@ wait_port_free "$CORE_RPC"
 wait_port_free "$CORE_P2P"
 wait_port_free "$CORED_RPC"
 wait_port_free "$CORED_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${CORE_RPC}|${CORE_P2P}|${CORED_RPC}|${CORED_P2P}) "; then
+    fail "port ${HB_RPC}/${HB_P2P}/${CORE_RPC}/${CORE_P2P}/${CORED_RPC}/${CORED_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$HB_DATADIR" "$CORE_DATADIR" "$CORED_DATADIR" "$HB_LOG"
 mkdir -p "$HB_DATADIR" "$CORE_DATADIR" "$CORED_DATADIR"
 

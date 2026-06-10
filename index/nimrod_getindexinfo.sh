@@ -59,8 +59,8 @@
 #   PASS: GETINDEXINFO nimrod: PASS shape=ok height=ok filter=ok empty=ok
 #   FAIL: GETINDEXINFO nimrod: FAIL <short reason>
 #
-# Touches ONLY /tmp/gii-nimrod/ + /tmp/gii-nimrod-core/ and ports 40031/40051
-#   (nimrod RPC/P2P), 40231/40251 (Core RPC/P2P).
+# Touches ONLY /tmp/gii-nimrod/ + /tmp/gii-nimrod-core/ and ports 21931/21951
+#   (nimrod RPC/P2P), 22131/22151 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -73,14 +73,14 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 NM_DATADIR="/tmp/gii-nimrod"
-NM_RPC=40031
-NM_P2P=40051
+NM_RPC=21931
+NM_P2P=21951
 NM_LOG="$NM_DATADIR/node.log"
 NM_COOKIE_FILE="$NM_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/gii-nimrod-core"
-CORE_RPC=40231
-CORE_P2P=40251
+CORE_RPC=22131
+CORE_P2P=22151
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic regtest p2wpkh address (bcrt1...) for coinbase rewards — both
@@ -122,10 +122,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${NM_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${NM_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$NM_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -144,10 +140,15 @@ nm_rpc() {
 log "resetting scratch state"
 pkill -f "datadir=$NM_DATADIR"   2>/dev/null || true
 pkill -f "datadir=$CORE_DATADIR" 2>/dev/null || true
-fuser -k "${NM_RPC}/tcp"   2>/dev/null || true
-fuser -k "${NM_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${NM_RPC}/${NM_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$NM_DATADIR" "$CORE_DATADIR"
 mkdir -p "$NM_DATADIR" "$CORE_DATADIR"

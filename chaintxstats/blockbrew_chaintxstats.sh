@@ -44,7 +44,7 @@
 #   FAIL: CHAINTXSTATS blockbrew: FAIL <short reason>
 #
 # Touches ONLY /tmp/ctxstats-blockbrew/ + /tmp/ctxstats-core-bb/ and ports
-#   39993/40013 (blockbrew RPC/P2P), 39995/40015 (Core RPC/P2P).
+#   21893/21913 (blockbrew RPC/P2P), 21895/21915 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -57,15 +57,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # for key_to_p2wpkh helper
 
 BB_DATADIR="/tmp/ctxstats-blockbrew"
-BB_RPC=39993
-BB_P2P=40013
+BB_RPC=21893
+BB_P2P=21913
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 BB_COOKIE_FILE="$BB_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/ctxstats-core-bb"
-CORE_RPC=39995
-CORE_P2P=40015
+CORE_RPC=21895
+CORE_P2P=21915
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic test secret -> one fixed p2wpkh mining address used on BOTH
@@ -96,10 +96,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   2>/dev/null || true
-    fuser -k "${BB_P2P}/tcp"   2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -146,10 +142,9 @@ PY
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BB_RPC}/tcp"   2>/dev/null || true
-fuser -k "${BB_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"

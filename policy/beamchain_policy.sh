@@ -70,8 +70,8 @@
 #   FAIL: POLICY beamchain: FAIL <short reason> [dust=.. version=.. ...]
 #
 # Touches ONLY /tmp/policyfleet-beamchain{,-core-strict,-core-def}/ and ports
-#   39946/39966 (beamchain RPC/P2P), 39948/39968 (strict Core RPC/P2P),
-#   39950/39970 (default Core RPC/P2P). Core dirs are namespaced to this harness
+#   21846/21866 (beamchain RPC/P2P), 21848/21868 (strict Core RPC/P2P),
+#   21850/21870 (default Core RPC/P2P). Core dirs are namespaced to this harness
 #   so a parallel sibling policy run never shares a scratch datadir.
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
@@ -85,23 +85,23 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx builders)
 
 BC_DATADIR="/tmp/policyfleet-beamchain"
-BC_RPC=39946
-BC_P2P=39966
+BC_RPC=21846
+BC_P2P=21866
 BC_LOG="$BC_DATADIR/node.log"
 
 # Core-oracle scratch dirs are namespaced to THIS harness (…-beamchain-…) so a
 # sibling policy run (camlcoin/hotbuns/…) that uses /tmp/policyfleet-core-* does
 # NOT share a datadir: an unscoped path lets one run's `rm -rf` wipe another's
 # live regtest datadir mid-flight, racing both bitcoinds to a no-output failure.
-# Ports are already per-harness unique (39948/39950).
+# Ports are already per-harness unique (21848/21850).
 CORE_DATADIR="/tmp/policyfleet-beamchain-core-strict"
-CORE_RPC=39948
-CORE_P2P=39968
+CORE_RPC=21848
+CORE_P2P=21868
 CORE_LOG="$CORE_DATADIR/core.log"
 
 CORE_DEF_DATADIR="/tmp/policyfleet-beamchain-core-def"
-CORE_DEF_RPC=39950
-CORE_DEF_P2P=39970
+CORE_DEF_RPC=21850
+CORE_DEF_P2P=21870
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 # Strict-policy flags so EVERY corpus violation rejects on the strict oracle.
@@ -140,12 +140,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"       2>/dev/null || true
-    fuser -k "${BC_P2P}/tcp"       2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -184,12 +178,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "policyfleet-beamchain" 2>/dev/null || true
-fuser -k "${BC_RPC}/tcp"       2>/dev/null || true
-fuser -k "${BC_P2P}/tcp"       2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_DEF_RPC}/${CORE_DEF_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BC_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"

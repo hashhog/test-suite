@@ -18,7 +18,7 @@
 # missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY ouroboros: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-ouroboros/ and ports 41402 (RPC) / 41422
+# Touches ONLY /tmp/hashhog-wofleet-ouroboros/ and ports 21402 (RPC) / 21422
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

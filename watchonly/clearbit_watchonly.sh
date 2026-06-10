@@ -24,7 +24,7 @@
 # missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY clearbit: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-clearbit/ and ports 41407 (RPC) / 41427
+# Touches ONLY /tmp/hashhog-wofleet-clearbit/ and ports 21407 (RPC) / 21427
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

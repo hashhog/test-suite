@@ -51,9 +51,9 @@
 #   FAIL: RBF hotbuns: FAIL <short reason> [replace=.. rule3=.. rule4=..]
 #   SKIP: RBF hotbuns: SKIP <build/raw-tx gap>
 #
-# Touches ONLY /tmp/rbf-hotbuns/ and ports 40194/40214 (hotbuns) +
-# 40196/40216 (bitcoind oracle). NEVER touches /data/nvme1/ or testnet4-data/
-# or any live node. Any `fuser -k` redirects stdout.
+# Touches ONLY /tmp/rbf-hotbuns/ and ports 22094/22114 (hotbuns) +
+# 22096/22116 (bitcoind oracle). NEVER touches /data/nvme1/ or testnet4-data/
+# or any live node. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -74,14 +74,14 @@ SCRATCH="/tmp/rbf-hotbuns"
 
 # hotbuns ports (per the cell brief).
 HB_DATADIR="$SCRATCH/hotbuns"
-HB_RPC=40194
-HB_P2P=40214
+HB_RPC=22094
+HB_P2P=22114
 HB_LOG="$SCRATCH/hotbuns.log"
 
 # bitcoind oracle ports (distinct from hotbuns).
 BD_DATADIR="$SCRATCH/bitcoind"
-BD_RPC=40196
-BD_P2P=40216
+BD_RPC=22096
+BD_P2P=22116
 BD_LOG="$SCRATCH/bitcoind.log"
 
 NBLOCKS=110          # mine to maturity (>100) so a coinbase UTXO is spendable
@@ -106,10 +106,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$HB_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$HB_PID" 2>/dev/null || true
     fi
-    fuser -k "${HB_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${HB_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${BD_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${BD_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$SCRATCH" 2>/dev/null || true
     return $ec
 }
@@ -140,10 +136,15 @@ classify() {
 log "resetting scratch state"
 pkill -f "rbf-hotbuns/hotbuns" >/dev/null 2>&1 || true
 pkill -f "rbf-hotbuns/bitcoind" >/dev/null 2>&1 || true
-fuser -k "${HB_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${HB_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${BD_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${BD_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${BD_RPC}|${BD_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${BD_RPC}|${BD_P2P}) "; then
+    fail "port ${HB_RPC}/${HB_P2P}/${BD_RPC}/${BD_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$SCRATCH"
 mkdir -p "$HB_DATADIR" "$BD_DATADIR"

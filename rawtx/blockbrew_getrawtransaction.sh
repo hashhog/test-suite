@@ -48,7 +48,7 @@
 #   FAIL: GETRAWTRANSACTION blockbrew: FAIL <short reason>
 #
 # Touches ONLY /tmp/grt-blockbrew/ + /tmp/grt-core-bb/ and ports
-#   40113/40133 (blockbrew RPC/P2P), 40115/40135 (Core RPC/P2P).
+#   22013/22033 (blockbrew RPC/P2P), 22015/22035 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Core is launched -listen=0 (RPC only): the sandbox SIGKILLs any bitcoind
 #   binding a 0.0.0.0 P2P listener ~2s after load.
@@ -62,15 +62,15 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 BB_DATADIR="/tmp/grt-blockbrew"
-BB_RPC=40113
-BB_P2P=40133
+BB_RPC=22013
+BB_P2P=22033
 BB_LOG="$BB_DATADIR/node.log"
 BB_URL="http://127.0.0.1:${BB_RPC}"
 BB_COOKIE_FILE="$BB_DATADIR/regtest/.cookie"
 
 CORE_DATADIR="/tmp/grt-core-bb"
-CORE_RPC=40115
-CORE_P2P=40135
+CORE_RPC=22015
+CORE_P2P=22035
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS_MINE=120     # mature coinbase funds for the wallet spend
@@ -96,10 +96,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -154,10 +150,9 @@ PY
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-fuser -k "${BB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${BB_RPC}|${BB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BB_RPC}/${BB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BB_DATADIR" "$CORE_DATADIR"

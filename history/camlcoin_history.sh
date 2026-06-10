@@ -39,7 +39,7 @@
 #   PASS: HISTORY camlcoin: PASS sent_entry=yes recv_entries=<n> gettx=ok
 #   FAIL: HISTORY camlcoin: FAIL <short reason>
 #
-# Touches ONLY /tmp/histfleet-camlcoin/ and ports 39765 (RPC) / 39785 (P2P).
+# Touches ONLY /tmp/histfleet-camlcoin/ and ports 21665 (RPC) / 21685 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -48,8 +48,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 NODE_BIN="$BASEDIR/camlcoin/_build/default/bin/main.exe"
 DATADIR="/tmp/histfleet-camlcoin"
-RPC_PORT=39765
-P2P_PORT=39785
+RPC_PORT=21665
+P2P_PORT=21685
 RPC_URL="http://127.0.0.1:${RPC_PORT}/"
 LOGFILE="$DATADIR/history-test.log"
 
@@ -91,8 +91,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -118,8 +116,9 @@ result_str() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 pkill -f "histfleet-camlcoin" 2>/dev/null || true
 sleep 1
 rm -rf "$DATADIR"

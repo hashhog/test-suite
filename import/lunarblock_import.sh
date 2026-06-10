@@ -51,7 +51,7 @@
 #   FAIL -> "IMPORT lunarblock: FAIL <short reason>"                                                exit 1
 # Green REQUIRES rescan=ok.
 #
-# Touches ONLY /tmp/importfleet-lunarblock/ and ports 39819 (RPC) / 39839 (P2P).
+# Touches ONLY /tmp/importfleet-lunarblock/ and ports 21719 (RPC) / 21739 (P2P).
 # NEVER touches /data/nvme1/, testnet4-data/, or any live node.
 # ============================================================================
 set -uo pipefail
@@ -61,8 +61,8 @@ REPO_ROOT="/home/work/hashhog"
 LB_DIR="$REPO_ROOT/lunarblock"
 SCRATCH="/tmp/importfleet-lunarblock"
 NODE_LOG="$SCRATCH/node.log"
-RPC_PORT=39819
-P2P_PORT=39839
+RPC_PORT=21719
+P2P_PORT=21739
 RPC="http://127.0.0.1:${RPC_PORT}"
 
 # The canonical "abandon … about" BIP-39 test mnemonic — deterministic across
@@ -101,8 +101,6 @@ finish() {
 }
 
 kill_node() {
-  fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-  fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
   if [[ -n "$NODE_PID" ]]; then
     kill -TERM "-${NODE_PID}" 2>/dev/null || kill -TERM "$NODE_PID" 2>/dev/null || true
   fi
@@ -170,8 +168,9 @@ print('True' if res else 'False')"
 
 # ── 0. Idempotent reset ─────────────────────────────────────────────────────
 log "resetting scratch state (ports ${RPC_PORT}/${P2P_PORT}, datadir ${SCRATCH})"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+  finish FAIL "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 0.5
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH"

@@ -32,8 +32,8 @@
 #   PASS: GETNODEADDRESSES ouroboros: PASS shape=ok errors=ok count=ok netfilter=ok
 #   FAIL: GETNODEADDRESSES ouroboros: FAIL <short reason>
 #
-# Touches ONLY /tmp/gna-ouroboros/ + /tmp/gna-core/ and ports 40072/40092
-# (ouroboros RPC/P2P) + 40073/40093 (Core oracle RPC/P2P).
+# Touches ONLY /tmp/gna-ouroboros/ + /tmp/gna-core/ and ports 21972/21992
+# (ouroboros RPC/P2P) + 21973/21993 (Core oracle RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -54,13 +54,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OURO_DIR="$REPO_ROOT/ouroboros"
 
 OU_DATADIR="/tmp/gna-ouroboros"
-OU_RPC=40072
-OU_P2P=40092
+OU_RPC=21972
+OU_P2P=21992
 OU_LOG="$OU_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/gna-core"
-CORE_RPC=40073
-CORE_P2P=40093    # Core auto-binds an onion listener at P2P+1 (40094); both clear.
+CORE_RPC=21973
+CORE_P2P=21993    # Core auto-binds an onion listener at P2P+1 (21994); both clear.
 CORE_LOG="$CORE_DATADIR/core.log"
 
 INJECT_ADDR="8.8.8.8"
@@ -91,11 +91,6 @@ cleanup() {
         { kill "$CORE_BG"; wait "$CORE_BG"; } >/dev/null 2>&1 || true
     fi
     pkill -f "gna-ouroboros" 2>/dev/null || true
-    fuser -k "${OU_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${OU_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
-    fuser -k "$((CORE_P2P + 1))/tcp" >/dev/null 2>&1 || true   # Core onion listener (P2P+1)
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -115,11 +110,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "gna-ouroboros" 2>/dev/null || true
-fuser -k "${OU_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${OU_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
-fuser -k "$((CORE_P2P + 1))/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P}/$((CORE_P2P + 1)) already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$OU_DATADIR" "$CORE_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR"
@@ -185,7 +184,17 @@ except Exception as e:
 core_ready=0
 for attempt in 1 2 3; do
     log "launching Core oracle rpc=:$CORE_RPC p2p=:$CORE_P2P (attempt $attempt) -> $CORE_LOG"
-    fuser -k "${CORE_RPC}/tcp" "${CORE_P2P}/tcp" "$((CORE_P2P + 1))/tcp" >/dev/null 2>&1 || true
+    # Port-kill removed (2026-06-10 fuser incident): wait for OUR stopped node to release
+    # the port; never kill by port.
+    for __hp in "${CORE_RPC}" "${CORE_P2P}" "$((CORE_P2P + 1))"; do
+        for _ in $(seq 1 30); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+        if ss -tln 2>/dev/null | grep -qE ":${__hp} "; then
+            fail "port ${__hp} still LISTENING after our own stop — refusing port-kill (2026-06-10 fuser incident)"
+        fi
+    done
     rm -rf "$CORE_DATADIR" 2>/dev/null || true
     mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \

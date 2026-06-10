@@ -16,7 +16,7 @@
 #   on failure: RECOVERY haskoin: FAIL <short reason>                               (exit 1)
 # All other output goes to stderr / the per-run log; the summary line is the only stdout.
 #
-# Scratch datadir: /tmp/recreg-haskoin/   RPC port: 39609   P2P port: 39639
+# Scratch datadir: /tmp/recreg-haskoin/   RPC port: 21509   P2P port: 21539
 # NEVER touches /data/nvme1/, testnet4-data/, or any live node.
 #
 # RPC auth: cookie (-u $(cat .../regtest/.cookie)), JSON-RPC 1.0 — matches
@@ -25,8 +25,8 @@
 set -uo pipefail
 
 # ── Config ───────────────────────────────────────────────────────────────
-RPC_PORT=39609
-P2P_PORT=39639
+RPC_PORT=21509
+P2P_PORT=21539
 DATADIR=/tmp/recreg-haskoin
 LOG="$DATADIR/recovery.log"
 BASEDIR=/home/work/hashhog
@@ -62,15 +62,13 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$NODE_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-# ── Idempotent start: nuke prior datadir + free ports ──────────────────────
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

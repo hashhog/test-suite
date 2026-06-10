@@ -23,7 +23,7 @@
 # missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY beamchain: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-beamchain/ and ports 41406 (RPC) / 41426
+# Touches ONLY /tmp/hashhog-wofleet-beamchain/ and ports 21406 (RPC) / 21426
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

@@ -56,8 +56,8 @@
 #   PASS: GETRAWTRANSACTION beamchain: PASS hex=ok decoded=ok confirmed=ok errors=ok
 #   FAIL: GETRAWTRANSACTION beamchain: FAIL <short reason>
 #
-# Touches ONLY /tmp/grt-beamchain{,-core}/ and ports 40116/40136 (beamchain
-#   RPC/P2P) + 40118/40138 (Core RPC/P2P). NEVER touches /data/nvme1/ or
+# Touches ONLY /tmp/grt-beamchain{,-core}/ and ports 22016/22036 (beamchain
+#   RPC/P2P) + 22018/22038 (Core RPC/P2P). NEVER touches /data/nvme1/ or
 #   testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -70,13 +70,13 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx/sign)
 
 BC_DATADIR="/tmp/grt-beamchain"
-BC_RPC=40116
-BC_P2P=40136
+BC_RPC=22016
+BC_P2P=22036
 BC_LOG="$BC_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/grt-beamchain-core"
-CORE_RPC=40118
-CORE_P2P=40138
+CORE_RPC=22018
+CORE_P2P=22038
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Fixed deterministic test secret -> one p2wpkh regtest address the coinbases
@@ -99,8 +99,7 @@ CORE_BG=""
 log() { echo "[getrawtransaction:beamchain] $*" >&2; }
 
 # ── Cleanup: kill both nodes + wipe scratch on any exit. ──────────────────
-# NB: any `fuser -k` redirects STDOUT (it prints killed PIDs to stdout, which
-# would corrupt the single summary line).
+# NB: Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 cleanup() {
     local ec=$?
     if [[ -n "$BC_PID" ]] && kill -0 "$BC_PID" 2>/dev/null; then
@@ -115,10 +114,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -197,12 +192,11 @@ PYEOF
 }
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
-# Free this harness's OWN ports only (port-scoped fuser can never self-match).
+# Abort if our fixed ports are still LISTENING (port-kills banned — 2026-06-10 incident).
 log "resetting scratch state"
-fuser -k "${BC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${BC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${BC_RPC}/${BC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$BC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$BC_DATADIR" "$CORE_DATADIR"
@@ -251,8 +245,18 @@ wait_core_ready() {
 # in a small retry loop (mirrors haskoin_chaintxstats.sh) to ride out a
 # transient sandbox kill at startup.
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -port="$CORE_P2P" \
         -bind="127.0.0.1:$CORE_P2P" -txindex=1 -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &

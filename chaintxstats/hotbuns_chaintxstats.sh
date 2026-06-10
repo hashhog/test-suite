@@ -70,7 +70,7 @@
 #   FAIL: CHAINTXSTATS hotbuns: FAIL <short reason>
 #
 # Touches ONLY /tmp/ctxstats-hotbuns/ + /tmp/ctxstats-core/ and ports
-#   39994/40014 (hotbuns) + 39995/40015 (Core). NEVER touches /data/nvme1/ or
+#   21894/21914 (hotbuns) + 21895/21915 (Core). NEVER touches /data/nvme1/ or
 #   testnet4-data/ or any live node (haskoin is mid-sync — leave it).
 
 set -uo pipefail
@@ -82,13 +82,13 @@ BITCOIND="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 BITCOINCLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 HB_DATADIR="/tmp/ctxstats-hotbuns"
-HB_RPC=39994
-HB_P2P=40014
+HB_RPC=21894
+HB_P2P=21914
 HB_LOG="$HB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/ctxstats-core"
-CORE_RPC=39995
-CORE_P2P=40015
+CORE_RPC=21895
+CORE_P2P=21915
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Mine HEIGHT empty blocks on BOTH nodes, then query a WINDOW that is strictly
@@ -122,10 +122,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$HB_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$HB_PID" 2>/dev/null || true
     fi
-    fuser -k "${HB_RPC}/tcp"  2>/dev/null || true
-    fuser -k "${HB_P2P}/tcp"  2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
     rm -rf "$HB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -145,10 +141,15 @@ fail() {
 log "resetting scratch state"
 pkill -f "ctxstats-hotbuns" 2>/dev/null || true
 pkill -f "ctxstats-core"    2>/dev/null || true
-fuser -k "${HB_RPC}/tcp"   2>/dev/null || true
-fuser -k "${HB_P2P}/tcp"   2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HB_RPC}/${HB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$HB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$HB_DATADIR" "$CORE_DATADIR"

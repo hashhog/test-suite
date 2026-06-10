@@ -24,7 +24,7 @@
 #   PASS: RECOVERY beamchain: PASS funded=<X> recovered=<X> addrs=match neg=0
 #   FAIL: RECOVERY beamchain: FAIL <short reason>
 #
-# Touches ONLY /tmp/recreg-beamchain/ and ports 39606 (RPC) / 39636 (P2P).
+# Touches ONLY /tmp/recreg-beamchain/ and ports 21506 (RPC) / 21536 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -33,8 +33,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 NODE_BIN="$BASEDIR/beamchain/_build/prod/rel/beamchain/bin/beamchain"
 DATADIR="/tmp/recreg-beamchain"
-RPC_PORT=39606
-P2P_PORT=39636
+RPC_PORT=21506
+P2P_PORT=21536
 LOGFILE="$DATADIR/recovery-test.log"
 
 # Canonical BIP-39 all-zero-entropy 12-word test mnemonic (valid checksum).
@@ -68,9 +68,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Defensive: free the ports in case a child/escript lingers.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -127,8 +124,9 @@ scan_txouts() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch state ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"
 exec 3>>"$LOGFILE"   # keep a logfile fd around (node log lives separately)

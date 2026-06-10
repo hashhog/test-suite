@@ -75,8 +75,8 @@
 #   FAIL: POLICY rustoshi: FAIL <short reason> [dust=.. version=.. min-relay=.. ...]
 #
 # Touches ONLY /tmp/policyfleet-rustoshi/ + /tmp/policyfleet-core-{strict,def}/
-#   and ports 39940/39960 (rustoshi RPC/P2P), 39942/39962 (strict Core),
-#   39944/39964 (default Core).
+#   and ports 21840/21860 (rustoshi RPC/P2P), 21842/21862 (strict Core),
+#   21844/21864 (default Core).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -89,18 +89,18 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx builders)
 
 RS_DATADIR="/tmp/policyfleet-rustoshi"
-RS_RPC=39940
-RS_P2P=39960
+RS_RPC=21840
+RS_P2P=21860
 RS_LOG="$RS_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/policyfleet-core-strict"
-CORE_RPC=39942
-CORE_P2P=39962
+CORE_RPC=21842
+CORE_P2P=21862
 CORE_LOG="$CORE_DATADIR/core.log"
 
 CORE_DEF_DATADIR="/tmp/policyfleet-core-def"
-CORE_DEF_RPC=39944
-CORE_DEF_P2P=39964
+CORE_DEF_RPC=21844
+CORE_DEF_P2P=21864
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 # Strict-policy flags so EVERY corpus violation rejects on the primary oracle.
@@ -139,12 +139,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
-    fuser -k "${RS_RPC}/tcp"       2>/dev/null || true
-    fuser -k "${RS_P2P}/tcp"       2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
     rm -rf "$RS_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -181,12 +175,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "policyfleet-rustoshi" 2>/dev/null || true
-fuser -k "${RS_RPC}/tcp"       2>/dev/null || true
-fuser -k "${RS_P2P}/tcp"       2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${RS_RPC}|${RS_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) "; then
+    fail "port ${RS_RPC}/${RS_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_DEF_RPC}/${CORE_DEF_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 # Settle: give a prior run's daemons time to fully release ports + datadir locks
 # so a back-to-back invocation doesn't lose the concurrent-startup race.
 sleep 3

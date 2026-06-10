@@ -58,7 +58,7 @@
 # noise -> stderr/log, exit 0/1.
 #
 # Touches ONLY /tmp/csi-ouroboros/ + /tmp/csi-core/ and ports
-#   40273/40293 (ouroboros RPC/P2P) + 41273/41293 (Core RPC/P2P).
+#   22173/22193 (ouroboros RPC/P2P) + 22973/22993 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. It frees
 #   ONLY its OWN fixed ports / scratch dir, never broad-pkills bitcoind by name.
 
@@ -73,15 +73,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/address)
 
 OU_DATADIR="/tmp/csi-ouroboros"
-OU_RPC=40273
-OU_P2P=40293
+OU_RPC=22173
+OU_P2P=22193
 OU_LOG="$OU_DATADIR/node.log"
 
 # Core oracle ports live in the 41xxx band, away from the contended 4027x/4029x
 # range that sibling cells use for their oracles.
 CORE_DATADIR="/tmp/csi-core"
-CORE_RPC=41273
-CORE_P2P=41293
+CORE_RPC=22973
+CORE_P2P=22993
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=150        # ~150 blocks per the shared contract (matures + buries spends)
@@ -106,10 +106,10 @@ log() { echo "[coinstatsindex:ouroboros] $*" >&2; }
 
 # ── Port-free poll: wait until a tcp port is actually released. ───────────
 wait_port_free() {  # <port>
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): NEVER kills by port.
     local port="$1"
-    for _ in $(seq 1 20); do
-        if ! fuser "${port}/tcp" >/dev/null 2>&1; then return 0; fi
-        fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    for _ in $(seq 1 30); do
+        ss -tln 2>/dev/null | grep -qE ":${port} " || return 0
         sleep 1
     done
     return 0
@@ -130,11 +130,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    # Free ONLY our OWN fixed ports — never broad-pkill bitcoind by name.
-    fuser -k "${OU_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${OU_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$OU_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -161,6 +156,9 @@ wait_port_free "$OU_RPC"
 wait_port_free "$OU_P2P"
 wait_port_free "$CORE_RPC"
 wait_port_free "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${OU_RPC}/${OU_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$OU_DATADIR" "$CORE_DATADIR"
 mkdir -p "$OU_DATADIR" "$CORE_DATADIR"
 

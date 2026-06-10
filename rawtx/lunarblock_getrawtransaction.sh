@@ -74,8 +74,8 @@
 #   PASS: GETRAWTRANSACTION lunarblock: PASS hex=ok decoded=ok confirmed=ok errors=ok
 #   FAIL: GETRAWTRANSACTION lunarblock: FAIL <short reason> [hex=.. decoded=.. ...]
 #
-# Touches ONLY /tmp/grt-lunarblock + /tmp/grt-core and ports 40118/40138
-#   (lunarblock RPC/P2P) + 40116/40136 (Core RPC/P2P).
+# Touches ONLY /tmp/grt-lunarblock + /tmp/grt-core and ports 22018/22038
+#   (lunarblock RPC/P2P) + 22016/22036 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -87,13 +87,13 @@ CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 
 LB_DATADIR="/tmp/grt-lunarblock"
-LB_RPC=40118
-LB_P2P=40138
+LB_RPC=22018
+LB_P2P=22038
 LB_LOG="$LB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/grt-core"
-CORE_RPC=40116
-CORE_P2P=40136
+CORE_RPC=22016
+CORE_P2P=22036
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Genesis-coinbase txid (== genesis merkle root).  Identical on
@@ -123,10 +123,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${LB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${LB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$LB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -147,21 +143,17 @@ fail() {
 log "resetting scratch state"
 pkill -f "grt-lunarblock" 2>/dev/null || true
 pkill -f "datadir $LB_DATADIR" 2>/dev/null || true
-fuser -k "${LB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${LB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
-# Wait (up to 20s) for the RPC ports to actually become free — a previous run's
-# node-shutdown may still be releasing the socket (TIME_WAIT / lingering child).
-for _ in $(seq 1 20); do
-    busy=0
-    for p in "$LB_RPC" "$CORE_RPC"; do
-        if fuser "${p}/tcp" >/dev/null 2>&1; then busy=1; fi
+# Wait (up to 30s) for the ports to be released — the pkill above may have just
+# reaped a prior run's node and its socket can take a beat to clear. Then ABORT
+# if a listener persists (port-kills banned — 2026-06-10 fuser incident).
+for __hp in "${LB_RPC}" "${LB_P2P}" "${CORE_RPC}" "${CORE_P2P}"; do
+    for _ in $(seq 1 30); do
+        ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+        sleep 1
     done
-    [[ "$busy" -eq 0 ]] && break
-    fuser -k "${LB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    sleep 1
+    if ss -tln 2>/dev/null | grep -qE ":${__hp} "; then
+        fail "port ${__hp} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+    fi
 done
 sleep 1
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
@@ -280,7 +272,10 @@ core_stop_now() {
         "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" getblockcount >/dev/null 2>&1 || break
         sleep 1
     done
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
+    for _ in $(seq 1 15); do
+        ss -tln 2>/dev/null | grep -qE ":${CORE_RPC} " || break
+        sleep 1
+    done
     CORE_BG=""
 }
 # core_run_burst <body_fn>  -> 0 if the body ran to completion, 1 otherwise.
@@ -288,7 +283,10 @@ core_run_burst() {
     local body="$1" attempt
     for attempt in 1 2 3; do
         rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
-        fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${CORE_RPC} " || break
+            sleep 1
+        done
         sleep 1
         log "Core burst attempt $attempt: launching rpc=:$CORE_RPC (listen=0, txindex=1)"
         "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" \

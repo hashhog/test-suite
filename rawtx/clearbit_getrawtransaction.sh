@@ -50,10 +50,10 @@
 #   PASS: GETRAWTRANSACTION clearbit: PASS hex=ok decoded=ok confirmed=ok errors=ok
 #   FAIL: GETRAWTRANSACTION clearbit: FAIL <short reason>
 #
-# Touches ONLY /tmp/grt-clearbit/ + /tmp/grt-core/ and ports 40117/40137
-#   (clearbit RPC/P2P) + 40118/40141 (Core RPC/P2P).
+# Touches ONLY /tmp/grt-clearbit/ + /tmp/grt-core/ and ports 22017/22037
+#   (clearbit RPC/P2P) + 22018/22041 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
-#   Any fuser -k redirects stdout (it prints killed PIDs to STDOUT).
+#   Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -66,13 +66,13 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
 CB_DATADIR="/tmp/grt-clearbit"
 CB_NETDIR="$CB_DATADIR/regtest"
-CB_RPC=40117
-CB_P2P=40137
+CB_RPC=22017
+CB_P2P=22037
 CB_LOG="$CB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/grt-core"
-CORE_RPC=40118
-CORE_P2P=40141
+CORE_RPC=22018
+CORE_P2P=22041
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Deterministic regtest p2wpkh key/address both nodes mine to.
@@ -100,10 +100,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -121,10 +117,15 @@ fail() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "grt-clearbit" >/dev/null 2>&1 || true
-fuser -k "${CB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$CB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CB_DATADIR" "$CORE_DATADIR"

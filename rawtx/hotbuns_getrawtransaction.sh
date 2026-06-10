@@ -72,8 +72,8 @@
 #   PASS: GETRAWTRANSACTION hotbuns: PASS hex=ok decoded=ok confirmed=ok errors=ok
 #   FAIL: GETRAWTRANSACTION hotbuns: FAIL <short reason>
 #
-# Touches ONLY /tmp/grt-hotbuns/ + /tmp/grt-core-hb/ and ports 40114/40134
-#   (hotbuns RPC/P2P) + 40116/40136 (Core RPC/P2P).
+# Touches ONLY /tmp/grt-hotbuns/ + /tmp/grt-core-hb/ and ports 22014/22034
+#   (hotbuns RPC/P2P) + 22016/22036 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -92,13 +92,13 @@ SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 DEST_SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 HB_DATADIR="/tmp/grt-hotbuns"
-HB_RPC=40114
-HB_P2P=40134
+HB_RPC=22014
+HB_P2P=22034
 HB_LOG="$HB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/grt-core-hb"
-CORE_RPC=40116
-CORE_P2P=40136
+CORE_RPC=22016
+CORE_P2P=22036
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Captured-from-Core manifest (survives Core's death; consumed by PHASE B).
@@ -124,10 +124,6 @@ cleanup() {
     fi
     "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" stop >/dev/null 2>&1 || true
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${HB_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${HB_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$HB_DATADIR" "$CORE_DATADIR" "$CAP_DIR" 2>/dev/null || true
     return $ec
 }
@@ -148,10 +144,15 @@ fail() {
 log "resetting scratch state"
 pkill -f "grt-hotbuns" 2>/dev/null || true
 pkill -f "grt-core-hb" 2>/dev/null || true
-fuser -k "${HB_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${HB_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${HB_RPC}|${HB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${HB_RPC}/${HB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$HB_DATADIR" "$CORE_DATADIR" "$CAP_DIR"
 mkdir -p "$HB_DATADIR" "$CORE_DATADIR" "$CAP_DIR"

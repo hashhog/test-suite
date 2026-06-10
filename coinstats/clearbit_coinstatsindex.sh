@@ -50,11 +50,11 @@
 #   SKIP: COINSTATSINDEX clearbit: SKIP <reason>   (only for missing binary / replay)
 #
 # Touches ONLY /tmp/csidx-clearbit/ + /tmp/csidx-core/ + /tmp/csidx-core-noidx/
-#   and ports 40384/40385 (clearbit RPC/P2P) + 40386/40387 (Core RPC; P2P unused
-#   -listen=0) + 40388 (Core no-index error-parity baseline). Ports chosen to NOT
+#   and ports 22284/22285 (clearbit RPC/P2P) + 22286/22287 (Core RPC; P2P unused
+#   -listen=0) + 22288 (Core no-index error-parity baseline). Ports chosen to NOT
 #   collide with the sibling coinstats scripts run concurrently in the batch.
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Does NOT
-#   broad-pkill bitcoind/clearbit by name. Any `fuser -k` redirects stdout.
+#   broad-pkill bitcoind/clearbit by name. Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -66,18 +66,18 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (address builder)
 
 CB_DATADIR="/tmp/csidx-clearbit/$$"
-CB_RPC=40384
-CB_P2P=40385
+CB_RPC=22284
+CB_P2P=22285
 CB_LOG="$CB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/csidx-core/$$"
-CORE_RPC=40386
-CORE_P2P=40387   # declared but Core launched -listen=0 (no P2P listener)
+CORE_RPC=22286
+CORE_P2P=22287   # declared but Core launched -listen=0 (no P2P listener)
 CORE_LOG="$CORE_DATADIR/core.log"
 
 # Separate Core datadir for the coinstatsindex-DISABLED error-parity probe.
 CORE_NOIDX_DATADIR="/tmp/csidx-core-noidx/$$"
-CORE_NOIDX_RPC=40388
+CORE_NOIDX_RPC=22288
 CORE_NOIDX_LOG="$CORE_NOIDX_DATADIR/core.log"
 
 # Deterministic test secret -> one p2wpkh bcrt1 address BOTH nodes mine to.
@@ -118,11 +118,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_NOIDX_BG" ]] && kill "$CORE_NOIDX_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp"        >/dev/null 2>&1 || true
-    fuser -k "${CB_P2P}/tcp"        >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp"      >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp"      >/dev/null 2>&1 || true
-    fuser -k "${CORE_NOIDX_RPC}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" "$CORE_NOIDX_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -136,17 +131,20 @@ skip() { echo "COINSTATSINDEX clearbit: SKIP $*"; exit 0; }
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state (pid=$$)"
 pkill -f "csidx-clearbit/$$" 2>/dev/null || true
-free_port() {  # poll until the port is actually free (a just-killed node can hold it briefly)
+free_port() {
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
     local p="$1"
-    fuser -k "${p}/tcp" >/dev/null 2>&1 || true
     for _ in $(seq 1 20); do
-        fuser "${p}/tcp" >/dev/null 2>&1 || return 0
-        fuser -k "${p}/tcp" >/dev/null 2>&1 || true
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
         sleep 1
     done
     return 0
 }
 free_port "$CB_RPC"; free_port "$CB_P2P"; free_port "$CORE_RPC"; free_port "$CORE_P2P"; free_port "$CORE_NOIDX_RPC"
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_NOIDX_RPC}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_NOIDX_RPC} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$CB_DATADIR" "$CORE_DATADIR" "$CORE_NOIDX_DATADIR"
 mkdir -p "$CB_DATADIR" "$CORE_DATADIR" "$CORE_NOIDX_DATADIR"
 

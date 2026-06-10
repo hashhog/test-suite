@@ -18,7 +18,7 @@
 # missing watch-only RPCs are FAILs.
 #
 # Summary line (stdout): "WATCHONLY blockbrew: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-blockbrew/ and ports 41403 (RPC) / 41423
+# Touches ONLY /tmp/hashhog-wofleet-blockbrew/ and ports 21403 (RPC) / 21423
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

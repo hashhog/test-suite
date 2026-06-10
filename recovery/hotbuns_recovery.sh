@@ -24,7 +24,7 @@
 #   PASS: RECOVERY hotbuns: PASS funded=<X> recovered=<X> addrs=match neg=0
 #   FAIL: RECOVERY hotbuns: FAIL <short reason>
 #
-# Touches ONLY /tmp/recreg-hotbuns/ and ports 39604 (RPC) / 39634 (P2P).
+# Touches ONLY /tmp/recreg-hotbuns/ and ports 21504 (RPC) / 21534 (P2P).
 # NEVER touches /data/nvme1/ or testnet4-data/ or live nodes.
 
 set -uo pipefail
@@ -33,8 +33,8 @@ set -uo pipefail
 BASEDIR="/home/work/hashhog"
 NODE_DIR="$BASEDIR/hotbuns"
 DATADIR="/tmp/recreg-hotbuns"
-RPC_PORT=39604
-P2P_PORT=39634
+RPC_PORT=21504
+P2P_PORT=21534
 LOGFILE="$DATADIR/node.log"
 
 # Canonical BIP-39 test vector — checksum-valid, the exact mnemonic the hotbuns
@@ -71,9 +71,6 @@ cleanup() {
         done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    # Belt-and-suspenders: free the ports in case a child outlived $NODE_PID.
-    fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-    fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
     rm -rf "$DATADIR" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -118,8 +115,9 @@ json_get() {
 
 # ── 0. Idempotent reset ─────────────────────────────────────────────────────
 log "resetting scratch state (datadir + ports)"
-fuser -k "${RPC_PORT}/tcp" 2>/dev/null || true
-fuser -k "${P2P_PORT}/tcp" 2>/dev/null || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    fail "port ${RPC_PORT}/${P2P_PORT} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$DATADIR" 2>/dev/null || true
 mkdir -p "$DATADIR"
 

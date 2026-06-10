@@ -34,7 +34,7 @@
 # wo_lib.py sanitizes impl error strings against GAP_RE collisions).
 #
 # Summary line (stdout): "WATCHONLY rustoshi: PASS|FAIL ...". exit 0/1.
-# Touches ONLY /tmp/hashhog-wofleet-rustoshi/ and ports 41400 (RPC) / 41420
+# Touches ONLY /tmp/hashhog-wofleet-rustoshi/ and ports 21400 (RPC) / 21420
 # (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail

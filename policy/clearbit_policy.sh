@@ -76,8 +76,8 @@
 #   FAIL: POLICY clearbit: FAIL <short reason> [dust=.. version=.. ...]
 #
 # Touches ONLY /tmp/policyfleet-clearbit/ + /tmp/policyfleet-core-{strict,def}/
-#   and ports 39947/39967 (clearbit RPC/P2P), 39948/39968 (strict Core RPC/P2P),
-#   39949/39969 (default Core RPC/P2P).
+#   and ports 21847/21867 (clearbit RPC/P2P), 21848/21868 (strict Core RPC/P2P),
+#   21849/21869 (default Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -91,23 +91,23 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework (key/tx 
 
 CB_DATADIR="/tmp/policyfleet-clearbit"
 CB_NETDIR="$CB_DATADIR/regtest"                    # clearbit appends the network subdir
-CB_RPC=39947
-CB_P2P=39967
+CB_RPC=21847
+CB_P2P=21867
 CB_LOG="$CB_DATADIR/node.log"
 
 # NOTE on P2P port spacing: bitcoind also opens a localhost "onion" listener on
 # <p2p>+1 (its Tor control port). If two Core P2P ports were adjacent (e.g.
-# 39968 + 39969) the second node would fail to bind because the first node's
+# 21868 + 21869) the second node would fail to bind because the first node's
 # <p2p>+1 already holds the slot. We therefore space the three P2P ports by 4
 # so no <p2p>+1 ever collides with another node's listen port.
 CORE_DATADIR="/tmp/policyfleet-core-strict"
-CORE_RPC=39948
-CORE_P2P=39971
+CORE_RPC=21848
+CORE_P2P=21871
 CORE_LOG="$CORE_DATADIR/core.log"
 
 CORE_DEF_DATADIR="/tmp/policyfleet-core-def"
-CORE_DEF_RPC=39949
-CORE_DEF_P2P=39975
+CORE_DEF_RPC=21849
+CORE_DEF_P2P=21875
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 # Strict-policy flags so EVERY corpus violation rejects on the primary oracle.
@@ -146,12 +146,6 @@ cleanup() {
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
     [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
-    fuser -k "${CB_RPC}/tcp"       2>/dev/null || true
-    fuser -k "${CB_P2P}/tcp"       2>/dev/null || true
-    fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-    fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-    fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
     rm -rf "$CB_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -188,12 +182,15 @@ classify() {
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
 pkill -f "policyfleet-clearbit" 2>/dev/null || true
-fuser -k "${CB_RPC}/tcp"       2>/dev/null || true
-fuser -k "${CB_P2P}/tcp"       2>/dev/null || true
-fuser -k "${CORE_RPC}/tcp"     2>/dev/null || true
-fuser -k "${CORE_P2P}/tcp"     2>/dev/null || true
-fuser -k "${CORE_DEF_RPC}/tcp" 2>/dev/null || true
-fuser -k "${CORE_DEF_P2P}/tcp" 2>/dev/null || true
+# Wait briefly for the pkill'd prior run to release its sockets, then
+# ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
+for _ in $(seq 1 30); do
+    ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) " || break
+    sleep 1
+done
+if ss -tln 2>/dev/null | grep -qE ":(${CB_RPC}|${CB_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) "; then
+    fail "port ${CB_RPC}/${CB_P2P}/${CORE_RPC}/${CORE_P2P}/${CORE_DEF_RPC}/${CORE_DEF_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 1
 rm -rf "$CB_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"
 mkdir -p "$CB_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR"

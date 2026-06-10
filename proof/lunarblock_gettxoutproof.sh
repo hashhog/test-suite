@@ -69,8 +69,8 @@
 #   SKIP: if the impl entrypoint/luajit is missing the FAIL reason contains
 #         "not found" / "not built" (GAP_RE-compatible) so the runner SKIPs.
 #
-# Touches ONLY /tmp/proof-lunarblock/ + /tmp/proof-lb-core/ and ports 40425/40445
-#   (lunarblock RPC/P2P) + 40427/40447 (Core RPC/P2P).
+# Touches ONLY /tmp/proof-lunarblock/ + /tmp/proof-lb-core/ and ports 22325/22345
+#   (lunarblock RPC/P2P) + 22327/22347 (Core RPC/P2P).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node. Never
 #   broad-pkills bitcoind by name; only frees its OWN fixed ports / scratch dir.
 
@@ -97,13 +97,13 @@ GARBAGE_HEX="deadbeef"          # valid hex, too short to deserialize a merklebl
 NONHEX_GARBAGE="zzzz"           # not hexadecimal at all
 
 LB_DATADIR="/tmp/proof-lunarblock"
-LB_RPC=40425
-LB_P2P=40445
+LB_RPC=22325
+LB_P2P=22345
 LB_LOG="$LB_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/proof-lb-core"
-CORE_RPC=40427
-CORE_P2P=40447
+CORE_RPC=22327
+CORE_P2P=22347
 CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=101        # 1 coinbase to MINE_ADDR + 100 maturity blocks (to a sink).
@@ -116,11 +116,12 @@ log() { echo "[gettxoutproof:lunarblock] $*" >&2; }
 
 # ── Port free helper: kill + POLL until the socket is actually released. ──
 free_port() {
-    local port="$1"
-    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    # WAIT-ONLY (port-kill removed: 2026-06-10 fuser incident): waits for OUR
+    # just-stopped node to release the port. NEVER kills by port.
+    local p="$1"
     for _ in $(seq 1 20); do
-        fuser "${port}/tcp" >/dev/null 2>&1 || return 0
-        sleep 0.5
+        ss -tln 2>/dev/null | grep -qE ":${p} " || return 0
+        sleep 1
     done
     return 0
 }
@@ -166,6 +167,9 @@ free_port "$LB_RPC"
 free_port "$LB_P2P"
 free_port "$CORE_RPC"
 free_port "$CORE_P2P"
+if ss -tln 2>/dev/null | grep -qE ":(${LB_RPC}|${LB_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${LB_RPC}/${LB_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 rm -rf "$LB_DATADIR" "$CORE_DATADIR"
 mkdir -p "$LB_DATADIR" "$CORE_DATADIR"
 

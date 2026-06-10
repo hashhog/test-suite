@@ -66,11 +66,11 @@
 #   SKIP: SCANBLOCKS camlcoin: SKIP <no scanblocks RPC | no filter index>
 #
 # Touches ONLY /tmp/sblk-camlcoin/ + /tmp/sblk-core-camlcoin/ and ports
-#   40430/40450 (camlcoin RPC/P2P) + 40432/40452 (Core RPC; P2P unused, -listen=0).
+#   22330/22350 (camlcoin RPC/P2P) + 22332/22352 (Core RPC; P2P unused, -listen=0).
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 #   Never broad-pkills bitcoind by name (a live mainnet bitcoind may be running);
 #   only frees its OWN fixed ports + scratch dir.
-#   Any `fuser -k` redirects stdout: `fuser -k "<port>/tcp" >/dev/null 2>&1`.
+#   Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
 
@@ -82,15 +82,15 @@ CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
 TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
 CC_DATADIR="/tmp/sblk-camlcoin/$$"
-CC_RPC=40430
-CC_P2P=40450
+CC_RPC=22330
+CC_P2P=22350
 CC_LOG="$CC_DATADIR/node.log"
 CC_COOKIE=""
 CC_PID=""
 
 CORE_DATADIR="/tmp/sblk-core-camlcoin/$$"
-CORE_RPC=40432
-CORE_P2P=40452   # declared but Core launched -listen=0 (no P2P listener)
+CORE_RPC=22332
+CORE_P2P=22352   # declared but Core launched -listen=0 (no P2P listener)
 CORE_LOG="$CORE_DATADIR/core.log"
 CORE_BG=""
 
@@ -125,10 +125,6 @@ cleanup() {
         sleep 1
     done
     [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    fuser -k "${CC_RPC}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CC_P2P}/tcp"   >/dev/null 2>&1 || true
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
     rm -rf "$CC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -142,10 +138,9 @@ skip() { echo "SCANBLOCKS camlcoin: SKIP $*"; exit 0; }
 # ── 0. Idempotent reset (OWN ports + OWN PID scratch only). ───────────────
 log "resetting scratch state (pid=$$)"
 pkill -f "sblk-camlcoin/$$" 2>/dev/null || true
-fuser -k "${CC_RPC}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CC_P2P}/tcp"   >/dev/null 2>&1 || true
-fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${CC_RPC}|${CC_P2P}|${CORE_RPC}|${CORE_P2P}) "; then
+    fail "port ${CC_RPC}/${CC_P2P}/${CORE_RPC}/${CORE_P2P} already LISTENING — refusing to kill it (fuser-on-port killed mainnet nodes, 2026-06-10 fuser incident)"
+fi
 sleep 3
 rm -rf "$CC_DATADIR" "$CORE_DATADIR"
 mkdir -p "$CC_DATADIR" "$CORE_DATADIR"
@@ -221,8 +216,18 @@ except Exception:
 # NOTE: do NOT pass -port. Even with -listen=0, supplying an explicit P2P
 # -port makes the sandbox watchdog SIGKILL bitcoind a few seconds after load.
 launch_core_once() {
-    fuser -k "${CORE_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CORE_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CORE_BG:-}" ]]; then
+        kill "$CORE_BG" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CORE_BG" 2>/dev/null || true
+    fi
+    for __hp in "${CORE_RPC}" "${CORE_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CORE_DATADIR"; mkdir -p "$CORE_DATADIR"
     "$CORE_BIN" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" -listen=0 \
         -blockfilterindex=basic -fallbackfee=0.0002 >"$CORE_LOG" 2>&1 &
@@ -251,8 +256,18 @@ log "Core oracle ready (pid=$CORE_BG)"
 # ── 4. Launch camlcoin on regtest WITH --blockfilterindex basic enabled. ──
 launch_cc_once() {
     CC_COOKIE=""
-    fuser -k "${CC_RPC}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${CC_P2P}/tcp" >/dev/null 2>&1 || true
+    # PID-scoped stop of OUR previous attempt (port-kill removed: 2026-06-10 fuser incident).
+    if [[ -n "${CC_PID:-}" ]]; then
+        kill "$CC_PID" 2>/dev/null || true
+        for _ in $(seq 1 15); do kill -0 "$CC_PID" 2>/dev/null || break; sleep 1; done
+        kill -9 "$CC_PID" 2>/dev/null || true
+    fi
+    for __hp in "${CC_RPC}" "${CC_P2P}"; do
+        for _ in $(seq 1 15); do
+            ss -tln 2>/dev/null | grep -qE ":${__hp} " || break
+            sleep 1
+        done
+    done
     rm -rf "$CC_DATADIR"; mkdir -p "$CC_DATADIR"
     "$NODE_BIN" --network regtest --datadir "$CC_DATADIR" \
         --port "$CC_P2P" --rpcport "$CC_RPC" --metricsport 0 \
