@@ -33,8 +33,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WO_LIB="$SCRIPT_DIR/wo_lib.py"
 LB_DIR="$BASEDIR/lunarblock"
 DATADIR="/tmp/hashhog-wofleet-lunarblock"
-RPC_PORT=41409
-P2P_PORT=41429
+RPC_PORT=21409
+P2P_PORT=21429
 RPC_URL="http://127.0.0.1:${RPC_PORT}"
 LOG="$DATADIR/node.log"
 NODE_PID=""
@@ -47,8 +47,6 @@ boot_gap() { echo "WATCHONLY lunarblock: FAIL cannot boot: $*"; exit 1; }
 
 cleanup() {
     local ec=$?
-    fuser -k "${RPC_PORT}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${P2P_PORT}/tcp" >/dev/null 2>&1 || true
     if [[ -n "$NODE_PID" ]]; then
         kill -TERM "-${NODE_PID}" 2>/dev/null || kill -TERM "$NODE_PID" 2>/dev/null || true
         for _ in 1 2 3 4 5; do
@@ -73,8 +71,9 @@ rpc() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" >/dev/null 2>&1 || true
-fuser -k "${P2P_PORT}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    boot_gap "port ${RPC_PORT}/${P2P_PORT} already LISTENING (refusing to kill: fuser-on-ephemeral-port killed mainnet nodes, 2026-06-10 incident)"
+fi
 sleep 0.5
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"

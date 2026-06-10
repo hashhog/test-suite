@@ -28,8 +28,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WO_LIB="$SCRIPT_DIR/wo_lib.py"
 OURO_DIR="$BASEDIR/ouroboros"
 DATADIR="/tmp/hashhog-wofleet-ouroboros"
-RPC_PORT=41402
-P2P_PORT=41422
+RPC_PORT=21402
+P2P_PORT=21422
 LOG="$DATADIR/node.log"
 NODE_PID=""
 COOKIE=""
@@ -45,8 +45,6 @@ cleanup() {
         for _ in $(seq 1 15); do kill -0 "$NODE_PID" 2>/dev/null || break; sleep 1; done
         kill -9 "$NODE_PID" 2>/dev/null || true
     fi
-    fuser -k "${RPC_PORT}/tcp" >/dev/null 2>&1 || true
-    fuser -k "${P2P_PORT}/tcp" >/dev/null 2>&1 || true
     [[ -n "${HASHHOG_KEEP_SCRATCH:-}" ]] || rm -rf "$DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -68,8 +66,9 @@ wrpc() {
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
 log "resetting scratch ($DATADIR, ports $RPC_PORT/$P2P_PORT)"
-fuser -k "${RPC_PORT}/tcp" >/dev/null 2>&1 || true
-fuser -k "${P2P_PORT}/tcp" >/dev/null 2>&1 || true
+if ss -tln 2>/dev/null | grep -qE ":(${RPC_PORT}|${P2P_PORT}) "; then
+    boot_gap "port ${RPC_PORT}/${P2P_PORT} already LISTENING (refusing to kill: fuser-on-ephemeral-port killed mainnet nodes, 2026-06-10 incident)"
+fi
 sleep 1
 rm -rf "$DATADIR"
 mkdir -p "$DATADIR"
