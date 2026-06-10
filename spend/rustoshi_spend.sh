@@ -48,9 +48,10 @@
 # NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 BIN="$BASEDIR/rustoshi/target/release/rustoshi"
 DATADIR="/tmp/spendfleet-rustoshi"
 RPC_PORT=21610

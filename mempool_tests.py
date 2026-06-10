@@ -34,7 +34,7 @@ from regtest_miner import rpc_call, mine_blocks, sha256d, compact_size
 # Configuration
 # ---------------------------------------------------------------------------
 
-HASHHOG = "/home/work/hashhog"
+HASHHOG = os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGTEST_DIR = "/tmp/hashhog-mempool-regtest"
 RESULTS_DIR = os.path.expanduser("~/hashhog/test-suite/results")
 RESULTS_JSON = os.path.join(RESULTS_DIR, "mempool-tests.json")

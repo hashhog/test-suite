@@ -23,13 +23,14 @@
 # tools/smoke-harness.sh's rpc_call and the recovery flow proven last session.
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
 RPC_PORT=21509
 P2P_PORT=21539
 DATADIR=/tmp/recreg-haskoin
 LOG="$DATADIR/recovery.log"
-BASEDIR=/home/work/hashhog
+BASEDIR=${HASHHOG_ROOT}
 HASKOIN_REPO="$BASEDIR/haskoin"
 
 # Canonical all-zeros-entropy BIP-39 test mnemonic (valid 12-word checksum).

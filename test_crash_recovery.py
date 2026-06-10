@@ -14,7 +14,7 @@ import time
 
 from regtest_miner import mine_blocks, rpc_call
 
-HASHHOG = "/home/work/hashhog"
+HASHHOG = os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CRASH_DIR = "/tmp/hashhog-crash"
 RESULTS_DIR = os.path.expanduser("~/hashhog/test-suite/results")
 RESULTS_FILE = os.path.join(RESULTS_DIR, "crash-recovery.json")

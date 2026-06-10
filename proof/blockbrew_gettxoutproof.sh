@@ -69,9 +69,10 @@
 #   binding a 0.0.0.0 P2P listener ~2s after load.
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 NODE_BIN="$BASEDIR/blockbrew/blockbrew"
 CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"

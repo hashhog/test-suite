@@ -30,7 +30,7 @@ from regtest_miner import rpc_call, mine_blocks, sha256d
 # Constants
 # ---------------------------------------------------------------------------
 
-HASHHOG = "/home/work/hashhog"
+HASHHOG = os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGTEST_DIR = "/tmp/hashhog-p2p-tests"
 RESULTS_DIR = os.path.join(HASHHOG, "test-suite", "results")
 

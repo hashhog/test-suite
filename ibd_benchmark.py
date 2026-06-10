@@ -8,9 +8,9 @@ block height. Emits a JSON result suitable for CI gating or
 wave-over-wave perf comparison.
 
 Safety model:
-- `--datadir` MUST be under /tmp/** or /home/work/bench-*/.
+- `--datadir` MUST be under /tmp/** or ~/bench-*/.
   The harness refuses to touch `/data/nvme1/hashhog-mainnet/` (live
-  fleet data) or `/home/work/hashhog/testnet4-data/`. No exceptions
+  fleet data) or `<repo>/testnet4-data/`. No exceptions
   and no overrides — a typo here would wipe production datadirs.
 - On exit (success, timeout, or Ctrl-C), the harness SIGTERMs the
   benched node, waits 30 s, then SIGKILLs if needed. Datadir is
@@ -41,6 +41,7 @@ Usage:
 stdlib only (Python 3.9+).
 """
 from __future__ import annotations
+MAINNET_ROOT = os.environ.get("HASHHOG_MAINNET_ROOT", "/data/nvme1/hashhog-mainnet")
 
 import argparse
 import base64
@@ -58,14 +59,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path("/home/work/hashhog")
+REPO_ROOT = Path(os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-ALLOWED_DATADIR_PREFIXES = ("/tmp/", "/home/work/bench-")
+ALLOWED_DATADIR_PREFIXES = ("/tmp/", os.path.expanduser("~/bench-"))
 FORBIDDEN_DATADIR_PREFIXES = (
     "/data/nvme1/hashhog-mainnet",
-    "/home/work/hashhog/testnet4-data",
-    "/home/work/hashhog/bitcoin-core",
-    "/home/work/.bitcoin",
+    os.path.join(str(REPO_ROOT), "testnet4-data"),
+    os.path.join(str(REPO_ROOT), "bitcoin-core"),
+    os.path.expanduser("~/.bitcoin"),
 )
 
 BENCH_RPC_PORT = {
@@ -356,7 +357,7 @@ def main() -> int:
     parser.add_argument("--target-height", type=int, required=True,
                         help="benchmark completes when RPC tip reaches this height")
     parser.add_argument("--datadir", type=Path, required=True,
-                        help="isolated datadir (must be under /tmp/ or /home/work/bench-*/)")
+                        help="isolated datadir (must be under /tmp/ or ~/bench-*/)")
     parser.add_argument("--timeout", type=int, default=3600,
                         help="max wall seconds (default: 3600)")
     parser.add_argument("--poll-interval", type=float, default=5.0,

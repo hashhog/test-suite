@@ -9,6 +9,7 @@ import os
 import random
 import sys
 import time
+MAINNET_ROOT = os.environ.get("HASHHOG_MAINNET_ROOT", "/data/nvme1/hashhog-mainnet")
 
 from framework import RPCClient, NODE_CONFIGS
 
@@ -17,12 +18,12 @@ RESULTS_FILE = os.path.join(RESULTS_DIR, "utxo-comparison.json")
 
 # Mainnet nodes to test (subset specified in task)
 MAINNET_NODES = {
-    "core":      {"port": 8332,  "cookie": "/data/nvme1/hashhog-mainnet/bitcoin-core/.cookie"},
-    "haskoin":   {"port": 8354,  "cookie": "/data/nvme1/hashhog-mainnet/haskoin/.cookie"},
-    "rustoshi":  {"port": 8350,  "cookie": "/data/nvme1/hashhog-mainnet/rustoshi/.cookie"},
-    "beamchain": {"port": 48348, "cookie": "/data/nvme1/hashhog-mainnet/beamchain/.cookie"},
-    "hotbuns":   {"port": 8351,  "cookie": "/data/nvme1/hashhog-mainnet/hotbuns/.cookie"},
-    "blockbrew": {"port": 8355,  "cookie": "/data/nvme1/hashhog-mainnet/blockbrew/.cookie"},
+    "core":      {"port": 8332,  "cookie": f"{MAINNET_ROOT}/bitcoin-core/.cookie"},
+    "haskoin":   {"port": 8354,  "cookie": f"{MAINNET_ROOT}/haskoin/.cookie"},
+    "rustoshi":  {"port": 8350,  "cookie": f"{MAINNET_ROOT}/rustoshi/.cookie"},
+    "beamchain": {"port": 48348, "cookie": f"{MAINNET_ROOT}/beamchain/.cookie"},
+    "hotbuns":   {"port": 8351,  "cookie": f"{MAINNET_ROOT}/hotbuns/.cookie"},
+    "blockbrew": {"port": 8355,  "cookie": f"{MAINNET_ROOT}/blockbrew/.cookie"},
 }
 
 # BIP30 duplicate coinbase blocks

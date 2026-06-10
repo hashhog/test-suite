@@ -16,7 +16,7 @@ import urllib.error
 
 from regtest_miner import mine_blocks, rpc_call
 
-HASHHOG = "/home/work/hashhog"
+HASHHOG = os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGTEST_DIR = "/tmp/hashhog-regtest"
 RESULTS_FILE = os.path.expanduser("~/hashhog/test-suite/results/regtest-group1.json")
 

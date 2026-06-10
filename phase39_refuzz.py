@@ -30,7 +30,7 @@ from regtest_miner import bits_to_target, encode_coinbase_height
 # Configuration
 # ---------------------------------------------------------------------------
 
-HASHHOG = "/home/work/hashhog"
+HASHHOG = os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FUZZ_DIR = "/tmp/hashhog-refuzz"
 RESULTS_DIR = os.path.join(HASHHOG, "test-suite", "results")
 

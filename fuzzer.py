@@ -28,7 +28,7 @@ from regtest_miner import rpc_call, mine_blocks, sha256d, compact_size
 # Configuration
 # ---------------------------------------------------------------------------
 
-HASHHOG = "/home/work/hashhog"
+HASHHOG = os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FUZZ_DIR = "/tmp/hashhog-fuzz"
 RESULTS_DIR = os.path.join(HASHHOG, "test-suite", "results")
 

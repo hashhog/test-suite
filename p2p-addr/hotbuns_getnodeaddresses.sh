@@ -28,7 +28,7 @@
 #       the differential DETERMINISTIC.
 #
 # DIFFERENTIAL ORACLE: a REAL bitcoind regtest oracle
-# (/home/work/hashhog/bitcoin-core/build/bin/bitcoind + bitcoin-cli) on its OWN
+# (${HASHHOG_ROOT}/bitcoin-core/build/bin/bitcoind + bitcoin-cli) on its OWN
 # scratch + ports. Both hotbuns and Core are exercised; assertions compare the
 # KEY SET + types (NOT time exactly — clocks differ) and the error/count/filter
 # semantics.
@@ -62,9 +62,10 @@
 #   node (haskoin is mid-sync — left untouched).
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 NODE_DIR="$BASEDIR/hotbuns"
 BCD="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"

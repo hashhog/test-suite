@@ -69,9 +69,10 @@
 #   broad-pkills bitcoind by name (a live mainnet bitcoind may be running).
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 HK_DIR="$BASEDIR/haskoin"
 CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"
 CORE_CLI="$BASEDIR/bitcoin-core/build/bin/bitcoin-cli"
@@ -79,7 +80,7 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"
 
 HK_BIN="$(find "$HK_DIR/dist-newstyle" -name haskoin -type f -executable 2>/dev/null | head -1)"
 
-export LD_LIBRARY_PATH="/home/work/.local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${HOME}/.local/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 HK_DATADIR="/tmp/sblk-haskoin"
 HK_RPC=22138

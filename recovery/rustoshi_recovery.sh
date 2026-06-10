@@ -34,9 +34,10 @@
 # datadir and the assigned ports.
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ────────────────────────────────────────────────────────────────
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 BIN="$BASEDIR/rustoshi/target/release/rustoshi"
 DATADIR="/tmp/recreg-rustoshi"
 RPC_PORT=21500

@@ -69,9 +69,10 @@
 #   Port-kills (fuser -k) are BANNED (2026-06-10 incident); PID-scoped kills only.
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 OURO_DIR="$BASEDIR/ouroboros"
 OURO_PY="$OURO_DIR/.venv/bin/python3"
 CORE_BIN="$BASEDIR/bitcoin-core/build/bin/bitcoind"

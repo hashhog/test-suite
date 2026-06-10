@@ -86,7 +86,7 @@ from regtest_miner import (  # noqa: E402
 # --------------------------------------------------------------------------
 # Constants — fixed, isolated ports so this never collides with the fleet.
 # --------------------------------------------------------------------------
-HASHHOG = "/home/work/hashhog"
+HASHHOG = os.environ.get("HASHHOG_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATADIR = "/tmp/hashhog-haskoin-inject"
 RPC_PORT = 31362
 P2P_PORT = 31462

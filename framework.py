@@ -9,6 +9,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from typing import Any, Optional
+MAINNET_ROOT = os.environ.get("HASHHOG_MAINNET_ROOT", "/data/nvme1/hashhog-mainnet")
 
 
 # ---------------------------------------------------------------------------
@@ -97,17 +98,17 @@ class RPCClient:
 # ---------------------------------------------------------------------------
 
 NODE_CONFIGS = {
-    "core":       {"port": 8332,  "cookie": "/data/nvme1/hashhog-mainnet/bitcoin-core/.cookie"},
-    "haskoin":    {"port": 8354,  "cookie": "/data/nvme1/hashhog-mainnet/haskoin/.cookie"},
-    "rustoshi":   {"port": 8350,  "cookie": "/data/nvme1/hashhog-mainnet/rustoshi/.cookie"},
-    "nimrod":     {"port": 8353,  "cookie": "/data/nvme1/hashhog-mainnet/nimrod/mainnet/.cookie"},
-    "beamchain":  {"port": 48348, "cookie": "/data/nvme1/hashhog-mainnet/beamchain/.cookie"},
-    "hotbuns":    {"port": 8351,  "cookie": "/data/nvme1/hashhog-mainnet/hotbuns/.cookie"},
-    "clearbit":   {"port": 8356,  "cookie": "/data/nvme1/hashhog-mainnet/clearbit/.cookie"},
-    "blockbrew":  {"port": 8355,  "cookie": "/data/nvme1/hashhog-mainnet/blockbrew/.cookie"},
-    "lunarblock": {"port": 8358,  "cookie": "/data/nvme1/hashhog-mainnet/lunarblock/.cookie"},
-    "ouroboros":  {"port": 8359,  "cookie": "/data/nvme1/hashhog-mainnet/ouroboros/.cookie"},
-    "camlcoin":   {"port": 8357,  "cookie": "/data/nvme1/hashhog-mainnet/camlcoin/.cookie"},
+    "core":       {"port": 8332,  "cookie": f"{MAINNET_ROOT}/bitcoin-core/.cookie"},
+    "haskoin":    {"port": 8354,  "cookie": f"{MAINNET_ROOT}/haskoin/.cookie"},
+    "rustoshi":   {"port": 8350,  "cookie": f"{MAINNET_ROOT}/rustoshi/.cookie"},
+    "nimrod":     {"port": 8353,  "cookie": f"{MAINNET_ROOT}/nimrod/mainnet/.cookie"},
+    "beamchain":  {"port": 48348, "cookie": f"{MAINNET_ROOT}/beamchain/.cookie"},
+    "hotbuns":    {"port": 8351,  "cookie": f"{MAINNET_ROOT}/hotbuns/.cookie"},
+    "clearbit":   {"port": 8356,  "cookie": f"{MAINNET_ROOT}/clearbit/.cookie"},
+    "blockbrew":  {"port": 8355,  "cookie": f"{MAINNET_ROOT}/blockbrew/.cookie"},
+    "lunarblock": {"port": 8358,  "cookie": f"{MAINNET_ROOT}/lunarblock/.cookie"},
+    "ouroboros":  {"port": 8359,  "cookie": f"{MAINNET_ROOT}/ouroboros/.cookie"},
+    "camlcoin":   {"port": 8357,  "cookie": f"{MAINNET_ROOT}/camlcoin/.cookie"},
 }
 
 

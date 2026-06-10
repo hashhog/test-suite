@@ -28,9 +28,10 @@
 # NEVER touches /data/nvme1/ or testnet4-data/ or live nodes.
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ────────────────────────────────────────────────────────────────
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 NODE_DIR="$BASEDIR/hotbuns"
 DATADIR="/tmp/recreg-hotbuns"
 RPC_PORT=21504

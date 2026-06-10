@@ -55,9 +55,10 @@
 # NEVER touches /data/nvme1/, testnet4-data/, or any live node.
 # ============================================================================
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Fixed configuration ─────────────────────────────────────────────────────
-REPO_ROOT="/home/work/hashhog"
+REPO_ROOT="${HASHHOG_ROOT}"
 LB_DIR="$REPO_ROOT/lunarblock"
 SCRATCH="/tmp/importfleet-lunarblock"
 NODE_LOG="$SCRATCH/node.log"

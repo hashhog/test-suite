@@ -29,10 +29,11 @@
 # =============================================================================
 
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ---- fixed config -----------------------------------------------------------
 NODE="camlcoin"
-BASEDIR="/home/work/hashhog"
+BASEDIR="${HASHHOG_ROOT}"
 BIN="$BASEDIR/camlcoin/_build/default/bin/main.exe"
 DATADIR="/tmp/recreg-camlcoin"
 RPC_PORT=21505

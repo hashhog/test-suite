@@ -31,8 +31,9 @@ set -uo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 GBH="$DIR/blockheader"
 
-export PATH="/home/work/.bun/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
-export haskoin_datadir="${haskoin_datadir:-/home/work/hashhog/haskoin}"
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export PATH="${HOME}/.bun/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export haskoin_datadir="${haskoin_datadir:-${HASHHOG_ROOT}/haskoin}"
 
 IMPLS="${GBH_IMPLS:-rustoshi nimrod ouroboros blockbrew hotbuns camlcoin beamchain clearbit lunarblock haskoin}"
 LOGDIR="${GBH_LOGDIR:-/tmp/getblockheader-regression}"

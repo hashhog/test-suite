@@ -53,9 +53,10 @@
 # All other (noisy) output goes to stderr / the node log.
 # ============================================================================
 set -uo pipefail
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Fixed configuration ─────────────────────────────────────────────────────
-REPO_ROOT="/home/work/hashhog"
+REPO_ROOT="${HASHHOG_ROOT}"
 LB_DIR="$REPO_ROOT/lunarblock"
 SCRATCH="/tmp/spendref-lunarblock"
 NODE_LOG="$SCRATCH/node.log"

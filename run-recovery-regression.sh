@@ -35,11 +35,12 @@ REC="$DIR/recovery"
 
 # Interpreters that live in non-standard dirs (cron's minimal PATH lacks them):
 #   bun (hotbuns), luajit (lunarblock), escript (beamchain).
-export PATH="/home/work/.bun/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export PATH="${HOME}/.bun/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 # haskoin loads its BIP-39 wordlist via the cabal data dir; the fleet binary is
 # built-not-cabal-installed, so point getDataDir at the in-tree resources. The
 # haskoin test also sets this — belt-and-suspenders for direct/cron invocation.
-export haskoin_datadir="${haskoin_datadir:-/home/work/hashhog/haskoin}"
+export haskoin_datadir="${haskoin_datadir:-${HASHHOG_ROOT}/haskoin}"
 
 IMPLS="${RECOVERY_IMPLS:-rustoshi nimrod ouroboros blockbrew hotbuns camlcoin beamchain clearbit lunarblock haskoin}"
 LOGDIR="${RECOVERY_LOGDIR:-/tmp/recovery-regression}"
