@@ -394,8 +394,12 @@ declare -gA BD_MASK=(
     [getrawmempool]='if type=="object" then with_entries(.value.time=0) else . end'
     # getchaintxstats: time/txrate/window_interval are wall-clock-derived.
     [getchaintxstats]='.time=0 | (if has("txrate") then .txrate=0 else . end) | (if has("window_interval") then .window_interval=0 else . end)'
-    # getnetworkinfo: per-node/socket/UA state. subversion is the per-impl user-agent -> MASK.
-    [getnetworkinfo]='.timeoffset=0 | .connections=0 | (if has("connections_in") then .connections_in=0 else . end) | (if has("connections_out") then .connections_out=0 else . end) | .networkactive=false | .localaddresses=["M"] | .subversion="M" | .warnings=(.warnings|if type=="array" then ["M"] else "M" end)'
+    # getnetworkinfo: per-node/socket/UA state. POLICY (user, 2026-06-10): SOFTWARE-IDENTITY fields are
+    # intentionally NOT byte-identical to Core — an impl reports what it IS, not "Bitcoin Core v31.99". So
+    # `version` (CLIENT_VERSION) and `subversion` (user-agent) are MASKED here (intentional divergence, NOT a
+    # fixable diff). `protocolversion`, `localservices`/service-bits (capability), and `relayfee` (policy) are
+    # NOT identity and stay compared (real diffs to fix).
+    [getnetworkinfo]='.timeoffset=0 | .connections=0 | (if has("connections_in") then .connections_in=0 else . end) | (if has("connections_out") then .connections_out=0 else . end) | .networkactive=false | .localaddresses=["M"] | .version=0 | .subversion="M" | .warnings=(.warnings|if type=="array" then ["M"] else "M" end)'
     # getmininginfo: networkhashps/pooledtx are state-derived. currentblockweight/
     # currentblocktx are OPTIONAL template-assembler state — present only on a node
     # that has assembled a block template (the miner), ABSENT on a node that only
