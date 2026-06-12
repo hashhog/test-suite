@@ -287,9 +287,16 @@ core_height() {
 }
 
 # ── AEAD / desync failure scan ─────────────────────────────────────────────
+# NOTE: the bare token "AEAD" must NOT appear as a standalone alternative — it
+# is a 4-char substring that case-insensitively matches inside arbitrary block
+# HASH hex (e.g. the "...aead..." in "INJECT: block ... hash=31c03aead62707af",
+# emitted by the mining/injectBlock path the B3 fix wires in). Match "aead"
+# ONLY when it is paired with explicit failure context, like every other
+# alternative here. A genuine AEAD failure is always logged as "AEAD <verb>
+# fail/mismatch", never as a lone token, so this loses no real detection.
 aead_failures() {
     local f
-    local pat='AEAD|Poly1305 (tag )?mismatch|decrypt(ion)? fail|auth(entication)? fail|tag mismatch|bad mac|v2 .*desync|MAC check failed|ChaCha.*fail|v2 transport error'
+    local pat='AEAD[^a-z0-9]*(tag )?(mismatch|fail|error|decrypt)|Poly1305 (tag )?mismatch|decrypt(ion)? fail|auth(entication)? fail|tag mismatch|bad mac|v2 .*desync|MAC check failed|ChaCha.*fail|v2 transport error'
     for f in "$@"; do
         [[ -f "$f" ]] || continue
         grep -hEi "$pat" "$f" 2>/dev/null
