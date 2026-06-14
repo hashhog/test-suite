@@ -845,6 +845,18 @@ def main():
     subprocess.run(["rm", "-rf", FUZZ_DIR], check=False)
     log("Cleanup complete.")
 
+    # Exit non-zero when the fuzzer FOUND something, so CI fails on a real
+    # finding instead of silently passing. A consensus divergence (an impl
+    # deciding a block/tx differently from Core), a crash, or a hang under fuzz
+    # is a genuine bug; the detail is in test-suite/results/fuzz-results.json.
+    n_div = len(stats.get("divergences", []))
+    n_crashes = len(stats.get("crashes", []))
+    n_hangs = len(stats.get("hangs", []))
+    if n_div or n_crashes or n_hangs:
+        log(f"FUZZ FINDINGS: {n_div} divergence(s), {n_crashes} crash(es), "
+            f"{n_hangs} hang(s) -- see {RESULTS_DIR}/fuzz-results.json")
+        return 1
+    log("No crashes, hangs, or divergences found across the fuzz run.")
     return 0
 
 
