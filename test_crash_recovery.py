@@ -23,6 +23,39 @@ RESULTS_FILE = os.path.join(RESULTS_DIR, "crash-recovery.json")
 CORE_RPC = 21332
 CORE_P2P = 21333
 
+# ── Helpers for the harder launch adapters (2026-06-18 coverage extension) ──────
+# ouroboros runs from a venv that carries its Rust `sync` extension; fall back to
+# the system python3 (smoke-harness does the same).
+OURO_PY = (
+    f"{HASHHOG}/ouroboros/.venv/bin/python3"
+    if os.path.exists(f"{HASHHOG}/ouroboros/.venv/bin/python3")
+    else "python3"
+)
+
+# beamchain is an Erlang release launched with `foreground`. Over a SIGKILL +
+# restart, epmd can still hold the old node's -sname for a few seconds, so a
+# fixed sname fails to re-register. Use a fresh sname every launch.
+_BEAM_LAUNCH = 0
+
+
+def _beamchain_pre(d):
+    global _BEAM_LAUNCH
+    _BEAM_LAUNCH += 1
+    with open(f"{d}/sys.config", "w") as f:
+        f.write(
+            "[\n {beamchain, [\n   {network, regtest},\n   {datadir, \"%s\"},\n"
+            "   {p2pport, 21347},\n   {rpcport, 21346}\n ]},\n"
+            " {kernel, [{logger_level, info}]},\n"
+            " {sasl,   [{sasl_error_logger, false}]}\n].\n" % d
+        )
+    with open(f"{d}/vm.args", "w") as f:
+        # No -heart: heart would auto-restart the VM on crash and defeat the test.
+        f.write(
+            "-sname beamchain_crash_%d_%d\n-setcookie beamchain_crash\n"
+            "+P 1048576\n+K true\n+A 64\n" % (os.getpid(), _BEAM_LAUNCH)
+        )
+
+
 # Test nodes: pick 3 that are easy to start in regtest
 NODES = {
     "core": {
@@ -127,6 +160,35 @@ NODES = {
         },
         "check": f"{HASHHOG}/lunarblock/src/main.lua",
         "rpcport": 21350, "start_delay": 3,
+    },
+    "beamchain": {
+        "binary": f"{HASHHOG}/beamchain/_build/prod/rel/beamchain/bin/beamchain",
+        "args": lambda d: ["foreground"],
+        "pre_launch": _beamchain_pre,
+        "env": lambda d: {
+            "RELX_CONFIG_PATH": f"{d}/sys.config", "VMARGS_PATH": f"{d}/vm.args",
+        },
+        "rpcport": 21346, "auth": "cookie", "start_delay": 6,
+    },
+    "ouroboros": {
+        "binary": OURO_PY,
+        "args": lambda d: [
+            "-m", "ouroboros.cli", "--network", "regtest", "--data-dir", d,
+            "start", "--force", "--rpc-port", "21348", "--p2p-port", "21349",
+        ],
+        "cwd": f"{HASHHOG}/ouroboros",
+        "check": f"{HASHHOG}/ouroboros/src/ouroboros/cli.py",
+        "rpcport": 21348, "auth": "cookie", "start_delay": 4,
+    },
+    "hotbuns": {
+        "binary": "bun",
+        "args": lambda d: [
+            "run", "src/index.ts", "--network=regtest", f"--datadir={d}",
+            "--port=21353", "--rpcport=21352",
+        ],
+        "cwd": f"{HASHHOG}/hotbuns",
+        "check": f"{HASHHOG}/hotbuns/src/index.ts",
+        "rpcport": 21352, "auth": "cookie", "start_delay": 4,
     },
 }
 
@@ -506,7 +568,8 @@ def main():
     test_nodes = []
     candidates = os.environ.get(
         "CRASH_NODES",
-        "rustoshi,haskoin,clearbit,blockbrew,nimrod,camlcoin,lunarblock",
+        "rustoshi,haskoin,clearbit,blockbrew,nimrod,camlcoin,lunarblock,"
+        "beamchain,ouroboros,hotbuns",
     ).split(",")
     for name in candidates:
         name = name.strip()
