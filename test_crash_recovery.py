@@ -460,6 +460,28 @@ def run_crash_test(name, crash_point, total_blocks=110, base_blocks=100):
     kill_node(name)
     time.sleep(1)  # Brief pause before restart
 
+    # Optional: dump the on-disk datadir RIGHT AFTER the crash (before restart/
+    # cleanup). Distinguishes "data persisted but not replayed on boot" (restart-
+    # resume bug) from "data never durably flushed" (durability gap) for the
+    # DROP-to-0/1 nodes. HASHHOG_INSPECT_AFTER_CRASH=1.
+    if os.environ.get("HASHHOG_INSPECT_AFTER_CRASH"):
+        dd = f"{CRASH_DIR}/{name}"
+        total = 0
+        biggest = []
+        for root, _dirs, files in os.walk(dd):
+            for fn in files:
+                fp = os.path.join(root, fn)
+                try:
+                    sz = os.path.getsize(fp)
+                except OSError:
+                    sz = 0
+                total += sz
+                biggest.append((sz, os.path.relpath(fp, dd)))
+        biggest.sort(reverse=True)
+        log(f"  [INSPECT] {name} datadir after crash: {total} bytes total, {len(biggest)} files")
+        for sz, rel in biggest[:8]:
+            log(f"  [INSPECT]   {sz:>10} B  {rel}")
+
     # Step 5: Restart
     log(f"  Restarting {name}...")
     ok = start_node(name)
