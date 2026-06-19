@@ -423,6 +423,14 @@ def run_crash_test(name, crash_point, total_blocks=110, base_blocks=100):
         "steps": {},
     }
 
+    # Each crash point is an INDEPENDENT test: wipe the node's datadir first so a
+    # prior crash point's completed chain (the node ends every test at total_blocks)
+    # doesn't pre-seed this one — otherwise the node already holds all blocks and the
+    # "crash at N" never actually loses anything, masking a real recovery regression.
+    # Core's datadir is untouched (it is the shared, already-mined block source).
+    import shutil as _shutil
+    _shutil.rmtree(f"{CRASH_DIR}/{name}", ignore_errors=True)
+
     # Step 1: Start the node
     ok = start_node(name)
     if not ok:
