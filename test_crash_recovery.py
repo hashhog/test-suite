@@ -83,6 +83,51 @@ NODES = {
         "rpcport": 21338,
         "start_delay": 2,
     },
+    # ── 2026-06-18 durability-provability extension ─────────────────────────────
+    # Mirror smoke-harness.sh's PROVEN regtest launch args; auth via .cookie (the
+    # production path — mainnet uses cookies). Ports stay inside the allocated
+    # 21332-21358 band. submitblock/getblockcount/getbestblockhash/
+    # getblockchaininfo all confirmed implemented in each node's RPC dispatch.
+    "blockbrew": {
+        "binary": f"{HASHHOG}/blockbrew/blockbrew",
+        "args": lambda d: [
+            "-network=regtest", f"-datadir={d}",
+            "-listen=127.0.0.1:21341", "-rpcbind=127.0.0.1:21340",
+            "-maxoutbound=0", "-nolisten",
+        ],
+        "rpcport": 21340, "auth": "cookie", "start_delay": 2,
+    },
+    "nimrod": {
+        "binary": f"{HASHHOG}/nimrod/bin/nimrod",
+        "args": lambda d: [
+            "--network=regtest", f"--datadir={d}",
+            "--port=21343", "--rpcport=21342", "start",
+        ],
+        "rpcport": 21342, "auth": "cookie", "start_delay": 3,
+    },
+    "camlcoin": {
+        "binary": f"{HASHHOG}/camlcoin/_build/default/bin/main.exe",
+        "args": lambda d: [
+            "--network", "regtest", "--datadir", d,
+            "--port", "21345", "--rpcport", "21344",
+        ],
+        "rpcport": 21344, "auth": "cookie", "start_delay": 3,
+    },
+    "lunarblock": {
+        # lunarblock uses rpcuser/rpcpassword auth, NOT a .cookie (see auto-memory).
+        "binary": "luajit",
+        "args": lambda d: [
+            "src/main.lua", "--network", "regtest", "--datadir", d,
+            "--port", "21351", "--rpcport", "21350", "--nov2transport",
+            "--rpcuser", "test", "--rpcpassword", "test",
+        ],
+        "cwd": f"{HASHHOG}/lunarblock",
+        "env": lambda d: {
+            "LUA_PATH": f"{HASHHOG}/lunarblock/src/?.lua;{HASHHOG}/lunarblock/src/?/init.lua;;",
+        },
+        "check": f"{HASHHOG}/lunarblock/src/main.lua",
+        "rpcport": 21350, "start_delay": 3,
+    },
 }
 
 processes = {}
@@ -92,10 +137,32 @@ def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def _auth_for(node_name):
+    """(user, pass) for a node's RPC. Nodes with auth=="cookie" (the 6 added
+    2026-06-18) read their .cookie the way smoke-harness and the mainnet fleet
+    do — the production auth path. Re-read every call because the node writes
+    the cookie only after it binds RPC. Returns None while the cookie is absent."""
+    cfg = NODES[node_name]
+    if cfg.get("auth") == "cookie":
+        datadir = f"{CRASH_DIR}/{node_name}"
+        for c in (f"{datadir}/.cookie", f"{datadir}/regtest/.cookie"):
+            try:
+                with open(c) as fh:
+                    u, _, p = fh.read().strip().partition(":")
+                    return (u, p)
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+        return None
+    return ("test", "test")
+
+
 def node_rpc(node_name, method, params=None):
     cfg = NODES[node_name]
     url = f"http://127.0.0.1:{cfg['rpcport']}"
-    return rpc_call(url, "test", "test", method, params)
+    auth = _auth_for(node_name)
+    if auth is None:
+        return None, "cookie not yet available"
+    return rpc_call(url, auth[0], auth[1], method, params)
 
 
 def wait_for_rpc(node_name, timeout=20):
@@ -104,9 +171,11 @@ def wait_for_rpc(node_name, timeout=20):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            result, err = rpc_call(url, "test", "test", "getblockchaininfo")
-            if result is not None:
-                return True
+            auth = _auth_for(node_name)
+            if auth is not None:
+                result, err = rpc_call(url, auth[0], auth[1], "getblockchaininfo")
+                if result is not None:
+                    return True
         except Exception:
             pass
         time.sleep(0.5)
@@ -121,9 +190,21 @@ def start_node(name):
     log_path = f"{CRASH_DIR}/{name}.log"
     log_file = open(log_path, "a")
 
+    # pre_launch hook: write any per-datadir config files the node needs before
+    # it starts (e.g. beamchain's sys.config + vm.args). Idempotent across the
+    # restart-after-crash, so it runs on every start_node.
+    if "pre_launch" in cfg:
+        cfg["pre_launch"](datadir)
+
     cmd = [cfg["binary"]] + cfg["args"](datadir)
+    # cwd / env: some nodes must launch from their submodule root (ouroboros
+    # `-m ouroboros.cli`, lunarblock `luajit src/main.lua`) or need extra env
+    # (beamchain RELX_CONFIG_PATH/VMARGS_PATH). Optional per-node.
+    env = dict(os.environ)
+    if "env" in cfg:
+        env.update(cfg["env"](datadir))
     proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file,
-                            preexec_fn=os.setsid)
+                            preexec_fn=os.setsid, cwd=cfg.get("cwd"), env=env)
     processes[name] = proc
     time.sleep(cfg["start_delay"])
     if wait_for_rpc(name, timeout=20):
@@ -405,15 +486,37 @@ def main():
         "summary": {},
     }
 
-    # Check which test node binaries exist
+    # Check which test node binaries exist. Default candidate set grew from 3 to
+    # 7 (2026-06-18 durability extension); override with CRASH_NODES=a,b,c for an
+    # incremental single-node validation run. The tricky launchers (beamchain
+    # epmd-over-SIGKILL, ouroboros daemonization, hotbuns missing build) are NOT
+    # in the default set yet — see CRASH-RECOVERY follow-up.
+    import shutil
+
+    def node_available(name):
+        cfg = NODES[name]
+        check_path = cfg.get("check", cfg["binary"])
+        if not os.path.isfile(check_path):
+            return False
+        binary = cfg["binary"]
+        if os.path.sep not in binary:        # bare command (e.g. luajit) — need it on PATH
+            return shutil.which(binary) is not None
+        return os.path.isfile(binary)
+
     test_nodes = []
-    for name in ["rustoshi", "haskoin", "clearbit"]:
-        binary = NODES[name]["binary"]
-        if os.path.isfile(binary):
+    candidates = os.environ.get(
+        "CRASH_NODES",
+        "rustoshi,haskoin,clearbit,blockbrew,nimrod,camlcoin,lunarblock",
+    ).split(",")
+    for name in candidates:
+        name = name.strip()
+        if name not in NODES:
+            log(f"  {name}: not configured, skipping"); continue
+        if node_available(name):
             test_nodes.append(name)
-            log(f"  {name}: binary found at {binary}")
+            log(f"  {name}: available")
         else:
-            log(f"  {name}: binary NOT found at {binary}, skipping")
+            log(f"  {name}: artifact NOT found, skipping")
 
     if not test_nodes:
         log("No test node binaries found, exiting")
@@ -447,8 +550,9 @@ def main():
         stop_all()
         sys.exit(1)
 
-    # Crash points: early (103), mid (105), late (108)
-    crash_points = [103, 105, 108]
+    # Crash points: early (103), mid (105), late (108). CRASH_POINTS=105 narrows
+    # to a single point for a fast per-node validation pass.
+    crash_points = [int(x) for x in os.environ.get("CRASH_POINTS", "103,105,108").split(",")]
     log(f"\nCrash points to test: {crash_points}")
 
     # Run crash tests for each node at each crash point
