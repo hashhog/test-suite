@@ -1,0 +1,107 @@
+{
+  "node": "beamchain",
+  "timestamp": "2026-07-02T09:52:07Z",
+  "cap_mb": 2048,
+  "probes": [
+    {
+      "id": "allocbomb-inv",
+      "class": "1e",
+      "desc": "inv count=0xFFFFFFFF, no items (36B/item -> ~150GB if pre-allocated)",
+      "status": "MEDIUM-logpanic",
+      "note": "survived + RPC-responsive but logged a crash marker (caught?): =CRASH REPORT==== 2-Jul-2026::05:52:09.538063 ===",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [
+        "=CRASH REPORT==== 2-Jul-2026::05:52:09.538063 ===",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:11.539039 ===",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:15.540090 ==="
+      ]
+    },
+    {
+      "id": "allocbomb-headers",
+      "class": "1e",
+      "desc": "headers count=0xFFFFFFFF, no items (81B/item)",
+      "status": "MEDIUM-logpanic",
+      "note": "survived + RPC-responsive but logged a crash marker (caught?): =CRASH REPORT==== 2-Jul-2026::05:52:23.541044 ===",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [
+        "=CRASH REPORT==== 2-Jul-2026::05:52:23.541044 ==="
+      ]
+    },
+    {
+      "id": "allocbomb-getdata",
+      "class": "1e",
+      "desc": "getdata count=0xFFFFFFFF, no items (36B/item)",
+      "status": "PASS",
+      "note": "matched Core (no disconnect), bounded RSS (\u0394=0MB), rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": []
+    },
+    {
+      "id": "allocbomb-block-txcount",
+      "class": "1e",
+      "desc": "block: valid 80B header + tx-count=0xFFFFFFFF, no txs",
+      "status": "MEDIUM-logpanic",
+      "note": "survived + RPC-responsive but logged a crash marker (caught?): ** Reason for termination ==",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [
+        "** Reason for termination ==",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:33.653345 ===",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:39.542002 ===",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:39.543561 ===",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:40.545041 ==="
+      ]
+    },
+    {
+      "id": "oversized-len-addr",
+      "class": "1c",
+      "desc": "addr length field=5,000,000 (> 4MB MAX) with 1B body",
+      "status": "MEDIUM-logpanic",
+      "note": "survived + RPC-responsive but logged a crash marker (caught?): ** Reason for termination = exit:message_too_large",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": true,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [
+        "** Reason for termination = exit:message_too_large",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:41.829171 ===",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:42.546064 ===",
+        "=CRASH REPORT==== 2-Jul-2026::05:52:46.547038 ==="
+      ]
+    },
+    {
+      "id": "compactsize-boundary-inv",
+      "class": "5a",
+      "desc": "inv count=0xFFFFFFFFFFFFFFFF (9-byte compactsize), no items",
+      "status": "INCONCLUSIVE",
+      "note": "handshake failed: ConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 31456)"
+    },
+    {
+      "id": "compactsize-boundary-headers",
+      "class": "5a",
+      "desc": "headers count=0xFFFFFFFFFFFFFFFF (9-byte compactsize), no items",
+      "status": "INCONCLUSIVE",
+      "note": "handshake failed: ConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 31456)"
+    }
+  ],
+  "prefix": {
+    "mined": 110,
+    "submitted": 110
+  }
+}

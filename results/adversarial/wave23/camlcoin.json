@@ -1,0 +1,272 @@
+{
+  "node": "camlcoin",
+  "timestamp": "2026-07-02T13:23:18Z",
+  "cap_mb": 3072,
+  "waves": [
+    2,
+    3
+  ],
+  "probes": [],
+  "attacks": [
+    {
+      "id": "unconnecting-headers-flood",
+      "class": "2a",
+      "wave": 2,
+      "desc": "flood 600 headers msgs with unknown prev (never connects)",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 0.0,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "sent": 600,
+        "cpu_pct": 0.0,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "lowwork-header-chain",
+      "class": "2b",
+      "wave": 2,
+      "desc": "feed 20000 valid-PoW below-min-work headers (2000/msg)",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=6MB, rpc 0.00s",
+      "rss_delta_mb": 6,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 0.6,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "headers_fed": 20000,
+        "cpu_pct": 0.6,
+        "fd_delta": 0
+      }
+    },
+    {
+      "id": "addr-flood",
+      "class": "2c",
+      "wave": 2,
+      "desc": "400x max-size (1000-entry) addr messages",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=19MB, rpc 0.00s",
+      "rss_delta_mb": 19,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 1.0,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "addr_msgs": 400,
+        "cpu_pct": 1.0,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "oversize-inv",
+      "class": "2d",
+      "wave": 2,
+      "desc": "inv count=60000 (>MAX_INV_SZ) + 30x 50000-item inv stream",
+      "status": "MEDIUM-nodisconnect",
+      "note": "did NOT drop peer on a >50000-item inv where Core discourages",
+      "rss_delta_mb": 17,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 1.2,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "dropped_on_oversize_inv": false,
+        "maxsize_invs_streamed": 30,
+        "cpu_pct": 1.2,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "orphan-tx-flood",
+      "class": "2e",
+      "wave": 2,
+      "desc": "4000 txs each spending a nonexistent parent",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 0.0,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "orphans_sent": 4000,
+        "cpu_pct": 0.0,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "getdata-flood",
+      "class": "2f",
+      "wave": 2,
+      "desc": "40x 2000-item getdata for unknown blocks; RPC latency during",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 0.5,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "getdata_msgs": 40,
+        "rpc_during_max_ms": 1,
+        "cpu_pct": 0.5,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "mempool-fill",
+      "class": "2g",
+      "wave": 2,
+      "desc": "flood valid low-fee OP_TRUE chains off mature coinbases",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 0.0,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "txs_sent": 192,
+        "mempool_bytes": 0,
+        "mempool_txs": 0,
+        "cpu_pct": 0.0,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "inbound-monopolize",
+      "class": "3a",
+      "wave": 3,
+      "desc": "open 60 idle inbound conns; honest peer must still get in",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s; conncount=67 honest_admitted=True",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 0.4,
+      "peer_dropped": null,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "handshaked": 60,
+        "node_conncount": 67,
+        "honest_admitted_when_full": true,
+        "cpu_pct": 0.4,
+        "fd_delta": 60
+      }
+    },
+    {
+      "id": "getdata-stall",
+      "class": "3b",
+      "wave": 3,
+      "desc": "serve headers for a heavier chain, WITHHOLD all blocks",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 0.8,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "getheaders_served": 1,
+        "getdata_requests": 7,
+        "getdata_items_requested": 112,
+        "rpc_during_max_ms": 1,
+        "still_connected": true,
+        "cpu_pct": 0.8,
+        "fd_delta": -63
+      }
+    },
+    {
+      "id": "bogus-highwork-header-stall",
+      "class": "3c",
+      "wave": 3,
+      "desc": "serve a 3000-header high-work chain, withhold all blocks",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 1.0,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "getheaders_served": 0,
+        "getdata_requests": 21,
+        "besthash_unchanged": true,
+        "rpc_during_max_ms": 1,
+        "still_connected": true,
+        "cpu_pct": 1.0,
+        "fd_delta": 1
+      }
+    }
+  ],
+  "prefix": {
+    "mined": 110,
+    "submitted": 110,
+    "mature_coins": [
+      [
+        "b4ba2b24be456aacaf743be5fe5de25eb3ebebb52f3faf75aecf45921a810101",
+        0,
+        5000000000
+      ],
+      [
+        "927f5d496740474fe76bad1493b6a11d679dbdfb526edda6e619279f7a627bf0",
+        0,
+        5000000000
+      ],
+      [
+        "115ca2bdad55b4d7d740268f4c61b846df567008c59f0ccb2b836601fddf7c3a",
+        0,
+        5000000000
+      ],
+      [
+        "8c86d9bc71781e38c131cc93ec7c6abfa90d1c43fd76cb9442d87fddf68114f6",
+        0,
+        5000000000
+      ],
+      [
+        "eb7aafbffa11ad3084d6904de6da08601dfc0dac323cafe0caa7ebefe566c167",
+        0,
+        5000000000
+      ],
+      [
+        "0cc1b9dddd4821b7a97b10b9bbc1057668435144d01c42588dcf6a0bbcee1a5c",
+        0,
+        5000000000
+      ],
+      [
+        "949f0a184ba034a527ed75f01802a1c9bab1cf161c19c26af60ab3dc4140674d",
+        0,
+        5000000000
+      ],
+      [
+        "f3f060271810bbb75a7558fb5efad847ff159cc75885d52af549466353e68002",
+        0,
+        5000000000
+      ]
+    ]
+  }
+}

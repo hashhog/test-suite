@@ -1,0 +1,84 @@
+{
+  "node": "clearbit",
+  "timestamp": "2026-07-02T13:07:26Z",
+  "cap_mb": 2048,
+  "probes": [
+    {
+      "id": "allocbomb-inv",
+      "class": "1e",
+      "desc": "inv count=0xFFFFFFFF, no items (36B/item -> ~150GB if pre-allocated)",
+      "status": "PASS",
+      "note": "disconnected the bad peer, bounded RSS (\u0394=0MB), rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "peer_dropped": true,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": []
+    },
+    {
+      "id": "allocbomb-headers",
+      "class": "1e",
+      "desc": "headers count=0xFFFFFFFF, no items (81B/item)",
+      "status": "INCONCLUSIVE",
+      "note": "handshake did not complete (P2P wedged?)",
+      "proc_alive": true,
+      "returncode": null,
+      "rpc_ok": true
+    },
+    {
+      "id": "allocbomb-getdata",
+      "class": "1e",
+      "desc": "getdata count=0xFFFFFFFF, no items (36B/item)",
+      "status": "INCONCLUSIVE",
+      "note": "handshake did not complete (P2P wedged?)",
+      "proc_alive": true,
+      "returncode": null,
+      "rpc_ok": true
+    },
+    {
+      "id": "allocbomb-block-txcount",
+      "class": "1e",
+      "desc": "block: valid 80B header + tx-count=0xFFFFFFFF, no txs",
+      "status": "INCONCLUSIVE",
+      "note": "handshake did not complete (P2P wedged?)",
+      "proc_alive": true,
+      "returncode": null,
+      "rpc_ok": true
+    },
+    {
+      "id": "oversized-len-addr",
+      "class": "1c",
+      "desc": "addr length field=5,000,000 (> 4MB MAX) with 1B body",
+      "status": "INCONCLUSIVE",
+      "note": "handshake did not complete (P2P wedged?)",
+      "proc_alive": true,
+      "returncode": null,
+      "rpc_ok": true
+    },
+    {
+      "id": "compactsize-boundary-inv",
+      "class": "5a",
+      "desc": "inv count=0xFFFFFFFFFFFFFFFF (9-byte compactsize), no items",
+      "status": "INCONCLUSIVE",
+      "note": "handshake did not complete (P2P wedged?)",
+      "proc_alive": true,
+      "returncode": null,
+      "rpc_ok": true
+    },
+    {
+      "id": "compactsize-boundary-headers",
+      "class": "5a",
+      "desc": "headers count=0xFFFFFFFFFFFFFFFF (9-byte compactsize), no items",
+      "status": "INCONCLUSIVE",
+      "note": "handshake did not complete (P2P wedged?)",
+      "proc_alive": true,
+      "returncode": null,
+      "rpc_ok": true
+    }
+  ],
+  "prefix": {
+    "mined": 110,
+    "submitted": 110
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "node": "beamchain",
+  "timestamp": "2026-07-02T12:57:14Z",
+  "cap_mb": 2048,
+  "probes": [
+    {
+      "id": "allocbomb-inv",
+      "class": "1e",
+      "desc": "inv count=0xFFFFFFFF, no items (36B/item -> ~150GB if pre-allocated)",
+      "status": "PASS",
+      "note": "matched Core (no disconnect), bounded RSS (\u0394=0MB), rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": []
+    },
+    {
+      "id": "allocbomb-headers",
+      "class": "1e",
+      "desc": "headers count=0xFFFFFFFF, no items (81B/item)",
+      "status": "PASS",
+      "note": "matched Core (no disconnect), bounded RSS (\u0394=0MB), rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": []
+    },
+    {
+      "id": "allocbomb-getdata",
+      "class": "1e",
+      "desc": "getdata count=0xFFFFFFFF, no items (36B/item)",
+      "status": "PASS",
+      "note": "matched Core (no disconnect), bounded RSS (\u0394=0MB), rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": []
+    },
+    {
+      "id": "allocbomb-block-txcount",
+      "class": "1e",
+      "desc": "block: valid 80B header + tx-count=0xFFFFFFFF, no txs",
+      "status": "MEDIUM-logpanic",
+      "note": "survived + RPC-responsive but logged a crash marker (caught?): ** Reason for termination ==",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [
+        "** Reason for termination ==",
+        "=CRASH REPORT==== 2-Jul-2026::08:57:40.175338 ==="
+      ]
+    },
+    {
+      "id": "oversized-len-addr",
+      "class": "1c",
+      "desc": "addr length field=5,000,000 (> 4MB MAX) with 1B body",
+      "status": "MEDIUM-logpanic",
+      "note": "survived + RPC-responsive but logged a crash marker (caught?): ** Reason for termination = exit:message_too_large",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": true,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [
+        "** Reason for termination = exit:message_too_large",
+        "=CRASH REPORT==== 2-Jul-2026::08:57:48.349860 ==="
+      ]
+    },
+    {
+      "id": "compactsize-boundary-inv",
+      "class": "5a",
+      "desc": "inv count=0xFFFFFFFFFFFFFFFF (9-byte compactsize), no items",
+      "status": "PASS",
+      "note": "matched Core (no disconnect), bounded RSS (\u0394=0MB), rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": []
+    },
+    {
+      "id": "compactsize-boundary-headers",
+      "class": "5a",
+      "desc": "headers count=0xFFFFFFFFFFFFFFFF (9-byte compactsize), no items",
+      "status": "PASS",
+      "note": "matched Core (no disconnect), bounded RSS (\u0394=0MB), rpc 0.00s",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": []
+    }
+  ],
+  "prefix": {
+    "mined": 110,
+    "submitted": 110
+  }
+}
