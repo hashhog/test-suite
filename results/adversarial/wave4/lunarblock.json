@@ -1,0 +1,193 @@
+{
+  "node": "lunarblock",
+  "timestamp": "2026-07-02T14:25:52Z",
+  "cap_mb": 2048,
+  "waves": [
+    4
+  ],
+  "probes": [],
+  "attacks": [
+    {
+      "id": "preverack-flood",
+      "class": "4a",
+      "wave": 4,
+      "desc": "burst ping/getheaders/inv/getdata/tx AFTER version, BEFORE verack",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s; preverack_replies=0 (Core 0); recovered=False",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 0,
+      "cpu_pct": 11.5,
+      "peer_dropped": true,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "preverack_replies": 0,
+        "preverack_reply_types": [],
+        "disconnected_preverack": true,
+        "handshake_completed_after": false,
+        "cpu_pct": 11.5,
+        "fd_delta": 0
+      }
+    },
+    {
+      "id": "out-of-order-handshake",
+      "class": "4b",
+      "wave": 4,
+      "desc": "non-version message first; verack-before-version on a 2nd conn",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s; preversion_replies=0 (Core 0); recovered=False",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "cpu_pct": 10.4,
+      "peer_dropped": true,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "preversion_replies": 0,
+        "disconnected_on_preversion": true,
+        "recovered_after_early_verack": false,
+        "cpu_pct": 10.4,
+        "fd_delta": 0
+      }
+    },
+    {
+      "id": "duplicate-version",
+      "class": "4c",
+      "wave": 4,
+      "desc": "complete handshake then send a 2nd (redundant) version",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s; dup-version disconnected=False responsive=True",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "cpu_pct": 9.7,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "disconnected_on_dup_version": false,
+        "responsive_after_dup_version": true,
+        "cpu_pct": 9.7,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "ping-pong-abuse",
+      "class": "4d",
+      "wave": 4,
+      "desc": "withhold pongs to node pings; flood 3000 pings (pong-flood/CPU)",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s; answered_ping=True pongs=3000/3000flood",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 1,
+      "cpu_pct": 13.1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "answered_our_ping": true,
+        "pings_flooded": 3000,
+        "pongs_received": 3000,
+        "node_pinged_us": 0,
+        "cpu_pct": 13.1,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "unrequested-block-tx",
+      "class": "4e",
+      "wave": 4,
+      "desc": "send a valid unrequested block + a well-formed unrequested tx",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=0MB, rpc 0.00s; unreq-block accepted=False tip 110->110",
+      "rss_delta_mb": 0,
+      "rpc_latency_ms": 2,
+      "cpu_pct": 10.1,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "unrequested_block_sent": true,
+        "tip_before": 110,
+        "tip_after": 110,
+        "accepted_unrequested_block": false,
+        "cpu_pct": 10.1,
+        "fd_delta": 1
+      }
+    },
+    {
+      "id": "getaddr-abuse",
+      "class": "4f",
+      "wave": 4,
+      "desc": "50x getaddr (Core answers <=1/conn) + unsolicited addr flood",
+      "status": "PASS",
+      "note": "up+responsive, RSS\u0394=1MB, rpc 0.00s; addr_responses=0 to 50 getaddr (Core 0)",
+      "rss_delta_mb": 1,
+      "rpc_latency_ms": 1,
+      "cpu_pct": 10.4,
+      "peer_dropped": false,
+      "proc_alive": true,
+      "returncode": null,
+      "log_hits": [],
+      "extra": {
+        "getaddr_sent": 50,
+        "addr_responses": 0,
+        "unsolicited_addr_msgs": 50,
+        "disconnected": false,
+        "cpu_pct": 10.4,
+        "fd_delta": 1
+      }
+    }
+  ],
+  "prefix": {
+    "mined": 111,
+    "submitted": 110,
+    "mature_coins": [
+      [
+        "b4ba2b24be456aacaf743be5fe5de25eb3ebebb52f3faf75aecf45921a810101",
+        0,
+        5000000000
+      ],
+      [
+        "927f5d496740474fe76bad1493b6a11d679dbdfb526edda6e619279f7a627bf0",
+        0,
+        5000000000
+      ],
+      [
+        "115ca2bdad55b4d7d740268f4c61b846df567008c59f0ccb2b836601fddf7c3a",
+        0,
+        5000000000
+      ],
+      [
+        "8c86d9bc71781e38c131cc93ec7c6abfa90d1c43fd76cb9442d87fddf68114f6",
+        0,
+        5000000000
+      ],
+      [
+        "eb7aafbffa11ad3084d6904de6da08601dfc0dac323cafe0caa7ebefe566c167",
+        0,
+        5000000000
+      ],
+      [
+        "0cc1b9dddd4821b7a97b10b9bbc1057668435144d01c42588dcf6a0bbcee1a5c",
+        0,
+        5000000000
+      ],
+      [
+        "949f0a184ba034a527ed75f01802a1c9bab1cf161c19c26af60ab3dc4140674d",
+        0,
+        5000000000
+      ],
+      [
+        "f3f060271810bbb75a7558fb5efad847ff159cc75885d52af549466353e68002",
+        0,
+        5000000000
+      ]
+    ],
+    "unrequested_block_captured": true
+  }
+}

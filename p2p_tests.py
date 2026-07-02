@@ -323,6 +323,9 @@ class MockPeer:
         self._buf = b""
         self._connected = False
         self._read_task: Optional[asyncio.Task] = None
+        # Auto-reply pong→ping by default. Toggleable so the adversarial harness
+        # can withhold pongs (ping-without-pong stall test, design §3/§4d).
+        self.auto_pong = True
 
     async def connect(self, timeout: float = 10.0):
         """Open TCP connection to the node."""
@@ -440,8 +443,9 @@ class MockPeer:
                     msg["parsed"] = {
                         "nonce": struct.unpack("<Q", payload[:8])[0],
                     }
-                    # Auto-respond with pong
-                    await self.send("pong", payload[:8])
+                    # Auto-respond with pong (unless disabled for stall tests)
+                    if getattr(self, "auto_pong", True):
+                        await self.send("pong", payload[:8])
 
                 self.received_messages.append(msg)
 
