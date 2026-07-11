@@ -35,6 +35,73 @@ RESULTS_DIR = os.path.join(HASHHOG, "test-suite", "results")
 CORE_BIN = f"{HASHHOG}/bitcoin-core/build/bin/bitcoind"
 CORE_CLI = f"{HASHHOG}/bitcoin-core/build/bin/bitcoin-cli"
 
+# ---------------------------------------------------------------------------
+# Shared child environment for the compiled/interpreted nodes.
+#
+# Several nodes will not even spawn from the meta-repo root with the caller's
+# bare environment (same class of bug as the lunarblock LUA_PATH one):
+#   - hotbuns needs `bun` on PATH (~/.bun/bin).
+#   - haskoin dynamically links the RocksDB 9.x `rocksdb_compat` shim from
+#     ~/.local/lib64, so LD_LIBRARY_PATH must include it or it dies at load.
+#   - camlcoin / ouroboros pick up their .local / .cargo tooling from PATH.
+# These mirror the PATH / LD_LIBRARY_PATH that tools/diff-test.sh exports, so
+# the nodes boot under fuzzer.py exactly as they do under the diff harness.
+# ---------------------------------------------------------------------------
+_HOME = os.path.expanduser("~")
+_NODE_ENV = {
+    "PATH": f"{_HOME}/.nimble/bin:{_HOME}/.local/bin:{_HOME}/.cargo/bin:"
+            f"{_HOME}/.bun/bin:" + os.environ.get("PATH", ""),
+    "LD_LIBRARY_PATH": f"{_HOME}/.local/lib64:/usr/local/lib:"
+            + os.environ.get("LD_LIBRARY_PATH", ""),
+}
+
+
+def _find_haskoin():
+    """Locate the haskoin executable under dist-newstyle (cabal build output)."""
+    import glob
+    for p in glob.glob(f"{HASHHOG}/haskoin/dist-newstyle/**/haskoin",
+                       recursive=True):
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+HASKOIN_BIN = _find_haskoin() or f"{HASHHOG}/haskoin/dist-newstyle/MISSING-haskoin"
+
+# beamchain runs from a relx release and reads its config from sys.config /
+# vm.args pointed at by RELX_CONFIG_PATH / VMARGS_PATH (no CLI flags).  Ports
+# are baked into sys.config, so keep these in sync with the NODES entry below.
+BEAMCHAIN_BIN = f"{HASHHOG}/beamchain/_build/prod/rel/beamchain/bin/beamchain"
+BEAMCHAIN_RPC = 19362
+BEAMCHAIN_P2P = 19363
+
+
+def _beamchain_prelaunch(datadir):
+    """Write beamchain's sys.config + vm.args and return the env pointing at
+    them (mirrors tools/diff-test.sh).  Called by start_node just before spawn."""
+    os.makedirs(datadir, exist_ok=True)
+    sys_cfg = os.path.join(datadir, "sys.config")
+    vm_args = os.path.join(datadir, "vm.args")
+    with open(sys_cfg, "w") as f:
+        f.write(
+            "[\n"
+            " {beamchain, [\n"
+            "   {network, regtest},\n"
+            f'   {{datadir, "{datadir}"}},\n'
+            f"   {{p2pport, {BEAMCHAIN_P2P}}},\n"
+            f"   {{rpcport, {BEAMCHAIN_RPC}}},\n"
+            '   {txindex, "1"}\n'
+            " ]},\n"
+            " {kernel, [{logger_level, info}]},\n"
+            " {sasl,   [{sasl_error_logger, false}]}\n"
+            "].\n"
+        )
+    with open(vm_args, "w") as f:
+        f.write(f"-sname fuzz_{os.getpid()}\n-setcookie fuzz\n"
+                "+P 1048576\n+K true\n+A 64\n")
+    return {"RELX_CONFIG_PATH": sys_cfg, "VMARGS_PATH": vm_args}
+
+
 # Regtest port assignments (19xxx range to avoid conflicts)
 NODES = {
     "core": {
@@ -129,7 +196,121 @@ NODES = {
             "LUA_CPATH": os.path.expanduser("~/.local/lib/lua/5.1/?.so") + ";;",
         },
     },
+    # -----------------------------------------------------------------------
+    # The five nodes below were previously fuzzable only via an ad-hoc
+    # scratchpad driver (see CORE-PARITY-AUDIT/fuzz-sweep-6nodes-2026-07-11.md).
+    # Unlike nimrod/blockbrew/clearbit/lunarblock, none of them accept
+    # --rpcuser/--rpcpassword basic auth for the fuzz RPC; they authenticate
+    # via a generated .cookie in the datadir, so each carries "auth": "cookie"
+    # and the RPC helpers resolve the user:password from that file at call time
+    # (the cookie only exists once the node has started).  Launch invocations,
+    # cwd, env and cookie handling all mirror tools/diff-test.sh.
+    # -----------------------------------------------------------------------
+    "camlcoin": {
+        "binary": f"{HASHHOG}/camlcoin/_build/default/bin/main.exe",
+        "args": [
+            "--network", "regtest",
+            "--datadir", f"{FUZZ_DIR}/camlcoin",
+            "--port", "19361",
+            "--rpcport", "19360",
+        ],
+        "rpcport": 19360,
+        "auth": "cookie",
+        "start_delay": 2,
+        "boot_timeout": 60,
+        "env": dict(_NODE_ENV),
+    },
+    "beamchain": {
+        # relx release binary (NOT _build/default/bin) run in `foreground`;
+        # config comes from sys.config/vm.args via _beamchain_prelaunch.
+        "binary": BEAMCHAIN_BIN,
+        "args": ["foreground"],
+        "rpcport": BEAMCHAIN_RPC,
+        "auth": "cookie",
+        "start_delay": 3,
+        "boot_timeout": 75,
+        "env": dict(_NODE_ENV),
+        "prelaunch": _beamchain_prelaunch,
+    },
+    "hotbuns": {
+        "binary": "bun",
+        "args": [
+            "run", "src/index.ts",
+            "--network=regtest",
+            f"--datadir={FUZZ_DIR}/hotbuns",
+            "--port=19365",
+            "--rpcport=19364",
+            "--metrics-port=0",
+        ],
+        "rpcport": 19364,
+        "auth": "cookie",
+        "start_delay": 2,
+        "boot_timeout": 50,
+        # `bun run src/index.ts` resolves src/ relative to cwd.
+        "cwd": f"{HASHHOG}/hotbuns",
+        "env": dict(_NODE_ENV),
+    },
+    "ouroboros": {
+        "binary": f"{HASHHOG}/ouroboros/.venv/bin/python3"
+                  if os.access(f"{HASHHOG}/ouroboros/.venv/bin/python3", os.X_OK)
+                  else "python3",
+        "args": [
+            "-m", "ouroboros.cli",
+            "--network", "regtest",
+            "--data-dir", f"{FUZZ_DIR}/ouroboros",
+            "start", "--force",
+            "--rpc-port", "19366",
+            "--p2p-port", "19367",
+        ],
+        "rpcport": 19366,
+        "auth": "cookie",
+        "start_delay": 3,
+        "boot_timeout": 70,
+        "cwd": f"{HASHHOG}/ouroboros",
+        "env": dict(_NODE_ENV),
+    },
+    "haskoin": {
+        "binary": HASKOIN_BIN,
+        "args": [
+            "--network", "Regtest",
+            "--datadir", f"{FUZZ_DIR}/haskoin",
+            "node",
+            "--port", "19369",
+            "--rpcport", "19368",
+        ],
+        "rpcport": 19368,
+        "auth": "cookie",
+        "start_delay": 2,
+        "boot_timeout": 70,
+        "env": dict(_NODE_ENV),
+    },
 }
+
+
+def resolve_auth(name):
+    """Return (user, password) for a node's RPC.
+
+    Basic-auth nodes (default) carry static rpcuser/rpcpassword.  Cookie-auth
+    nodes ("auth": "cookie") have their credentials generated at startup into
+    <datadir>/.cookie (or <datadir>/regtest/.cookie); read them fresh each call
+    since the file only appears once the node is up.  Returns (None, None) if a
+    cookie is expected but not yet written (RPC will fail and the wait loop
+    retries)."""
+    cfg = NODES[name]
+    if cfg.get("auth") == "cookie":
+        datadir = f"{FUZZ_DIR}/{name}"
+        for c in (os.path.join(datadir, ".cookie"),
+                  os.path.join(datadir, "regtest", ".cookie")):
+            if os.path.isfile(c):
+                try:
+                    txt = open(c).read().strip()
+                    if ":" in txt:
+                        u, p = txt.split(":", 1)
+                        return u, p
+                except Exception:
+                    pass
+        return None, None
+    return cfg.get("rpcuser"), cfg.get("rpcpassword")
 
 # ---------------------------------------------------------------------------
 # Globals
@@ -163,7 +344,8 @@ def log(msg):
 def node_rpc(name, method, params=None):
     cfg = NODES[name]
     url = f"http://127.0.0.1:{cfg['rpcport']}"
-    return rpc_call(url, cfg["rpcuser"], cfg["rpcpassword"], method, params)
+    user, password = resolve_auth(name)
+    return rpc_call(url, user, password, method, params)
 
 
 def wait_for_rpc(name, timeout=20):
@@ -172,8 +354,8 @@ def wait_for_rpc(name, timeout=20):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            result, err = rpc_call(url, cfg["rpcuser"], cfg["rpcpassword"],
-                                   "getblockchaininfo")
+            user, password = resolve_auth(name)
+            result, err = rpc_call(url, user, password, "getblockchaininfo")
             if result is not None:
                 return True
         except Exception:
@@ -187,8 +369,8 @@ def is_node_alive(name):
     cfg = NODES[name]
     url = f"http://127.0.0.1:{cfg['rpcport']}"
     try:
-        result, err = rpc_call(url, cfg["rpcuser"], cfg["rpcpassword"],
-                               "getblockchaininfo")
+        user, password = resolve_auth(name)
+        result, err = rpc_call(url, user, password, "getblockchaininfo")
         return result is not None
     except Exception:
         return False
@@ -210,10 +392,17 @@ def start_node(name):
     # Optional per-node cwd/env (needed by interpreted nodes whose module
     # resolution depends on the working directory / a *_PATH env var — e.g.
     # lunarblock's LUA_PATH).  Nodes without these keys launch unchanged.
+    # Optional "prelaunch" callable writes any config files the node needs
+    # before spawn (e.g. beamchain's sys.config/vm.args) and returns extra env.
     child_env = None
-    if cfg.get("env"):
+    if cfg.get("env") or cfg.get("prelaunch"):
         child_env = dict(os.environ)
-        child_env.update(cfg["env"])
+        if cfg.get("env"):
+            child_env.update(cfg["env"])
+        if cfg.get("prelaunch"):
+            extra = cfg["prelaunch"](datadir)
+            if extra:
+                child_env.update(extra)
     try:
         proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file,
                                 cwd=cfg.get("cwd"), env=child_env,
@@ -225,7 +414,7 @@ def start_node(name):
     processes[name] = proc
     time.sleep(cfg["start_delay"])
 
-    if wait_for_rpc(name, timeout=25):
+    if wait_for_rpc(name, timeout=cfg.get("boot_timeout", 25)):
         log(f"  {name}: started (pid {proc.pid}, rpc={cfg['rpcport']})")
         return True
 
