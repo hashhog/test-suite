@@ -117,6 +117,17 @@ NODES = {
         "rpcuser": "fuzz",
         "rpcpassword": "fuzz",
         "start_delay": 3,
+        # lunarblock's main.lua does `require("lunarblock.<mod>")`, which only
+        # resolves when LUA_PATH points at its src/ tree.  Launched from the
+        # meta-repo root without it, the node dies at startup with
+        # `module 'lunarblock.consensus' not found` — the reason prior sweeps
+        # couldn't fuzz it.  Set cwd + LUA_PATH/LUA_CPATH exactly like
+        # tools/diff-test.sh does so it actually boots.
+        "cwd": f"{HASHHOG}/lunarblock",
+        "env": {
+            "LUA_PATH": f"{HASHHOG}/lunarblock/src/?.lua;{HASHHOG}/lunarblock/src/?/init.lua;;",
+            "LUA_CPATH": os.path.expanduser("~/.local/lib/lua/5.1/?.so") + ";;",
+        },
     },
 }
 
@@ -196,8 +207,16 @@ def start_node(name):
     log_file = open(log_path, "w")
 
     cmd = [cfg["binary"]] + cfg["args"]
+    # Optional per-node cwd/env (needed by interpreted nodes whose module
+    # resolution depends on the working directory / a *_PATH env var — e.g.
+    # lunarblock's LUA_PATH).  Nodes without these keys launch unchanged.
+    child_env = None
+    if cfg.get("env"):
+        child_env = dict(os.environ)
+        child_env.update(cfg["env"])
     try:
         proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file,
+                                cwd=cfg.get("cwd"), env=child_env,
                                 preexec_fn=os.setsid)
     except Exception as e:
         log(f"  {name}: failed to spawn: {e}")
