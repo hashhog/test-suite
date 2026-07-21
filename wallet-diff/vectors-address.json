@@ -1,0 +1,205 @@
+{
+ "_comment": [
+  "walletdiff-address FROZEN corpus (design: CORE-PARITY-AUDIT/_wallet-diff-harness-design-2026-07-20.md sec 5+6, probe A1/A2).",
+  "Minted ONCE from the local Core oracle (bitcoin-core/build/bin, v-see-git), then frozen so later runs",
+  "detect drift in EITHER the SUT or the local Core build. Re-mint ONLY deliberately via mint-vectors.sh after a Core rebuild.",
+  "tprv = BIP32 master over the canonical 64-byte suite seed (test-suite/recovery/rustoshi_recovery.sh:52), tprv version bytes.",
+  "Descriptor paths use the h hardened marker EVERYWHERE (checksums differ between h and ' forms - never mix).",
+  "range is Core deriveaddresses [begin,end] INCLUSIVE notation; addresses has end-begin+1 entries."
+ ],
+ "suite": "walletdiff-address",
+ "minted": "2026-07-21",
+ "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+ "tprv": "tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3",
+ "network": "regtest",
+ "descriptors": [
+  {
+   "name": "pkh-ext",
+   "descriptor": "pkh(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/44h/1h/0h/0/*)#2a55lra4",
+   "checksum": "2a55lra4",
+   "range": [
+    0,
+    19
+   ],
+   "addresses": [
+    "mtiQKskPukKuGpWmVMLPgV1fiafFKZVaGQ",
+    "mqnD49H7nWXY7E1ravRtHJW1dUUtR2MxV2",
+    "n3pBYovkJBBtvvnaj9tNoWf1a1vYRt6iFG",
+    "mxLNMkuBRk9LfHQPbmnqzA5U1q4woKfHZB",
+    "mtSj6watxGasXX1JFpHQzs9ryv2x8m9tf6",
+    "n2Q9S2tt4kLfBKapFu3iYshh8Umb4LomCh",
+    "mhmrfVJa6Go7MhsiMjiNnEnPeyAuxEAv2B",
+    "n43AN6FcCJWVQ1ZAX7zCxtE8jNw6P6vAHY",
+    "msRcoiqafM8Ga6wk7hMoiiUJAd8FBnmCjC",
+    "mifGWPPTSuxMFnU6WNc5NPCbSUNDPSQ6eU",
+    "mq7p9PZ4VQNnULUggxvyAyAkvbd1g9b7nB",
+    "mxouFZjN6VrJfLhCM9PXudNEfhCpBZfupS",
+    "mkqbPg6EdkmNzCBhQ1ESiCtiMcaa8aygeK",
+    "muMGeHi1ygBWDW8JyeHrKPCZWzMez51hzN",
+    "mktoztxmBfTY196Jo2kQTGKwJmtNH1vhQR",
+    "mu5hr38LzbnAMY27666yPLkBaQv1Eb47yt",
+    "n2ZYSJhuCH7H2bxKf9cMZsKKTuHWExzUYS",
+    "msvbvZtp5dSARD142cRVbNqDi9ZsrYwP9c",
+    "mm8FzCCJRW6GgrBNU7oVjhCkiA45cwVcpM",
+    "mj5QATFMsavSywom9bD5Gxa8E2P3SfwkqU"
+   ]
+  },
+  {
+   "name": "pkh-int",
+   "descriptor": "pkh(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/44h/1h/0h/1/*)#mf34zkdd",
+   "checksum": "mf34zkdd",
+   "range": [
+    0,
+    4
+   ],
+   "addresses": [
+    "mvCtJVvbGt1dK1md9NWhVsApK1qdNd5y23",
+    "mwVUY6CFRJdgRPVCLZVcEeFKiGYMCqy9jr",
+    "muad7nUqEeM3twD2wsCGaTkYJZJdDQjHpu",
+    "msZNz3dFuwcv7TwZQN6dpeGSf46Z77eKLz",
+    "micWAoZwxMdk7qs1sQ49ZWDGhrrYuMdcUL"
+   ]
+  },
+  {
+   "name": "sh-wpkh-ext",
+   "descriptor": "sh(wpkh(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/49h/1h/0h/0/*))#vjujdjfs",
+   "checksum": "vjujdjfs",
+   "range": [
+    0,
+    19
+   ],
+   "addresses": [
+    "2Mstkbp7hERnFSHo8Jt4umoh92mgLTavxsi",
+    "2N7syV72yUZPbWjVaHVmhPDEUZeFdfoxRDP",
+    "2NCCg8k8aLSZJGVP813Dia6vetVCUZRHuot",
+    "2N8P895UbrMRZ2kQeu3GakhqDJNCvheYr3A",
+    "2NGFiU3KeeL6NuJi9m4yQpvLh611mKW7YvM",
+    "2MtoxyvCDRDKyYjMgirBSxSDYB9EPqSqo1o",
+    "2N8NS5EJh7HLNTAaKiyaVuAjkBuwZ9bgPqq",
+    "2NEYCXWUtf3ARHnMzJJCWdBxsa9YGZDuq6W",
+    "2Mzry4XJGK8oKkkxFbERjrvcq8au7bfqMJ8",
+    "2My5iCVEsLgak4DDiSaZ2RZoz7Hx8eWCAQ7",
+    "2N69uP5M88cf5VLFsRLZj5qKMGf6VLnPsmf",
+    "2MsFXsj9f6po51DGf4Pt5GzsurqTtwgsG7b",
+    "2Mu8paM9cPtZRsbiUrsSTMaEE8jKq4gokAG",
+    "2NCJeZ57ZjKxyRDYZj2SJUpdjQCy4fsN3p2",
+    "2NFA1VsnwK731vAMMyq6LvUujriqEVEHdrd",
+    "2N9yatPBQasFyKpEDpKSrBBUEnkYDM9qNBX",
+    "2NF4B8BhemGLE6HvZFPzCanm15Zw2XBVzKp",
+    "2N5w3GSPmWjMKwpWEuJuAGTTpRFi4gY89Pn",
+    "2NGZ1cEDiGhj5PkEJfEP46n5kQMwQD5zeH8",
+    "2N553jZVqeggSKaeSY35P4C3B6oG2oW5LTp"
+   ]
+  },
+  {
+   "name": "sh-wpkh-int",
+   "descriptor": "sh(wpkh(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/49h/1h/0h/1/*))#235hklzy",
+   "checksum": "235hklzy",
+   "range": [
+    0,
+    4
+   ],
+   "addresses": [
+    "2MyN14oBAd6MA8rtKsKr4Xq9CG8ocQQMruK",
+    "2N2aoqgqvHi7s8HAcVs6rHtSsUmG2tDATk8",
+    "2NDfPaQkGbcg1ffyT5swkAQPYXURM4SAKU2",
+    "2N3riPXSNst6cSxwj5hdMvtU3XefWnmpCBU",
+    "2MxzesvurncF8CGZbWMNUFrzetLskwFUDkN"
+   ]
+  },
+  {
+   "name": "wpkh-ext",
+   "descriptor": "wpkh(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/84h/1h/0h/0/*)#4jz7er6v",
+   "checksum": "4jz7er6v",
+   "range": [
+    0,
+    19
+   ],
+   "addresses": [
+    "bcrt1qtp5clz24d2mvkd56nc0rpwu5s2y8ust3h6d9fu",
+    "bcrt1qma7y8lzmsa4e08y84umauh2wnlrayles8hqelf",
+    "bcrt1qkhrqrqt6x56e4rrw30hr0dtrkcj9xh5d6jdt43",
+    "bcrt1qlllqcra6d282vnrddr4tqakapp4v8d7t7pu4pc",
+    "bcrt1qvk90y7rqdpp245gaalzd4qnygpav0jsy30sv5x",
+    "bcrt1q7kdd9c5rggvk6tfzdj69xthcz2t509mz46hkqz",
+    "bcrt1q3nxjc5xuwdt6zvfjqw96r3vrqdv29p689r2cmn",
+    "bcrt1q54g35ps7agedtk9dw4h2q3x3tfguef2mgjtdz6",
+    "bcrt1ql7emfrw0gskm6s7twtx59sx36f5j7tw4xyz8lw",
+    "bcrt1q4c40st4ekzurwkw8kxj95syrtn63dur5ss3fze",
+    "bcrt1q50y63d4vg79glqs2cydn5fq0y2x73q55cz79vn",
+    "bcrt1qn7tv93zv2tndww8jjd2jleup3gane59092jqag",
+    "bcrt1qe4g4aacj5mh0sgytslmx6dphh5akvaafq99kz3",
+    "bcrt1qvfcqhzk3zhtg0wc4402hdu98fkgdq2sxkt8nka",
+    "bcrt1qfxhad2yv9j5z76p27aktvx5ph6l6c0fwnhg50q",
+    "bcrt1qkfg29p8fayqjzw44jj2822m4qzcstmeegg93zs",
+    "bcrt1q032chjuetn23h95k4jup8ufqc0vhwmeq56fckn",
+    "bcrt1q64uk2s9sx0p70qlzs9epz2shvsewvxdtv6yjhj",
+    "bcrt1qcerks3chyqyy8qyer7rnt3mf6a8yzlfc4tzdfn",
+    "bcrt1quz3rh9xupwsl9ek2d4xk7lnjrh4lykrgnjfagu"
+   ]
+  },
+  {
+   "name": "wpkh-int",
+   "descriptor": "wpkh(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/84h/1h/0h/1/*)#yx8lyk25",
+   "checksum": "yx8lyk25",
+   "range": [
+    0,
+    4
+   ],
+   "addresses": [
+    "bcrt1ql46c9m7lecc772ksjm3607cakm22cw4xun9q6r",
+    "bcrt1qp7q9hk0gfrzgqhldf5ws6c2qwuvtakkuwwxmn7",
+    "bcrt1qvxv6pu6xjp8jdfe668lg6lnnuss2z5ughvm36v",
+    "bcrt1q4x4ny4m82qnu0smsy63un0798yhgptthmxn208",
+    "bcrt1qqczwexnccg9vs73zwdt5xg34h6h3le6ntvxp5d"
+   ]
+  },
+  {
+   "name": "tr-ext",
+   "descriptor": "tr(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/86h/1h/0h/0/*)#08c75n7j",
+   "checksum": "08c75n7j",
+   "range": [
+    0,
+    19
+   ],
+   "addresses": [
+    "bcrt1p92pmjh2ljkactjjlqrhl3xzwuv7wd6rh9x5hvmle8n9zdky46mdqk82msc",
+    "bcrt1pmhvrvmsfx2vng4s2pl4g27ma0yutqlyajp53pgs9ywgjkwhhxpeqndwzh2",
+    "bcrt1p7d87hzkktg352mjg0jg0v9mn2h3n5wrx2j54zp52mgx4kgfz72gsj9nzel",
+    "bcrt1p35ukgyhp6lgccpx9ypyq6gre43m7z39yzt9lkagwjl80ugfdl0vqakhr43",
+    "bcrt1phw39autt4ypt3mrekcr2xd93nmka2auw04gym9c5j50djd5ylg6qu7cw9l",
+    "bcrt1p227j003tj0e4ym282k6h3qslxqcjzh0857d0upxqzqdyh7e46f8swf7hge",
+    "bcrt1ptz44we0drmhm34cvwl6mrygup8n7rxp7kk2rxhncah7atll5pezqpqzrha",
+    "bcrt1pn60m5de4cqz7e0nyeyhyvqlznjlm5jjs08jdvvuynhwy44zk8xkshpl9g2",
+    "bcrt1p78ftgdf0vze4wgea0w0hup0tjcuxf223qctydvedzxsrjxygdglqnvdea4",
+    "bcrt1p845ydg975jqdz8x924za8wuzdeunmcl07n36u64tuxp43k2pnjrqy99nz7",
+    "bcrt1p96gh57x5en8n3y6v0jv8ulmq62ceu9q86a50dsaymhrtmwhtrxksfhhp3e",
+    "bcrt1phh5fzfjf7ukllfdtcy55aezhtqcdq86z86344a4rq4qw7vyjk66qv509w7",
+    "bcrt1p2pr6zqwnl6arlkwcgtdwprz6a3djnedyv0ru45avw7e8cv2kvdeqvywjy3",
+    "bcrt1p65hyf83na03ffzycxkf608ww45fx3fcqh7s8y08w79ys3mlg0luqpzga4v",
+    "bcrt1pn4phvjgvzp80x0xj2v5ewleswhzpqe0tepu2pz6mr00kuelyfdms9tk52d",
+    "bcrt1pxxfgq2hqkrakye3qsxeswa5efzavuzak487c38zcfv0w96ur5rzsn47xgt",
+    "bcrt1pyvq984ds6t7dyqrvlfqmkwu93942z4fv0aulz5tw4003un4x25ssa2j6jr",
+    "bcrt1p427nhzzn95euddnwt73dpcaawjwe8zvathm9r8ssvrdvunx6fjfq4gmzed",
+    "bcrt1pnu566cf0yshj5qzvy8plccuk4wawqq4mad68hs9mvk6p8tuehccsed52hd",
+    "bcrt1pc0htlpxnsh3yta65sw69wkalp8dht427ffekp4day9al8uhjpmhsmeqgyq"
+   ]
+  },
+  {
+   "name": "tr-int",
+   "descriptor": "tr(tprv8ZgxMBicQKsPezmaXRsdeRnZL1RsZMcNEQEqCnrkFpsNqBYpJHQoGC714p7DTiKKzcnTxYJgfPfViWCE6Ykic9eBxFM5f3AEmRBdgb6Gso3/86h/1h/0h/1/*)#7nalfxw2",
+   "checksum": "7nalfxw2",
+   "range": [
+    0,
+    4
+   ],
+   "addresses": [
+    "bcrt1pu0cagztr45dpcz6ayn96d7th0m2r7vm95r734807xdj7jfp7gpcstt26ef",
+    "bcrt1pfa7ee9an9xyvagag5sdlmewp3yrck2p3dv34yyumjmeecv8lf0pqhp5k8s",
+    "bcrt1pdynrhjy6yd6qh4mgckuxdxwtt7m7t3rznlz00dhfzhua0hs3fdlsry4h50",
+    "bcrt1puzwfzgrs87xyqk4rs5wuthr0a6fpcv5lzphkqx8z7pnlggr98zhqj2s7as",
+    "bcrt1pm37qrch63prtg88p70s68jrtsfwd4dqzg04wae5nggu7qjj3tkeszz0f27"
+   ]
+  }
+ ]
+}
