@@ -30,6 +30,24 @@ Core is the block source, nodes are driven over submitblock, results JSON in
 test-suite/results/. Datadirs live under /tmp/hashhog-p16-<pid>/ and are
 removed on exit (HASHHOG_KEEP_SCRATCH=1 to retain).
 
+Block-feed contract (root-caused 2026-07-21 — closes the KNOWN-OPEN from
+commit 2637c93): the raw submitblock feed IS the correct mechanism and drives
+both rustoshi and clearbit from genesis to Core tip deterministically and
+synchronously (verified 110/110 on a fresh datadir; rustoshi's submit_block
+connects the block before returning — crates/rpc/src/server.rs). The
+"height stays 0" observation was NOT a feed problem: it was a REAL rustoshi
+defect — the graceful-shutdown flush (rustoshi/src/main.rs, shutdown
+flush_with_tip_and_blocks) wrote the P2P sync-loop's stale in-memory tip
+(genesis) over the best-block pointer that submitblock had persisted, so a
+clean SIGTERM after an RPC-driven feed rebooted the node at height 0 with a
+wedged datadir (re-feeding returned "duplicate" without re-connecting, so
+only cases where some blocks were NOT yet stored could "intermittently"
+self-repair via the side-branch reorg path — that was the intermittent
+tip-match). SIGKILL skipped the flush and preserved the chain, which is why
+P0.5 crash-recovery always passed. Fixed in rustoshi (shutdown flush now
+never regresses the durable tip); the restart-consistency bar below
+(min_height on clean-stop cases) is what catches this defect class.
+
 Disk-full mechanism (UNPRIVILEGED — no sudo on maxbox):
   1. HASHHOG_P16_SMALLFS=<dir>  — a Max-provided size-capped mount, used as-is.
   2. userns tmpfs (default)     — `unshare -r -m` + `mount -t tmpfs -o size=64M`
@@ -361,7 +379,15 @@ def verify_restart_consistency(name, datadir, result, step_prefix, min_height=0)
     """Restart bar shared by all three cases: node boots on `datadir` with normal
     resources, reports a tip that is a REAL prefix of core's chain (tip hash at
     node height == core's hash at that height — catches garbage tips), and can
-    extend to core's tip. This is the 'never corrupt' half of the P1.6 gate."""
+    extend to core's tip. This is the 'never corrupt' half of the P1.6 gate.
+
+    min_height matters: after a CLEAN stop the node must not have lost blocks it
+    had durably accepted (Core parity: shutdown flushes the authoritative tip —
+    txdb.cpp DB_BEST_BLOCK). Pass the height the node provably held at its last
+    clean stop. A regressed-but-prefix tip (e.g. genesis) is exactly the
+    rustoshi shutdown-clobber defect this bar exists to catch — with
+    min_height=0 that defect only surfaced later via final_tip_match, because
+    re-fed stored blocks return "duplicate" without re-connecting."""
     proc = start_node(name, datadir, log_suffix=f".{step_prefix}")
     if not wait_for_rpc(name):
         result["steps"][f"{step_prefix}_boot"] = {
@@ -378,6 +404,7 @@ def verify_restart_consistency(name, datadir, result, step_prefix, min_height=0)
     result["steps"][f"{step_prefix}_boot"] = {
         "status": "pass" if prefix_ok else "fail",
         "height": h, "tip": tip, "prefix_of_core": prefix_ok,
+        "min_height": min_height,
     }
     if not prefix_ok:
         stop_node(name)
@@ -615,7 +642,12 @@ def test_disk_full(name):
     if mechanism == "smallfs-mount":
         datadir_after = mnt
 
-    # Restart with space available -> consistent tip, extend to core tip
+    # Restart with space available -> consistent tip, extend to core tip.
+    # min_height stays 0 here: the final flush legitimately ran against a FULL
+    # disk, so the durable tip may honestly sit behind the last accepted block
+    # (Core parity — FlushStateToDisk aborts on CheckDiskSpace failure and
+    # keeps the last consistent state). The prefix + extend-to-tip checks are
+    # the corruption bar for this case.
     no_corrupt = verify_restart_consistency(name, datadir_after, result, "recovery")
     result["passed"] = bool(loud and clean_stop and no_corrupt and fail == 0)
     log(f"  disk_full {name}: {'PASS' if result['passed'] else 'FAIL'}")
@@ -714,9 +746,12 @@ def test_fd_exhaustion(name):
             result["steps"]["low_fd"]["stop_mode"] = stop_mode
 
     # Never-corrupt bar: restart at normal limits, tip must be a core prefix
-    # at >= 0 and extend to core tip. (Seeded 60 blocks; a node that lost or
-    # mangled them fails the prefix/extend check.)
-    no_corrupt = verify_restart_consistency(name, datadir, result, "recovery")
+    # at >= FD_SEED_BLOCKS and extend to core tip. The 60 seed blocks were
+    # accepted at NORMAL limits and clean-stopped, so losing ANY of them on
+    # restart is silent data loss (the rustoshi shutdown-clobber class), not
+    # acceptable degradation — hence the hard floor.
+    no_corrupt = verify_restart_consistency(name, datadir, result, "recovery",
+                                            min_height=FD_SEED_BLOCKS)
 
     lf = result["steps"].get("low_fd", {})
     mode = lf.get("mode")
@@ -776,10 +811,15 @@ def test_dbcache_ceiling(name):
             "stop_mode": stop_mode,
         }
         log(f"  dbcache={mib}MiB: tip_match={tip_ok} peak_rss={rss}MB fail={fail} stop={stop_mode}")
-        # never-corrupt: the floor-cache datadir must reboot to the same tip
+        # never-corrupt: the floor-cache datadir must reboot to the same tip.
+        # min_height=TOTAL_BLOCKS: the node held all 110 blocks and was
+        # clean-stopped (stop_mode gated to "term" above), so a restart below
+        # 110 means the shutdown lost durably-accepted blocks — the exact
+        # rustoshi shutdown-tip-clobber defect root-caused 2026-07-21.
         if ok and label == "floor":
             ok = verify_restart_consistency(name, datadir, result,
-                                            f"recovery_{label}", min_height=0)
+                                            f"recovery_{label}",
+                                            min_height=TOTAL_BLOCKS)
         sub_ok[label] = ok
         shutil.rmtree(datadir, ignore_errors=True)
 
