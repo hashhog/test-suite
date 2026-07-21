@@ -236,6 +236,13 @@ def stop_all():
         shutil.rmtree(P16_DIR, ignore_errors=True)
 
 
+# The disk_full wrapper's copy-out (`cp -a` after the node dies) can race the
+# in-test rmtree and resurrect part of P16_DIR; retry the sweep at interpreter
+# exit so a completed run leaves zero scratch on the /tmp tmpfs.
+import atexit  # noqa: E402
+atexit.register(stop_all)
+
+
 def read_log_tail(path, n=4000):
     try:
         with open(path, "rb") as f:
@@ -268,7 +275,16 @@ def scan_logs_for(regex, *paths):
     return None
 
 
+_BLOCK_CACHE = {}   # height -> (blockhash, raw_hex), pre-fetched from Core in main()
+
+
 def get_block_raw(height):
+    # Serve from the pre-fetched cache when available (the normal path) so the
+    # block feed never depends on Core answering RPC while a test node is under
+    # resource pressure. Fall back to a live fetch only if the cache is cold.
+    cached = _BLOCK_CACHE.get(height)
+    if cached is not None:
+        return cached
     h, err = node_rpc("core", "getblockhash", [height])
     if err:
         return None, None
@@ -310,6 +326,19 @@ def submit_blocks(name, start, end, rpc_timeout=30):
 def get_height(name):
     r, err = node_rpc(name, "getblockcount")
     return None if err else r
+
+
+def wait_for_height(name, target, timeout=30):
+    """Poll until the node's height reaches target (async ActivateBestChain can
+    lag the submitblock RPC return). Returns the final height. Without this, a
+    tip check fired immediately after the last submitblock races the node's
+    chain-activation and intermittently reads a stale tip."""
+    deadline = time.time() + timeout
+    h = get_height(name)
+    while (h is None or h < target) and time.time() < deadline:
+        time.sleep(0.25)
+        h = get_height(name)
+    return h
 
 
 def get_tip(name):
@@ -735,6 +764,7 @@ def test_dbcache_ceiling(name):
             continue
         acc, fail, err, _ = submit_blocks(name, 1, TOTAL_BLOCKS)
         rss = peak_rss_mb(proc.pid)
+        wait_for_height(name, TOTAL_BLOCKS)   # let async ActivateBestChain settle
         tip_ok = (get_tip(name) == get_tip("core"))
         stop_mode = stop_node(name)
         rss_ok = rss is not None and rss <= RSS_CAP_MB
@@ -822,6 +852,28 @@ def main():
         log("FATAL: failed to mine enough blocks")
         stop_all()
         return 1
+
+    # Pre-fetch every Core block ONCE, now, while Core is quiescent. The later
+    # per-case block feed must NOT depend on Core answering RPC mid-run: launching
+    # a node under a resource-exhaustion case (e.g. a 64 GiB --dbcache) can spike
+    # host memory/swap pressure that transiently stalls Core's RPC, and a failed
+    # oracle fetch was being miscounted as a NODE submitblock failure (the
+    # dbcache_ceiling case false-FAILed all 110 blocks this way — get_block_raw
+    # returned empty, node stayed idle, tip never advanced). Caching decouples the
+    # oracle from the case entirely and makes the feed deterministic + fast.
+    log(f"--- Pre-fetching {TOTAL_BLOCKS} Core blocks into cache ---")
+    for h in range(1, TOTAL_BLOCKS + 1):
+        bh, err = node_rpc("core", "getblockhash", [h])
+        raw = None
+        if not err:
+            raw, err2 = node_rpc("core", "getblock", [bh, 0])
+            if err2:
+                raw = None
+        if not raw:
+            log(f"FATAL: could not pre-fetch Core block {h}")
+            stop_all()
+            return 1
+        _BLOCK_CACHE[h] = (bh, raw)
 
     for n in test_nodes:
         for c in wanted_cases:
