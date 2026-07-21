@@ -51,7 +51,9 @@
 #   FAIL: GETNODEADDRESSES lunarblock: FAIL <short reason>
 #
 # Touches ONLY /tmp/gna-lunarblock + /tmp/gna-core and ports 21978/21998
-#   (lunarblock RPC/P2P), 21980/22000 (Core RPC/P2P).
+#   (lunarblock RPC/P2P), 21980/21987 (Core RPC/P2P; Core onion auto-binds
+#   P2P+1=21988). Core P2P moved off 22000 on 2026-07-20 — it collided with the
+#   box's live syncthing daemon (persistent :22000), FAILing this arm every run.
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -77,7 +79,7 @@ LB_LOG="$LB_DATADIR/node.log"
 # when bitcoin-cli reads a sibling-rewritten .cookie).
 CORE_DATADIR="/tmp/gna-core-lunarblock"
 CORE_RPC=21980
-CORE_P2P=22000
+CORE_P2P=21987   # was 22000 — collided with live syncthing :22000 (onion P2P+1=21988 also clear)
 CORE_LOG="$CORE_DATADIR/core.log"
 
 VDIR=""   # validator-scripts dir (under LB_DATADIR, set after mkdir)

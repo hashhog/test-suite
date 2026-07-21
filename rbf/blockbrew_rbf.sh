@@ -23,11 +23,12 @@
 # against it. Both nodes therefore exercise byte-identical tx SHAPES (same
 # amounts, same sequences) over their own funding outpoint.
 #
-# INCREMENTAL-RELAY-FEE alignment: blockbrew defaults incrementalrelayfee to
-# 1 sat/vB (1000 sat/kvB); Core's DEFAULT_INCREMENTAL_RELAY_FEE is 0.1 sat/vB
-# (100 sat/kvB). To make Rule 4 thresholds AGREE, Core is launched with
-# -incrementalrelayfee=0.00001 (= 1 sat/vB = blockbrew's default). Both nodes
-# also use the default minrelayfee (1 sat/vB).
+# INCREMENTAL-RELAY-FEE alignment: since blockbrew 0d1fced (Core v31.99 parity)
+# blockbrew's IncrementalRelayFee == Core's DEFAULT_INCREMENTAL_RELAY_FEE =
+# 100 sat/kvB = 0.1 sat/vB (policy.h:48). To make Rule 4 thresholds AGREE, Core
+# is launched with -incrementalrelayfee=0.000001 (= 0.1 sat/vB). Both nodes also
+# use the matching minrelayfee (0.1 sat/vB). blockbrew exposes no CLI flag for
+# either, so the harness follows blockbrew's fixed Core-parity default.
 #
 # THE THREE ASSERTIONS (each replayed identically on Core and blockbrew):
 #   replace (HAPPY PATH): submit A (signals RBF, nSequence=0xfffffffd, fee f1)
@@ -81,9 +82,15 @@ CORE_RPC=22095
 CORE_P2P=22115
 CORE_LOG="$CORE_DATADIR/core.log"
 
-# Align Rule-4 thresholds: 0.00001 BTC/kvB = 1000 sat/kvB = 1 sat/vB =
-# blockbrew's default IncrementalRelayFee.
-CORE_FLAGS=(-incrementalrelayfee=0.00001 -minrelaytxfee=0.00001)
+# Align Rule-4 thresholds to Core's (and, since blockbrew 0d1fced, blockbrew's)
+# real default: DEFAULT_INCREMENTAL_RELAY_FEE = 100 sat/kvB = 0.1 sat/vB
+# (bitcoin-core/src/policy/policy.h:48). 0.000001 BTC/kvB = 100 sat/kvB.
+# blockbrew exposes no -incrementalrelayfee flag, so the harness must match
+# blockbrew's fixed default here — pinning Core to the old 1 sat/vB (as this
+# file did before 2026-07-20) made D's 50-sat bump look sufficient to blockbrew
+# (11-sat threshold) but insufficient to the harness's stale 110-sat model,
+# producing a phantom "blockbrew-ACCEPTS-D" rule-4 FAIL every night.
+CORE_FLAGS=(-incrementalrelayfee=0.000001 -minrelaytxfee=0.000001)
 
 # Fixed deterministic test secret (32 bytes) -> one p2wpkh keypair the whole
 # corpus is built from. Passed to the Python helper.
@@ -253,8 +260,8 @@ def build(prevout, val, fee, nseq=SEQ_RBF):
     tx.wit.vtxinwit[0].scriptWitness.stack = [priv.sign_ecdsa(sh) + bytes([SIGHASH_ALL]), pub]
     return tx, tx.serialize_with_witness().hex(), tx.txid_hex
 
-# Fee schedule. Control vsize ~ 110 vB; incremental relay fee = 1 sat/vB,
-# so Rule-4 minimum bump ~= 110 sat.
+# Fee schedule. Control vsize ~ 110 vB; incremental relay fee = 0.1 sat/vB,
+# so Rule-4 minimum bump ~= 11 sat.
 #   A : 1000 sat (~9 sat/vB) — well above floor, RBF-signaling.
 #   B : 20000 sat — large bump, clears Rules 3+4 by a wide margin (replaces A).
 #   R : 1000 sat — the FEE_A resident over prevout2 (the baseline C/D replace).
@@ -262,13 +269,13 @@ def build(prevout, val, fee, nseq=SEQ_RBF):
 #       conflicting txs"). Must be a DISTINCT fee (not == FEE_R) so C is a
 #       different tx than R — an equal-fee/equal-output C would be byte-identical
 #       to R and get caught as a plain duplicate, not as a Rule-3 conflict.
-#   D : 1050 sat — 50 sat above R, but delta 50 < incrementalRelayFee*vsize (~110)
+#   D : 1005 sat — 5 sat above R, but delta 5 < incrementalRelayFee*vsize (~11)
 #       -> passes Rule 3, FAILS Rule 4 ("not enough additional fees to relay").
 FEE_A = 1000
 FEE_B = 20000
 FEE_R = 1000
 FEE_C = 900
-FEE_D = 1050
+FEE_D = 1005
 
 _, hexA, txidA = build(prevout1, val1, FEE_A)
 _, hexB, txidB = build(prevout1, val1, FEE_B)
@@ -313,7 +320,7 @@ emit("MEMPOOL", in_mempool(txidA), in_mempool(txidB))
 
 # --- Rules 3/4: seat resident R (FEE_A) over prevout2, then submit C and D ---
 # C and D conflict with R (same prevout2). C has equal absolute fee (Rule 3
-# fail); D has a +50 sat fee but a bump below incrementalRelayFee*vsize
+# fail); D has a +5 sat fee but a bump below incrementalRelayFee*vsize
 # (Rule 4 fail). Both must reject "insufficient fee". testmempoolaccept is the
 # read path; it must NOT enter the mempool and must NOT evict R.
 okR, errR = sendraw(hexR);  emit("STEP_R", okR, errR)
@@ -402,7 +409,7 @@ for k in STEP_A_a STEP_B_a MEMPOOL_a MEMPOOL_b STEP_R_a STEP_C_a STEP_C_b STEP_D
     [[ -n "${V[$k]:-}" ]] || fail "blockbrew output missing field $k (helper output incomplete)"
 done
 
-log "=== RBF DIFFERENTIAL  (Core oracle: -incrementalrelayfee=1sat/vB) ==="
+log "=== RBF DIFFERENTIAL  (Core oracle: -incrementalrelayfee=0.1sat/vB) ==="
 log "Core : A_send=${C[STEP_A_a]} B_send=${C[STEP_B_a]} hasA=${C[MEMPOOL_a]} hasB=${C[MEMPOOL_b]} R_send=${C[STEP_R_a]} C_allowed=${C[STEP_C_a]}(${C[STEP_C_b]}) D_allowed=${C[STEP_D_a]}(${C[STEP_D_b]}) residentR=${C[RESIDENT_a]}"
 log "bbrew: A_send=${V[STEP_A_a]} B_send=${V[STEP_B_a]} hasA=${V[MEMPOOL_a]} hasB=${V[MEMPOOL_b]} R_send=${V[STEP_R_a]} C_allowed=${V[STEP_C_a]}(${V[STEP_C_b]}) D_allowed=${V[STEP_D_a]}(${V[STEP_D_b]}) residentR=${V[RESIDENT_a]}"
 
