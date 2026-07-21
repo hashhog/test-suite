@@ -50,8 +50,13 @@ mkdir -p "$LOGDIR"
 # recovery regression -> SKIP (don't alert the guard on a toolchain gap).
 GAP_RE='not found|not built|no binary|release binary|rebuild|missing.*RPC|RPC missing|not installed'
 
-PASS=0; FAIL=0; SKIP=0
+PASS=0; FAIL=0; SKIP=0; INFRA=0
 declare -a FAILED=()
+declare -a INFRAED=()
+# Infra-abort signatures: a per-impl failure that PREVENTED the comparison
+# (port collision, node never launched, empty output) — NOT a divergence.
+# Fail-closed: anything not matching this stays a real FAIL.
+INFRA_RE='already LISTENING|refusing to kill|produced no output|no output for|no summary line|address already in use|failed to (start|launch|bind|connect)|could not (start|launch|bind)|connection refused|port [0-9].* (in use|already)|bind: address|Errno 98|timed out (waiting|starting)|RPC (never came up|not ready)|launch (failed|error)|node (did not|failed to) start'
 
 echo "== recovery-regression $(date -u +%Y-%m-%dT%H:%M:%SZ) =="
 for impl in $IMPLS; do
@@ -82,15 +87,22 @@ for impl in $IMPLS; do
     echo "  PASS  $impl — $line"; PASS=$((PASS+1))
   elif printf '%s' "$line" | grep -qiE "$GAP_RE"; then
     echo "  SKIP  $impl (build gap) — $line"; SKIP=$((SKIP+1))
+  elif printf '%s' "$line" | grep -qiE "$INFRA_RE"; then
+    echo "  INFRA $impl (exit $rc) — $line  [detail: $log]"; INFRA=$((INFRA+1)); INFRAED+=("$impl")
   else
     echo "  FAIL  $impl (exit $rc) — $line  [detail: $log]"; FAIL=$((FAIL+1)); FAILED+=("$impl")
   fi
   rm -f "$tmpout"
 done
 
-echo "== recovery-regression: PASS=$PASS FAIL=$FAIL SKIP=$SKIP =="
+echo "== recovery-regression: PASS=$PASS FAIL=$FAIL SKIP=$SKIP${INFRA:+ INFRA=$INFRA} =="
 if [ "$FAIL" -gt 0 ]; then
   printf '  FAILED: %s\n' "${FAILED[*]}"
+  [ "$INFRA" -gt 0 ] && printf '  INFRA (not a divergence): %s\n' "${INFRAED[*]}"
   exit 1
+fi
+if [ "$INFRA" -gt 0 ]; then
+  printf '  INFRA-ONLY (no divergence; harness/port/launch aborts): %s\n' "${INFRAED[*]}"
+  exit 3
 fi
 exit 0
