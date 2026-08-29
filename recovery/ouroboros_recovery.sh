@@ -162,10 +162,32 @@ for _ in $(seq 1 30); do
 done
 [[ "$RPC_UP" -eq 1 ]] || emit_fail "RPC did not respond within 30s"
 
-# ── Step 1: sethdseed the FIXED seed on the default wallet ───────────────
-r=$(rpc sethdseed "[\"$SEED\"]")
-log "sethdseed(default): $r"
-echo "$r" | grep -q "$SEED" || emit_fail "sethdseed failed on default wallet"
+# ── Step 1: create the funding wallet, then sethdseed the FIXED seed ─────
+#
+# This step used to call sethdseed with NO wallet created first, relying on
+# ouroboros auto-creating a "default" wallet at startup.  That stopped being
+# true on 2026-07-22 in ouroboros 2c67e91, DELIBERATELY and CORRECTLY:
+#
+#   "Load only the wallets configured for startup. Do NOT auto-create a
+#    'default' wallet: Bitcoin Core loads no wallet on a fresh datadir"
+#
+# The node became MORE Core-faithful and this driver kept asserting the old
+# behaviour, so the recovery arm has been red every night since — the last
+# PASS was the 2026-07-21 nightly, the first permanent FAIL the 2026-07-22
+# one, straddling that commit exactly.  A fresh ouroboros now reports
+# `listwallets: []` and answers `sethdseed` with -18 "No wallet loaded",
+# which is what Core does.
+#
+# Creating the wallet explicitly is what the rustoshi, blockbrew, clearbit,
+# hotbuns and nimrod drivers already do; this brings ouroboros's driver into
+# line with them and with Core's actual startup behaviour.
+r=$(rpc createwallet '["funding"]')
+log "createwallet(funding): $r"
+echo "$r" | grep -q "funding" || emit_fail "createwallet 'funding' failed"
+
+r=$(wrpc funding sethdseed "[\"$SEED\"]")
+log "sethdseed(funding): $r"
+echo "$r" | grep -q "$SEED" || emit_fail "sethdseed failed on the funding wallet"
 
 # ── Step 2: derive A1.. for all four script types ────────────────────────
 A_BECH32=$(rpc getnewaddress '["", "bech32"]'      | json_str_result)
