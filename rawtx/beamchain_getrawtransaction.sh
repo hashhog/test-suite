@@ -353,10 +353,17 @@ BC_H=$(python3 -c "import sys,json;print(json.loads(sys.stdin.read()).get('resul
 # bash-loop version churned enough short-lived python/curl procs to trip the
 # sandbox's resource killer mid-run.
 log "replaying beamchain's $NBLOCKS blocks into Core via submitblock (single pass)"
-REPLAY_OUT=$(python3 - "$BC_RPC" "$BC_COOKIE" "$CORE_RPC" "$CORE_DATADIR" "$NBLOCKS" <<'PYEOF'
+REPLAY_OUT=$(python3 - "$BC_RPC" "$BC_COOKIE" "$CORE_RPC" "$CORE_DATADIR" "$NBLOCKS" "$CORE_CLI" <<'PYEOF'
 import sys, json, urllib.request, base64, subprocess, os
-bc_rpc_port, bc_cookie, core_rpc, core_dd, nblocks = (
-    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]))
+bc_rpc_port, bc_cookie, core_rpc, core_dd, nblocks, CORE_CLI = (
+    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), sys.argv[6])
+# CORE_CLI arrives as argv[6] on purpose. This heredoc is <<'PYEOF' (quoted), so
+# the shell does NOT expand it -- a literal "${HASHHOG_ROOT}/..." written here is
+# passed to subprocess verbatim and raises FileNotFoundError. Keep the quoting
+# (Python must not be shell-expanded) and pass shell values as arguments.
+if not os.path.isfile(CORE_CLI):
+    print(f"REPLAY_FAIL bitcoin-cli not found at {CORE_CLI}")
+    sys.exit(0)
 
 def bc(method, params):
     body = json.dumps({"jsonrpc":"1.0","id":1,"method":method,"params":params}).encode()
@@ -369,7 +376,6 @@ def bc(method, params):
         raise RuntimeError(f"beamchain {method} error: {o['error']}")
     return o["result"]
 
-CORE_CLI = "${HASHHOG_ROOT}/bitcoin-core/build/bin/bitcoin-cli"
 def core(*args):
     return subprocess.run(
         [CORE_CLI, "-regtest", f"-datadir={core_dd}", f"-rpcport={core_rpc}", *args],
