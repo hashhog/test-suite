@@ -216,8 +216,12 @@ fi
 log "A1=$A1"
 
 # ── 5. Fund + mature: mine 121 blocks to A1 (>=100 mature coinbases) ────────
-# Coinbase matures at 100 confs (Core COINBASE_MATURITY). Mining 121 leaves
-# ~21 mature coinbases for coin selection — comfortably above the spend.
+# Core's wallet rule is COINBASE_MATURITY+1 = 101 confirmations, NOT 100:
+# wallet.cpp:3336-3343 GetTxBlocksToMaturity = max(0,(COINBASE_MATURITY+1)-depth),
+# with depth = tip - height + 1 (wallet.cpp:3319-3331). At tip 121 the height-H
+# coinbase has depth 122-H, so mature <=> H <= 21: EXACTLY 21 mature coinbases.
+# Regtest nSubsidyHalvingInterval=150 (chainparams.cpp:535) and 121 < 150, so
+# every coinbase is 50 BTC -> mature 1050, immature 5000, total 6050.
 log "generatetoaddress 121 -> A1 (fund + mature)"
 resp="$(rpc_call "$RPC/wallet/spend" generatetoaddress "[121,\"$A1\"]")"
 nblk="$(printf '%s' "$resp" | py_field 'len(r)')"
@@ -234,7 +238,18 @@ if [[ "$FUNDED" == "__ERR__" ]]; then finish FAIL "getbalance crashed"; fi
 IMMATURE_PRE="$(rpc_call "$RPC/wallet/spend" getbalances '[]' | py_field 'r["mine"]["immature"]')"
 if [[ "$IMMATURE_PRE" == "__ERR__" ]]; then IMMATURE_PRE=0; fi
 log "funded balance=$FUNDED (immature=$IMMATURE_PRE)"
-if [[ "$(fcmp "$FUNDED" gt 0)" != "True" ]]; then finish FAIL "funded balance not positive ($FUNDED)"; fi
+# EXACT pin, not "> 0". A bare positivity check cannot see an off-by-one
+# maturity regression -- precisely how blockbrew's boundary bug sat unnoticed
+# for six weeks behind a green arm. Assert Core's exact figure and say which
+# DIRECTION the drift went, so the message never points the wrong way.
+FUNDED_EXPECT=1050
+if [[ "$(python3 -c "print(abs(float('$FUNDED')-$FUNDED_EXPECT)<1e-8)")" != "True" ]]; then
+  if [[ "$(fcmp "$FUNDED" gt "$FUNDED_EXPECT")" == "True" ]]; then
+    finish FAIL "getbalance $FUNDED BTC > expected mature $FUNDED_EXPECT BTC at tip 121 (OVER-counting: coinbase maturity not enforced at Core's COINBASE_MATURITY+1 boundary)"
+  else
+    finish FAIL "getbalance $FUNDED BTC < expected mature $FUNDED_EXPECT BTC at tip 121 (UNDER-counting: mature coinbases wrongly withheld)"
+  fi
+fi
 
 # listunspent must not crash and must list owned UTXOs (the spendable set).
 LU_SPENDABLE="$(rpc_call "$RPC/wallet/spend" listunspent '[]' \
