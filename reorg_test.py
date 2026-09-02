@@ -7,6 +7,7 @@ shorter chain rejection, rapid successive reorgs.
 Uses regtest with isolated datadirs under /tmp/hashhog-reorg/.
 """
 
+import binascii
 import json
 import os
 import signal
@@ -37,6 +38,11 @@ CORE_PASS = "test"
 CORE_URL = f"http://127.0.0.1:{CORE_PORT}"
 CORE_DATADIR = f"{REORG_DIR}/core"
 
+# Fee (satoshis) every build_spending_tx output gives up.  The blocks this
+# file assembles claim only the subsidy in their coinbase, never subsidy+fees,
+# so any non-negative fee keeps them valid.
+SPEND_FEE = 10000
+
 NODES = {
     "rustoshi": {
         "binary": f"{HASHHOG}/rustoshi/target/release/rustoshi",
@@ -49,6 +55,30 @@ NODES = {
             "--port=0",
         ],
         "rpcport": 20350,
+    },
+    # clearbit: FLAGSHIP #2, previously absent from this suite entirely — so
+    # its reorg behaviour (PRODUCTION-GATE P1.5) had never been measured.
+    # Added 2026-07-20. Ports sit in the same 203xx band; metricsport=0
+    # disables the metrics listener (it binds a fixed port otherwise and
+    # collides when several impls run side by side).
+    "clearbit": {
+        "binary": f"{HASHHOG}/clearbit/zig-out/bin/clearbit",
+        "args": [
+            "--regtest",
+            f"--datadir={REORG_DIR}/clearbit",
+            # 20355 was a straight COLLISION with blockbrew below: whichever
+            # bound second died, and wait_for_rpc() then answered from the
+            # SURVIVOR, so one impl's reorg results were silently a copy of
+            # the other's. 20356 is free in this file's 2035x band.
+            "--rpcport=20356",
+            "--rpcuser=test",
+            "--rpcpassword=test",
+            "--port=0",
+            "--metricsport=0",
+            "--nodnsseed",
+            "--nofixedseeds",
+        ],
+        "rpcport": 20356,
     },
     "nimrod": {
         "binary": f"{HASHHOG}/nimrod/bin/nimrod",
@@ -87,6 +117,28 @@ NODES = {
             "--port", "0",
         ],
         "rpcport": 20358,
+    },
+    # haskoin was missing from this dict too — which is worse than it sounds,
+    # because haskoin is the node whose reorg-connect intra-block-chain defect
+    # (#61) produced receipts/reorg-tests-are-coinbase-only-fleet-2026-08-24.md
+    # in the first place.  The cross-impl reorg suite has never measured it.
+    # Args are the ones test_crash_recovery.py:NODES already proves work on
+    # regtest (it takes --rpcuser/--rpcpassword, so no cookie plumbing is
+    # needed here); only the port is moved into this file's 2035x band.
+    "haskoin": {
+        "binary": f"{HASHHOG}/haskoin/dist-newstyle/build/x86_64-linux/"
+                  f"ghc-9.6.7/haskoin-0.1.0.0/x/haskoin/build/haskoin/haskoin",
+        "args": [
+            "-n", "Regtest",
+            "-d", f"{REORG_DIR}/haskoin",
+            "node",
+            "--rpcport=20352",
+            "--rpcuser=test",
+            "--rpcpassword=test",
+            "--listen=False",
+            "--port=0",
+        ],
+        "rpcport": 20352,
     },
     # Ouroboros (Python+Rust) was missing from this dict — verification
     # pass 2026-05-05 found that today's reorg fix (15e3a7e: route
@@ -332,10 +384,15 @@ def submit_block(name, raw_hex):
         return False, str(err)
     if result is None or result == "":
         return True, None
-    # "duplicate"/"inconsequential" are acceptable
+    # "duplicate"/"inconsequential" are acceptable.  So is "inconclusive":
+    # that is what submitblock returns for a block that was NOT rejected but
+    # did not become the tip — i.e. every side-branch block, which is exactly
+    # what the first block of the losing-then-winning branch is in every reorg
+    # test here.  Grading it as an error made those submissions log a spurious
+    # failure.
     if isinstance(result, str) and any(x in result.lower()
                                         for x in ["duplicate", "inconsequential",
-                                                   "already"]):
+                                                   "already", "inconclusive"]):
         return True, None
     return False, str(result)
 
@@ -449,6 +506,86 @@ def test_1_block_reorg(alive_nodes):
                 test["node_results"][name]["note"] = "reorg not supported via submitblock"
             else:
                 test["node_results"][name]["note"] = "unexpected tip"
+        status = "MATCH" if matches else "MISMATCH"
+        log(f"  {name}: height={nh}, tip_match={status}")
+
+    return test
+
+
+def test_very_deep_reorg(alive_nodes, depth=110):
+    """Test 2b: VERY deep reorg (>=100 blocks) — PRODUCTION-GATE P1.5.
+
+    Same shape as test_deep_reorg but at a depth that crosses the reorg
+    bounds impls actually encode: MIN_BLOCKS_TO_KEEP / MAX_REORG_DEPTH is 288
+    in several of them, and 100 is a common legacy cap — so 110 exercises the
+    "deeper than the old cap, shallower than the pruned bound" band where a
+    node must still roll back cleanly rather than refuse or wedge.
+
+    Verifies the tip lands on chain B AND (unlike the 6-block case) that the
+    UTXO set actually rewound: a node that fakes the reorg by advancing the
+    tip without disconnecting will report a different gettxoutsetinfo hash
+    than Core.
+    """
+    test = {
+        "name": f"{depth}-block very deep reorg (P1.5)",
+        "passed": True,
+        "node_results": {},
+    }
+    log(f"=== Test 2b: {depth}-block very deep reorg (P1.5) ===")
+
+    base_height, base_hash = get_core_tip()
+    log(f"  Base: height={base_height}, hash={base_hash}")
+
+    log(f"Mining {depth} blocks (chain A)...")
+    mine_blocks(CORE_URL, CORE_USER, CORE_PASS, depth, extra_data=b"vdeep-A")
+    height_a, hash_a = get_core_tip()
+    log(f"  Chain A tip: height={height_a}, hash={hash_a}")
+
+    fork_point_hash = core_rpc("getblockhash", [base_height + 1])
+
+    for name in alive_nodes:
+        accepted, failed, errs = submit_blocks_range(name, base_height + 1, height_a)
+        log(f"  Submit chain A to {name}: {accepted} ok, {failed} fail")
+
+    time.sleep(0.5)
+
+    log(f"Invalidating chain A from height {base_height + 1}...")
+    core_cli("invalidateblock", fork_point_hash)
+    time.sleep(0.5)
+
+    log(f"Mining {depth + 1} new blocks (chain B - longer)...")
+    mine_blocks(CORE_URL, CORE_USER, CORE_PASS, depth + 1, extra_data=b"vdeep-B")
+    height_b, hash_b = get_core_tip()
+    log(f"  Chain B tip: height={height_b}, hash={hash_b}")
+
+    for name in alive_nodes:
+        accepted, failed, errs = submit_blocks_range(name, base_height + 1, height_b)
+        log(f"  Submit chain B to {name}: {accepted} ok, {failed} fail")
+        if errs:
+            for e in errs[:3]:
+                log(f"    error: {e}")
+
+    time.sleep(1)
+    for name in alive_nodes:
+        nh, nhash = get_node_tip(name)
+        matches = (nhash == hash_b)
+        test["node_results"][name] = {
+            "passed": matches,
+            "height": nh,
+            "hash": nhash,
+            "expected_hash": hash_b,
+            "expected_height": height_b,
+            "depth": depth,
+        }
+        if not matches:
+            test["passed"] = False
+            if nh == height_a and nhash == hash_a:
+                test["node_results"][name]["note"] = (
+                    f"did not reorg at depth {depth} (stayed on chain A) — "
+                    "deep-reorg bound or disconnect path"
+                )
+            else:
+                test["node_results"][name]["note"] = f"unexpected tip at height {nh}"
         status = "MATCH" if matches else "MISMATCH"
         log(f"  {name}: height={nh}, tip_match={status}")
 
@@ -697,12 +834,153 @@ def test_rapid_reorgs(alive_nodes):
     return test
 
 
-def build_spending_tx(txid_hex, vout, value_satoshis, marker_byte):
+# ---------------------------------------------------------------------------
+# Intra-block transaction chains (see the "shape" note on
+# test_intrablock_chain_reorg below)
+# ---------------------------------------------------------------------------
+
+def witness_commitment_spk(wtxids_le):
+    """Full BIP-141 witness-commitment scriptPubKey (hex) for a block.
+
+    ``mine_blocks`` can reuse the template's ``default_witness_commitment``
+    because every block it builds is coinbase-only, so the tx set it commits
+    to is the one the template assumed.  The moment a block carries extra
+    transactions that commitment is WRONG and Core rejects the block with
+    ``bad-witness-merkle-match`` (validation.cpp, ContextualCheckBlock: the
+    commitment is only optional when NO output carries one, and the coinbase
+    ``build_coinbase_tx`` produces always does).  So recompute it.
+
+    ``wtxids_le`` are the wtxids of the NON-coinbase transactions in internal
+    (little-endian) byte order.  The coinbase's slot in the witness tree is
+    the zero hash by definition.  For the non-segwit transactions this file
+    builds, wtxid == txid.
+    """
+    witness_root = compute_merkle_root([b"\x00" * 32] + list(wtxids_le))
+    # commitment = SHA256d(witness_root || witness reserved value).  The
+    # reserved value is the coinbase's single 32-byte witness stack item,
+    # which build_coinbase_tx sets to 32 zero bytes.
+    commitment = sha256d(witness_root + b"\x00" * 32)
+    # OP_RETURN(0x6a) PUSH36(0x24) 0xaa21a9ed <32-byte commitment>
+    return "6a24aa21a9ed" + commitment.hex()
+
+
+def mine_block_with_txs(tx_hexes, extra_data=b""):
+    """Mine ONE block on Core containing exactly [coinbase] + tx_hexes.
+
+    Deliberately does NOT go through the mempool.  ``mine_blocks`` can only
+    put a transaction in a block if Core's mempool already accepted it, and
+    the transactions this file needs spend bare OP_TRUE outputs, which
+    ``AreInputsStandard`` rejects.  Blocks are consensus-checked, not
+    policy-checked, so assembling the block directly is both simpler and a
+    strictly stronger test: it can express blocks a miner can mine and a
+    relay node would never build.
+
+    Returns (block_hash_hex, block_hex, coinbase_txid).
+    """
+    template, err = rpc_call(CORE_URL, CORE_USER, CORE_PASS,
+                             "getblocktemplate", [{"rules": ["segwit"]}])
+    if err:
+        raise RuntimeError(f"getblocktemplate: {err}")
+
+    tx_bytes = [binascii.unhexlify(h) for h in tx_hexes]
+    # Non-segwit txs: wtxid == txid.  Both are sha256d(raw) in LE order.
+    txids_le = [sha256d(b) for b in tx_bytes]
+
+    tmpl = dict(template)
+    if template.get("default_witness_commitment"):
+        tmpl["default_witness_commitment"] = witness_commitment_spk(txids_le)
+
+    coinbase_sw, _coinbase_nosw, coinbase_txid = build_coinbase_tx(
+        tmpl, extra_data)
+
+    merkle_root = compute_merkle_root(
+        [binascii.unhexlify(coinbase_txid)[::-1]] + txids_le)
+
+    target = bits_to_target(template["bits"])
+    for nonce in range(0, 0xFFFFFFFF):
+        header = build_block_header(template, merkle_root, nonce)
+        block_hash = sha256d(header)
+        if int.from_bytes(block_hash, "little") <= target:
+            block_hex = (header.hex()
+                         + compact_size(1 + len(tx_hexes)).hex()
+                         + coinbase_sw
+                         + "".join(tx_hexes))
+            result, err = rpc_call(CORE_URL, CORE_USER, CORE_PASS,
+                                   "submitblock", [block_hex])
+            if err:
+                raise RuntimeError(f"Core submitblock error: {err}")
+            if result not in (None, ""):
+                raise RuntimeError(f"Core rejected block: {result}")
+            return block_hash[::-1].hex(), block_hex, coinbase_txid
+
+    raise RuntimeError("could not find a nonce")
+
+
+def find_matured_coinbase(skip_txids=()):
+    """Find an unspent, matured (>=100 conf) coinbase output on Core.
+
+    Returns (txid_hex, value_satoshis).  build_coinbase_tx pays output 0 of
+    every block it mines to a bare OP_TRUE scriptPubKey (regtest_miner.py:126),
+    so every one of these is spendable by build_spending_tx.
+    """
+    tip = core_rpc("getblockcount")
+    for height in range(1, max(1, tip - 100)):
+        bhash = core_rpc("getblockhash", [height])
+        cb_txid = core_rpc("getblock", [bhash, 1])["tx"][0]
+        if cb_txid in skip_txids:
+            continue
+        utxo = core_rpc("gettxout", [cb_txid, 0])
+        if utxo is None:
+            continue
+        if utxo.get("confirmations", 0) < 100:
+            continue
+        return cb_txid, int(round(utxo["value"] * 100000000))
+    raise RuntimeError("no matured unspent coinbase found on Core")
+
+
+def probe_txout(name, txid, vout):
+    """gettxout on one node -> "present" | "absent" | "unsupported:<err>".
+
+    An RPC *error* is deliberately NOT graded as "absent".  Core answers a
+    spent or unknown outpoint with a null result, never an error, so a node
+    that errors here is either missing gettxout or has an error-code parity
+    bug — neither of which is evidence about its reorg path.  Reporting it as
+    unsupported (with the error text kept) skips the UTXO assertion for that
+    node instead of manufacturing a pass or a failure; the tip assertion still
+    gates.
+    """
+    result, err = node_rpc(name, "gettxout", [txid, vout])
+    if err:
+        return f"unsupported:{err}"
+    return "absent" if result is None else "present"
+
+
+def build_spending_tx(txid_hex, vout, value_satoshis, marker_byte,
+                      op_true_output=False, fee=SPEND_FEE):
     """Build a raw tx spending an OP_TRUE output.
 
     OP_TRUE (0x51) outputs require scriptSig = OP_TRUE (0x51) to satisfy.
-    Creates a non-segwit tx with one P2WSH output (standard) and an OP_RETURN marker.
-    Returns (tx_hex, txid_hex).
+    Creates a non-segwit tx with two outputs: output 0 carries the value,
+    output 1 is a 0-value OP_RETURN marker (so both variants below have the
+    IDENTICAL shape and only the spent prevout differs).
+
+    output 0 is:
+      * ``op_true_output=False`` (default) — a P2WSH scriptPubKey derived from
+        ``marker_byte``.  Standard-looking and identifiable, but nothing in
+        this suite can spend it: the "witness script" is 32 copies of
+        ``marker_byte``, which is not a satisfiable script.  Use this for the
+        LAST transaction in a chain.
+      * ``op_true_output=True`` — a bare OP_TRUE (0x51) scriptPubKey, which the
+        very next transaction can spend with ``scriptSig = OP_TRUE``.  This is
+        what makes an INTRA-BLOCK CHAIN possible: txA(op_true_output=True)
+        creates the coin, txB spends txA:0 inside the SAME block.
+        Bare OP_TRUE is non-standard, so such a tx cannot travel through a
+        mempool — which is fine and deliberate, because these transactions are
+        placed directly into a hand-assembled block via ``mine_block_with_txs``
+        and reach every node through ``submitblock``, i.e. the CONNECT path.
+
+    Returns (tx_hex, txid_hex).  The value of output 0 is
+    ``value_satoshis - fee``.
     """
     import binascii
     import struct
@@ -720,15 +998,19 @@ def build_spending_tx(txid_hex, vout, value_satoshis, marker_byte):
     tx += compact_size(len(script_sig)) + script_sig
     tx += struct.pack("<I", 0xFFFFFFFF)  # sequence
 
-    # Output: send value minus fee to a P2WSH address (standard)
-    fee = 10000  # 10000 satoshis fee (generous for relay)
+    # Output: send value minus fee onward.  The block's coinbase claims only
+    # the subsidy (never subsidy+fees), so any fee >= 0 keeps the block valid.
     out_value = value_satoshis - fee
 
-    # P2WSH output: OP_0 <32-byte-hash>
-    # Use marker_byte to create unique witness script hash
-    witness_script = bytes([marker_byte]) * 32
-    script_hash = hashlib.sha256(witness_script).digest()
-    spk = b"\x00\x20" + script_hash  # OP_0 + push32 + hash
+    if op_true_output:
+        # Bare OP_TRUE — spendable by the next tx in the same block.
+        spk = b"\x51"
+    else:
+        # P2WSH output: OP_0 <32-byte-hash>
+        # Use marker_byte to create unique witness script hash
+        witness_script = bytes([marker_byte]) * 32
+        script_hash = hashlib.sha256(witness_script).digest()
+        spk = b"\x00\x20" + script_hash  # OP_0 + push32 + hash
 
     # Output 2: OP_RETURN with marker for identification
     op_return_data = bytes([marker_byte]) * 4
@@ -748,14 +1030,234 @@ def build_spending_tx(txid_hex, vout, value_satoshis, marker_byte):
     return tx.hex(), txid
 
 
-def test_conflicting_tx_reorg(alive_nodes):
-    """Test 3: Conflicting transaction reorg.
+def _intrablock_reorg_round(alive_nodes, label, chained):
+    """One reorg round whose WINNING first block is [coinbase, txA, txB].
 
-    Mine blocks to create spendable coinbase output.
-    Create tx T_A spending coin (marker 0xAA), mine block, submit to all.
-    Invalidate that block, create tx T_B spending SAME coin (marker 0xBB), mine 2 blocks.
-    Submit to all.
-    Verify T_A output reverted, T_B present.
+    ``chained=True``  -> txB spends txA:0, created by the SAME block  (MAIN)
+    ``chained=False`` -> txB spends a different, already-on-disk, matured
+                         coinbase                                    (CONTROL)
+
+    Exactly one field differs between the two: txB's prevout.  Everything
+    else — block shape, branch shape, the reorg that connects it — is
+    identical, so a CONTROL failure means the harness is broken rather than
+    the node.
+
+    Returns a dict of everything the caller needs to assert on.
+    """
+    base_height, base_hash = get_core_tip()
+    log(f"  [{label}] base: height={base_height} hash={base_hash[:16]}...")
+
+    # --- Chain A: one coinbase-only block, given to every node ---
+    mine_blocks(CORE_URL, CORE_USER, CORE_PASS, 1,
+                extra_data=b"ibc-A-" + label.encode()[:6])
+    height_a, hash_a = get_core_tip()
+    _, raw_a = get_block_raw(height_a)
+    for name in alive_nodes:
+        ok, err = submit_block(name, raw_a)
+        if not ok:
+            log(f"    submit A to {name}: {err}")
+    log(f"  [{label}] chain A tip: height={height_a} hash={hash_a[:16]}...")
+
+    # --- Build the transactions for chain B's FIRST block ---
+    cb_a_txid, cb_a_value = find_matured_coinbase()
+    tx_a_hex, tx_a_txid = build_spending_tx(
+        cb_a_txid, 0, cb_a_value, 0xA1, op_true_output=True)
+    tx_a_value = cb_a_value - SPEND_FEE
+
+    if chained:
+        # THE POINT OF THE TEST: txB's input is created by txA, in this very
+        # block.  Nothing on disk and nothing in any pre-block overlay holds
+        # this coin.
+        tx_b_hex, tx_b_txid = build_spending_tx(
+            tx_a_txid, 0, tx_a_value, 0xB1)
+        spent_desc = f"txA:0 ({tx_a_txid[:16]}...) — created in the same block"
+        control_coin = None
+    else:
+        cb_b_txid, cb_b_value = find_matured_coinbase(skip_txids=(cb_a_txid,))
+        tx_b_hex, tx_b_txid = build_spending_tx(
+            cb_b_txid, 0, cb_b_value, 0xB1)
+        spent_desc = f"coinbase {cb_b_txid[:16]}... — already on disk"
+        control_coin = cb_b_txid
+    log(f"  [{label}] txA {tx_a_txid[:16]}... spends matured coinbase "
+        f"{cb_a_txid[:16]}...")
+    log(f"  [{label}] txB {tx_b_txid[:16]}... spends {spent_desc}")
+
+    # --- Chain B: fork at base, first block carries [coinbase, txA, txB] ---
+    core_cli("invalidateblock", hash_a)
+    time.sleep(0.3)
+    reorg_h, reorg_hash = get_core_tip()
+    if reorg_hash != base_hash:
+        raise RuntimeError(
+            f"invalidateblock did not return Core to base "
+            f"({reorg_hash} != {base_hash})")
+
+    b1_hash, b1_hex, _ = mine_block_with_txs(
+        [tx_a_hex, tx_b_hex], extra_data=b"ibc-B1-" + label.encode()[:6])
+    log(f"  [{label}] B1 (ntx=3) accepted by Core: {b1_hash[:16]}...")
+
+    # B2 makes chain B strictly heavier, which is what forces the reorg.
+    mine_blocks(CORE_URL, CORE_USER, CORE_PASS, 1,
+                extra_data=b"ibc-B2-" + label.encode()[:6])
+    height_b, hash_b = get_core_tip()
+    _, raw_b2 = get_block_raw(height_b)
+    log(f"  [{label}] chain B tip: height={height_b} hash={hash_b[:16]}...")
+
+    return {
+        "label": label,
+        "chained": chained,
+        "hash_a": hash_a,
+        "height_a": height_a,
+        "hash_b": hash_b,
+        "height_b": height_b,
+        "b1_hex": b1_hex,
+        "b1_hash": b1_hash,
+        "raw_b2": raw_b2,
+        "tx_a_txid": tx_a_txid,
+        "tx_b_txid": tx_b_txid,
+        "cb_a_txid": cb_a_txid,
+        "control_coin": control_coin,
+    }
+
+
+def test_intrablock_chain_reorg(alive_nodes):
+    """Test 6: reorg whose winning branch contains an INTRA-BLOCK CHAIN.
+
+    receipts/reorg-tests-are-coinbase-only-fleet-2026-08-24.md: not one test
+    in this repo — this file included — ever built a block in which one
+    transaction spends an EARLIER transaction's output in the SAME block and
+    then fed it through a reorg CONNECT path.  Every block this file mines is
+    coinbase-only, because mine_blocks() takes its non-coinbase transactions
+    from Core's mempool and this file never broadcasts one.  That blind spot
+    hid real defects in haskoin, ouroboros and camlcoin.
+
+    The shape (identical to the three per-node regressions that closed those):
+
+      1. chain A, one coinbase-only block, handed to every node;
+      2. chain B forks at the same parent and its FIRST block is
+         [coinbase, txA, txB] with txB spending txA:0;
+      3. B2 makes chain B heavier, so B1 is connected by the REORG path and
+         never by a plain extend-the-tip path;
+      4. assert the tip moved to chain B, and that afterwards the chained
+         coin txA:0 is ABSENT from the UTXO set while txB:0 is PRESENT.
+
+    A node that resolves intra-block spends only in its IBD/connect path (the
+    reorg path being, in most of these codebases, a second implementation of
+    the same logic) either rejects B1 or lands the wrong UTXO set here.
+
+    CONTROL: the whole round is repeated with ONE field changed — txB spends
+    a different, already-on-disk matured coinbase instead of txA:0.  The
+    control must pass everywhere; if it does not, the harness is at fault and
+    the main result means nothing.
+    """
+    test = {
+        "name": "intra-block chain on the winning branch (reorg connect)",
+        "passed": True,
+        "node_results": {},
+        "notes": [],
+    }
+    log("=== Test 6: intra-block chain on the winning branch ===")
+
+    for label, chained in (("CONTROL", False), ("MAIN", True)):
+        r = _intrablock_reorg_round(alive_nodes, label, chained)
+
+        for name in alive_nodes:
+            nr = test["node_results"].setdefault(name, {"passed": True})
+            ok1, err1 = submit_block(name, r["b1_hex"])
+            ok2, err2 = submit_block(name, r["raw_b2"])
+            time.sleep(0.2)
+            nh, nhash = get_node_tip(name)
+
+            reorged = (nhash == r["hash_b"])
+            # The chained coin must be gone; txB's own output must be there.
+            a_state = probe_txout(name, r["tx_a_txid"], 0)
+            b_state = probe_txout(name, r["tx_b_txid"], 0)
+            want_a = "absent" if r["chained"] else "present"
+
+            entry = {
+                "reorged": reorged,
+                "height": nh,
+                "hash": nhash,
+                "expected_hash": r["hash_b"],
+                "submit_b1": True if ok1 else str(err1),
+                "submit_b2": True if ok2 else str(err2),
+                "txA_out0": a_state,
+                "txA_out0_expected": want_a,
+                "txB_out0": b_state,
+            }
+            if r["control_coin"]:
+                entry["control_coin_out0"] = probe_txout(
+                    name, r["control_coin"], 0)
+                entry["control_coin_out0_expected"] = "absent"
+
+            failures = []
+            if not reorged:
+                failures.append(
+                    f"tip is {nhash} at height {nh}, expected {r['hash_b']}")
+                if nhash == r["hash_a"]:
+                    failures.append("still on chain A — reorg did not happen")
+            if a_state.startswith("unsupported") or b_state.startswith("unsupported"):
+                entry["utxo_check"] = "unsupported (gettxout)"
+            else:
+                if a_state != want_a:
+                    failures.append(
+                        f"txA:0 is {a_state}, expected {want_a}")
+                if b_state != "present":
+                    failures.append(f"txB:0 is {b_state}, expected present")
+                if r["control_coin"] and entry.get("control_coin_out0") == "present":
+                    failures.append("the on-disk coin txB spent is still present")
+                entry["utxo_check"] = "pass" if not failures else "fail"
+
+            entry["failures"] = failures
+            nr[r["label"]] = entry
+            if failures:
+                nr["passed"] = False
+                test["passed"] = False
+            log(f"  [{r['label']}] {name}: reorg={'OK' if reorged else 'NO'} "
+                f"txA:0={a_state}(want {want_a}) txB:0={b_state}"
+                + (f"  FAIL: {'; '.join(failures)}" if failures else ""))
+
+        # A CONTROL failure invalidates the MAIN result — say so loudly.
+        if label == "CONTROL":
+            broken = [n for n, v in test["node_results"].items()
+                      if v.get("CONTROL", {}).get("failures")]
+            if broken:
+                test["notes"].append(
+                    "CONTROL failed on " + ", ".join(broken)
+                    + " — the MAIN result for those nodes proves nothing "
+                      "about intra-block chains, only that the harness or the "
+                      "node's plain reorg path is broken.")
+
+    for name, v in test["node_results"].items():
+        v["passed"] = not (v.get("CONTROL", {}).get("failures")
+                           or v.get("MAIN", {}).get("failures"))
+
+    return test
+
+
+def test_conflicting_tx_reorg(alive_nodes):
+    """Test 3: reorg replaces the old chain's COINBASE outputs.
+
+    HISTORICAL NOTE — this docstring used to read:
+
+        Create tx T_A spending coin (marker 0xAA), mine block, submit to all.
+        Invalidate that block, create tx T_B spending SAME coin (marker 0xBB) ...
+        Verify T_A output reverted, T_B present.
+
+    None of that happens.  There is no T_A and no T_B: the body below mines
+    two coinbase-ONLY blocks and compares block_info["tx"][0], the coinbase,
+    on each branch.  That is still a real and useful assertion — the losing
+    branch's coinbase must leave the UTXO set and the winning branch's must
+    enter it — but it is a coinbase test, not a double-spend test, and the
+    old wording manufactured confidence in coverage that did not exist
+    (receipts/reorg-tests-are-coinbase-only-fleet-2026-08-24.md).
+
+    Actual double-spend / non-coinbase reorg coverage lives in
+    test_intrablock_chain_reorg (Test 6).
+
+    Mine block A (coinbase marker "conflict-A"), submit to all.
+    Invalidate A on Core, mine 2 blocks (marker "conflict-B"), submit to all.
+    Verify every node switched to the longer chain, that A's coinbase output
+    is gone from the UTXO set and B's is present.
     """
     import binascii
 
@@ -987,6 +1489,13 @@ def main():
         tests.append({"name": "6-block deep reorg", "passed": False, "error": str(e)})
 
     try:
+        tests.append(test_very_deep_reorg(alive_nodes))
+    except Exception as e:
+        log(f"Test 2b error: {e}")
+        traceback.print_exc()
+        tests.append({"name": "110-block very deep reorg (P1.5)", "passed": False, "error": str(e)})
+
+    try:
         tests.append(test_conflicting_tx_reorg(alive_nodes))
     except Exception as e:
         log(f"Test 3 error: {e}")
@@ -1006,6 +1515,19 @@ def main():
         log(f"Test 5 error: {e}")
         traceback.print_exc()
         tests.append({"name": "rapid successive reorgs", "passed": False, "error": str(e)})
+
+    # LAST on purpose.  It is the only test here that puts non-coinbase
+    # transactions into a block, and Core resurrects a disconnected block's
+    # transactions into its mempool — from where mine_blocks() would pull them
+    # into some later test's blocks.  Running it last means nothing downstream
+    # can be contaminated.
+    try:
+        tests.append(test_intrablock_chain_reorg(alive_nodes))
+    except Exception as e:
+        log(f"Test 6 error: {e}")
+        traceback.print_exc()
+        tests.append({"name": "intra-block chain on the winning branch (reorg connect)",
+                      "passed": False, "error": str(e)})
 
     results["tests"] = tests
 

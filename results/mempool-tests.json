@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-09T10:31:51Z",
+  "timestamp": "2026-05-05T23:04:11Z",
   "total_tests": 12,
   "alive_nodes": [
     "rustoshi",
@@ -27,7 +27,7 @@
           "detail": "accepted after retry"
         }
       },
-      "duration": 3.0
+      "duration": 3.01
     },
     {
       "name": "test_double_spend_rejected",
@@ -137,7 +137,7 @@
           "detail": "already relayed via P2P"
         }
       },
-      "duration": 2.01
+      "duration": 2.0
     },
     {
       "name": "test_sendrawtransaction_invalid",
@@ -181,7 +181,7 @@
           "detail": "size=1"
         }
       },
-      "duration": 0.01
+      "duration": 0.0
     },
     {
       "name": "test_fee_estimation_ordering",
@@ -203,7 +203,7 @@
           "detail": "est1=0.011 est25=0.011"
         }
       },
-      "duration": 0.01
+      "duration": 0.0
     },
     {
       "name": "test_getpeerinfo_format",
@@ -218,7 +218,7 @@
         },
         "clearbit": {
           "status": "SKIP",
-          "detail": "Invalid control character at: line 1 column 286 (char 285)"
+          "detail": "'utf-8' codec can't decode byte 0xaa in position 382: invalid start byte"
         },
         "haskoin": {
           "status": "PASS",

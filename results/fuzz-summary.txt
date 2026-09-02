@@ -1,58 +1,41 @@
 ========================================================================
 FUZZ TESTING SUMMARY
 ========================================================================
-Date:       2026-04-08 23:05:41 UTC
-Duration:   267.6s
-Iterations: 100000
+Date:       2026-07-11 13:57:08 UTC
+Duration:   24.6s
+Iterations: 15
 Seed blocks: 50
 
 Nodes tested:
   core         alive        height=50
-  nimrod       alive        height=15601
-  blockbrew    dead/stopped height=?
+  nimrod       alive        height=50
+  blockbrew    alive        height=50
   clearbit     alive        height=50
-  lunarblock   dead/stopped height=?
+  lunarblock   alive        height=50
+  camlcoin     alive        height=50
+  beamchain    alive        height=50
+  hotbuns      alive        height=50
+  ouroboros    alive        height=50
+  haskoin      alive        height=50
 
 Mutation distribution:
-  header_flip           20175
-  flip_bits             20071
-  insert_random         10187
-  zero_field             9997
-  remove_tx              9931
-  truncate               9921
-  max_field              9797
-  random_garbage         4966
-  duplicate_block        4955
+  zero_field                3
+  max_field                 2
+  flip_bits                 2
+  header_flip               2
+  insert_random             2
+  truncate                  2
+  random_garbage            1
+  remove_tx                 1
 
-Expected rejections:    215513
+Expected rejections:    135
 Unexpected rejections:  0
 Expected accepts:       0
-Unexpected accepts:     15551
+Unexpected accepts:     0
 
-CRASHES:     1
-  blockbrew at iter 31170 (random_garbage) exit_code=2
+CRASHES:     0
 HANGS:       0
-DIVERGENCES: 15651
-  nimrod at iter 1 (duplicate_block) core=rejected node=accepted
-  nimrod at iter 4 (duplicate_block) core=rejected node=accepted
-  nimrod at iter 17 (zero_field) core=rejected node=accepted
-  nimrod at iter 21 (header_flip) core=rejected node=accepted
-  nimrod at iter 34 (duplicate_block) core=rejected node=accepted
-  nimrod at iter 46 (duplicate_block) core=rejected node=accepted
-  nimrod at iter 52 (header_flip) core=rejected node=accepted
-  nimrod at iter 55 (header_flip) core=rejected node=accepted
-  nimrod at iter 74 (max_field) core=rejected node=accepted
-  nimrod at iter 84 (max_field) core=rejected node=accepted
-  nimrod at iter 87 (max_field) core=rejected node=accepted
-  nimrod at iter 89 (max_field) core=rejected node=accepted
-  nimrod at iter 93 (max_field) core=rejected node=accepted
-  nimrod at iter 98 (max_field) core=rejected node=accepted
-  nimrod at iter 117 (header_flip) core=rejected node=accepted
-  nimrod at iter 125 (zero_field) core=rejected node=accepted
-  nimrod at iter 130 (duplicate_block) core=rejected node=accepted
-  nimrod at iter 133 (duplicate_block) core=rejected node=accepted
-  nimrod at iter 135 (duplicate_block) core=rejected node=accepted
-  nimrod at iter 141 (duplicate_block) core=rejected node=accepted
+DIVERGENCES: 0
 
-VERDICT: ISSUES FOUND - 15652 crash/divergence events
+VERDICT: PASS - No crashes or divergences detected
 ========================================================================

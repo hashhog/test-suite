@@ -1,46 +1,50 @@
 ========================================================================
 RPC Conformance Test Results
 ========================================================================
-Timestamp: 2026-04-08 20:26:38 UTC
+Timestamp: 2026-05-05 23:02:28 UTC
 
 Test                                Result     Time
 ----------------------------------------------------
-getblockchaininfo                   FAIL       3.7s
-getblockhash                        FAIL      60.6s
-getblockheader                      FAIL      28.6s
-getblock_v1                         FAIL       8.6s
-getrawtransaction                   PASS       1.0s
-gettxout                            FAIL       4.2s
-getmempoolinfo                      PASS       1.2s
-getpeerinfo                         PASS       1.3s
-estimatesmartfee                    PASS       4.8s
-validateaddress                     FAIL       1.0s
+getblockchaininfo                   FAIL       5.1s
+getblockhash                        FAIL      40.6s
+getblockheader                      FAIL      53.4s
+getblock_v1                         FAIL      14.4s
+getrawtransaction                   PASS       2.6s
+gettxout                            FAIL       2.8s
+getmempoolinfo                      PASS       2.6s
+getpeerinfo                         FAIL       2.6s
+estimatesmartfee                    PASS       2.7s
+validateaddress                     FAIL       2.5s
 ----------------------------------------------------
-Total: 4/10 passed
+Total: 3/10 passed
 
 Node              Pass   Fail  Total
 ------------------------------------
-beamchain           25     23     48
-blockbrew            9     39     48
-haskoin             24     24     48
-hotbuns             23     25     48
-rustoshi            23     25     48
+beamchain           26     20     46
+blockbrew            8     38     46
+camlcoin            21     25     46
+clearbit            18     28     46
+haskoin             24     22     46
+hotbuns             27     19     46
+lunarblock          24     22     46
+nimrod              25     21     46
+ouroboros           13     33     46
 
 Failure Details:
 ------------------------------------------------------------------------
   beamchain:
-    - getblockchaininfo/getblockchaininfo: diff in ['blocks', 'headers', 'bestblockhash']
-    - getblockheader/getblockheader: diff in ['confirmations']
-    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
-    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
-    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
-    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
-    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
-    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
-    - getblockheader/getblockheader: diff in ['confirmations', 'difficulty', 'nTx']
-    - getblockheader/getblockheader: diff in ['confirmations', 'nTx']
+    - getblockchaininfo/getblockchaininfo: diff in ['difficulty']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
   blockbrew:
-    - getblockchaininfo/getblockchaininfo: diff in ['chain']
+    - getblockchaininfo/getblockchaininfo: diff in ['difficulty']
     - getblockhash: RPC error -5: Block not found
     - getblockhash: RPC error -5: Block not found
     - getblockhash: RPC error -5: Block not found
@@ -50,8 +54,30 @@ Failure Details:
     - getblockhash: RPC error -5: Block not found
     - getblockhash: RPC error -5: Block not found
     - getblockhash: RPC error -5: Block not found
+  camlcoin:
+    - getblockchaininfo/getblockchaininfo: diff in ['chain', 'difficulty', 'mediantime']
+    - getblockheader/getblockheader: diff in ['mediantime', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'nonce', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'nonce', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'nonce', 'difficulty']
+    - getblockheader/getblockheader: diff in ['mediantime', 'difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'nTx']
+  clearbit:
+    - getblockchaininfo/getblockchaininfo: diff in ['difficulty', 'mediantime']
+    - getblockhash: RPC error -8: Block height out of range
+    - getblockhash: RPC error -8: Block height out of range
+    - getblockhash: RPC error -8: Block height out of range
+    - getblockhash: RPC error -8: Block height out of range
+    - getblockhash: RPC error -8: Block height out of range
+    - getblockhash: RPC error -8: Block height out of range
+    - getblockhash: RPC error -8: Block height out of range
+    - getblockheader: RPC error -5: Block not found
+    - getblockheader: RPC error -5: Block not found
   haskoin:
-    - getblockchaininfo/getblockchaininfo: diff in ['chain', 'mediantime']
+    - getblockchaininfo/getblockchaininfo: diff in ['difficulty', 'mediantime']
     - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
     - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
     - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
@@ -60,28 +86,50 @@ Failure Details:
     - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
     - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
     - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
-    - getblockheader: RPC error -1: Block header not found
+    - getblockheader/getblockheader: diff in ['confirmations', 'versionHex', 'mediantime']
   hotbuns:
-    - getblockhash: RPC error -32603: Block hash not found for height
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-    - getblockheader: RPC error -5: Block header not found
-  rustoshi:
-    - getblockchaininfo/getblockchaininfo: diff in ['mediantime']
-    - getblockheader/getblockheader: diff in ['chainwork']
-    - getblockheader/getblockheader: diff in ['height', 'mediantime', 'chainwork']
-    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
-    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
-    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
-    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
-    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
-    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
-    - getblockheader/getblockheader: diff in ['confirmations', 'height', 'mediantime']
+    - getblockchaininfo/getblockchaininfo: diff in ['difficulty']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
+    - getblockheader/getblockheader: diff in ['nTx']
+  lunarblock:
+    - getblockchaininfo/getblockchaininfo: diff in ['chain', 'difficulty']
+    - getblockheader/getblockheader: diff in ['chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['mediantime', 'chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'chainwork', 'nTx']
+    - getblockheader/getblockheader: diff in ['difficulty', 'chainwork', 'nTx']
+  nimrod:
+    - getblockchaininfo/getblockchaininfo: diff in ['difficulty', 'mediantime']
+    - getblockheader/getblockheader: diff in ['versionHex', 'bits', 'chainwork']
+    - getblockheader/getblockheader: diff in ['versionHex', 'bits', 'chainwork']
+    - getblockheader/getblockheader: diff in ['versionHex', 'mediantime', 'bits']
+    - getblockheader/getblockheader: diff in ['versionHex', 'mediantime', 'bits']
+    - getblockheader/getblockheader: diff in ['versionHex', 'mediantime', 'bits']
+    - getblockheader/getblockheader: diff in ['versionHex', 'mediantime', 'bits']
+    - getblockheader/getblockheader: diff in ['versionHex', 'mediantime', 'bits']
+    - getblockheader/getblockheader: diff in ['versionHex', 'mediantime', 'bits']
+    - getblockheader/getblockheader: diff in ['versionHex', 'mediantime', 'bits']
+  ouroboros:
+    - getblockchaininfo/getblockchaininfo: diff in ['difficulty', 'mediantime']
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
+    - getblockhash: RPC error -32603: Block not found
 
 ========================================================================

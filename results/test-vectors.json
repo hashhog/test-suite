@@ -4,101 +4,6 @@
       "total": 121,
       "tested": 121,
       "per_node": {
-        "rustoshi": {
-          "pass": 113,
-          "fail": 8,
-          "skip": 0,
-          "errors": [
-            {
-              "tx": "0100000001f709fa82596e4f908ee331cb5e0ed46ab331d7dcfaf697fe95891e...",
-              "txid": "cc60b1f899ec0a69",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            },
-            {
-              "tx": "01000000012c651178faca83be0b81c8c1375c4b0ad38d53c8fe1b1c4255f5e7...",
-              "txid": "1edc7f214659d52c",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            },
-            {
-              "tx": "0100000001f725ea148d92096a79b1709611e06e94c63c4ef61cbae2d9b90638...",
-              "txid": "018adb7133fde63a",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            },
-            {
-              "tx": "0100000001be599efaa4148474053c2fa031c7262398913f1dc1d9ec201fd440...",
-              "txid": "1464caf48c708a6c",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            },
-            {
-              "tx": "010000000112b66d5e8c7d224059e946749508efea9d66bf8d0c83630f080cf3...",
-              "txid": "1fb73fbfc947d52f",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            },
-            {
-              "tx": "0100000001b0ef70cc644e0d37407e387e73bfad598d852a5aa6d691d72b2913...",
-              "txid": "24cecfce0fa880b0",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            },
-            {
-              "tx": "0100000001c188aa82f268fcf08ba18950f263654a3ea6931dabc8bf3ed1d4d4...",
-              "txid": "9eaa819e386d6a54",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            },
-            {
-              "tx": "ffffffff01000100000000000000000000000000000000000000000000000000...",
-              "txid": "d3230b80abeab3cf",
-              "diffs": [
-                {
-                  "field": "version",
-                  "expected": 4294967295,
-                  "got": -1
-                }
-              ]
-            }
-          ]
-        },
         "blockbrew": {
           "pass": 113,
           "fail": 8,
@@ -302,35 +207,6 @@
       "total": 93,
       "tested": 93,
       "per_node": {
-        "rustoshi": {
-          "pass": 91,
-          "fail": 2,
-          "skip": 0,
-          "errors": [
-            {
-              "tx": "0100000001000100000000000000000000000000000000000000000000000000...",
-              "txid": "0ea8dd5d0a5d3635",
-              "diffs": [
-                {
-                  "field": "vout[0].value",
-                  "expected": -1e-08,
-                  "got": 184467440737.09552
-                }
-              ]
-            },
-            {
-              "tx": "01000000013bfc220ec526583cb6b7e922b8b27f604cfe0a09764de61e80f58d...",
-              "txid": "3e7fb893bfd7a2fe",
-              "diffs": [
-                {
-                  "field": "vout[0].scriptPubKey.type",
-                  "expected": "pubkey",
-                  "got": "nonstandard"
-                }
-              ]
-            }
-          ]
-        },
         "blockbrew": {
           "pass": 92,
           "fail": 1,
@@ -350,21 +226,10 @@
           ]
         },
         "beamchain": {
-          "pass": 91,
-          "fail": 2,
+          "pass": 92,
+          "fail": 1,
           "skip": 0,
           "errors": [
-            {
-              "tx": "0100000001000100000000000000000000000000000000000000000000000000...",
-              "txid": "0ea8dd5d0a5d3635",
-              "diffs": [
-                {
-                  "field": "vout[0].value",
-                  "expected": -1e-08,
-                  "got": 184467440737.09552
-                }
-              ]
-            },
             {
               "tx": "01000000013bfc220ec526583cb6b7e922b8b27f604cfe0a09764de61e80f58d...",
               "txid": "3e7fb893bfd7a2fe",
@@ -404,235 +269,6 @@
     "assembled": 578,
     "tested": 578,
     "per_node": {
-      "rustoshi": {
-        "pass_strict": 48,
-        "fail_strict": 530,
-        "pass_semantic": 124,
-        "fail_semantic": 454,
-        "rpc_errors": 0,
-        "errors": [
-          {
-            "script_asm": "DEPTH 0 EQUAL",
-            "script_hex": "740087",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_DEPTH 0 OP_EQUAL",
-                "got": "OP_UNKNOWN[0x74] 0 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "IF 0x50 ENDIF 1",
-            "script_hex": "63506851",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_IF OP_RESERVED OP_ENDIF 1",
-                "got": "OP_IF OP_UNKNOWN[0x50] OP_ENDIF OP_1"
-              }
-            ]
-          },
-          {
-            "script_asm": "0x5f ADD 0x60 EQUAL",
-            "script_hex": "5f936087",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "15 OP_ADD 16 OP_EQUAL",
-                "got": "OP_15 OP_UNKNOWN[0x93] OP_16 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "NOP",
-            "script_hex": "61",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_NOP",
-                "got": "OP_UNKNOWN[0x61]"
-              }
-            ]
-          },
-          {
-            "script_asm": "IF VER ELSE 1 ENDIF",
-            "script_hex": "6362675168",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_IF OP_VER OP_ELSE 1 OP_ENDIF",
-                "got": "OP_IF OP_UNKNOWN[0x62] OP_ELSE OP_1 OP_ENDIF"
-              }
-            ]
-          },
-          {
-            "script_asm": "IF RESERVED RESERVED1 RESERVED2 ELSE 1 ENDIF",
-            "script_hex": "6350898a675168",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_IF OP_RESERVED OP_RESERVED1 OP_RESERVED2 OP_ELSE 1 OP_ENDIF",
-                "got": "OP_IF OP_UNKNOWN[0x50] OP_UNKNOWN[0x89] OP_UNKNOWN[0x8a] OP_ELSE OP_1 OP_ENDIF"
-              }
-            ]
-          },
-          {
-            "script_asm": "IF 1 ELSE 0 ELSE 1 ENDIF ADD 2 EQUAL",
-            "script_hex": "63516700675168935287",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_IF 1 OP_ELSE 0 OP_ELSE 1 OP_ENDIF OP_ADD 2 OP_EQUAL",
-                "got": "OP_IF OP_1 OP_ELSE 0 OP_ELSE OP_1 OP_ENDIF OP_UNKNOWN[0x93] OP_2 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "IF SHA1 ELSE ELSE SHA1 ELSE ELSE SHA1 ELSE ELSE SHA1 ELSE ELSE SHA1 ELSE ELSE SH",
-            "script_hex": "63a76767a76767a76767a76767a76767a76767a76767a76767a76767a76767a7",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_IF OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ENDIF 68ca4fec736264c13b859bac43d5173df6871682 OP_EQUAL",
-                "got": "OP_IF OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ENDIF 68ca4fec736264c13b859bac43d5173df6871682 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "NOTIF 1 ELSE 0 ELSE 1 ENDIF ADD 2 EQUAL",
-            "script_hex": "64516700675168935287",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_NOTIF 1 OP_ELSE 0 OP_ELSE 1 OP_ENDIF OP_ADD 2 OP_EQUAL",
-                "got": "OP_NOTIF OP_1 OP_ELSE 0 OP_ELSE OP_1 OP_ENDIF OP_UNKNOWN[0x93] OP_2 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "NOTIF SHA1 ELSE ELSE SHA1 ELSE ELSE SHA1 ELSE ELSE SHA1 ELSE ELSE SHA1 ELSE ELSE",
-            "script_hex": "64a76767a76767a76767a76767a76767a76767a76767a76767a76767a76767a7",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_NOTIF OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ELSE OP_ELSE OP_SHA1 OP_ENDIF 68ca4fec736264c13b859bac43d5173df6871682 OP_EQUAL",
-                "got": "OP_NOTIF OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ELSE OP_ELSE OP_UNKNOWN[0xa7] OP_ENDIF 68ca4fec736264c13b859bac43d5173df6871682 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "IF 1 IF RETURN ELSE RETURN ELSE RETURN ENDIF ELSE 1 IF 1 ELSE RETURN ELSE 1 ENDI",
-            "script_hex": "6351636a676a676a6867516351676a675168676a68935287",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_IF 1 OP_IF OP_RETURN OP_ELSE OP_RETURN OP_ELSE OP_RETURN OP_ENDIF OP_ELSE 1 OP_IF 1 OP_ELSE OP_RETURN OP_ELSE 1 OP_ENDIF OP_ELSE OP_RETURN OP_ENDIF OP_ADD 2 OP_EQUAL",
-                "got": "OP_IF OP_1 OP_IF OP_RETURN OP_ELSE OP_RETURN OP_ELSE OP_RETURN OP_ENDIF OP_ELSE OP_1 OP_IF OP_1 OP_ELSE OP_RETURN OP_ELSE OP_1 OP_ENDIF OP_ELSE OP_RETURN OP_ENDIF OP_UNKNOWN[0x93] OP_2 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "NOTIF 0 NOTIF RETURN ELSE RETURN ELSE RETURN ENDIF ELSE 0 NOTIF 1 ELSE RETURN EL",
-            "script_hex": "6400646a676a676a6867006451676a675168676a68935287",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_NOTIF 0 OP_NOTIF OP_RETURN OP_ELSE OP_RETURN OP_ELSE OP_RETURN OP_ENDIF OP_ELSE 0 OP_NOTIF 1 OP_ELSE OP_RETURN OP_ELSE 1 OP_ENDIF OP_ELSE OP_RETURN OP_ENDIF OP_ADD 2 OP_EQUAL",
-                "got": "OP_NOTIF 0 OP_NOTIF OP_RETURN OP_ELSE OP_RETURN OP_ELSE OP_RETURN OP_ENDIF OP_ELSE 0 OP_NOTIF OP_1 OP_ELSE OP_RETURN OP_ELSE OP_1 OP_ENDIF OP_ELSE OP_RETURN OP_ENDIF OP_UNKNOWN[0x93] OP_2 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "ADD 21 EQUAL",
-            "script_hex": "93011587",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_ADD 21 OP_EQUAL",
-                "got": "OP_UNKNOWN[0x93] 15 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "DEPTH 1 EQUALVERIFY 0 EQUAL",
-            "script_hex": "7451880087",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_DEPTH 1 OP_EQUALVERIFY 0 OP_EQUAL",
-                "got": "OP_UNKNOWN[0x74] OP_1 OP_EQUALVERIFY 0 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "DEPTH 2 EQUALVERIFY 1 EQUALVERIFY 1 EQUAL",
-            "script_hex": "74528851885187",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_DEPTH 2 OP_EQUALVERIFY 1 OP_EQUALVERIFY 1 OP_EQUAL",
-                "got": "OP_UNKNOWN[0x74] OP_2 OP_EQUALVERIFY OP_1 OP_EQUALVERIFY OP_1 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "DEPTH 2 EQUALVERIFY 0x05 0x0100000000 EQUAL",
-            "script_hex": "74528805010000000087",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_DEPTH 2 OP_EQUALVERIFY 0100000000 OP_EQUAL",
-                "got": "OP_UNKNOWN[0x74] OP_2 OP_EQUALVERIFY 0100000000 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "DUP 1 ADD 1 EQUALVERIFY 0 EQUAL",
-            "script_hex": "76519351880087",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_DUP 1 OP_ADD 1 OP_EQUALVERIFY 0 OP_EQUAL",
-                "got": "OP_DUP OP_1 OP_UNKNOWN[0x93] OP_1 OP_EQUALVERIFY 0 OP_EQUAL"
-              }
-            ]
-          },
-          {
-            "script_asm": "NIP",
-            "script_hex": "77",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_NIP",
-                "got": "OP_UNKNOWN[0x77]"
-              }
-            ]
-          },
-          {
-            "script_asm": "OVER DEPTH 3 EQUALVERIFY",
-            "script_hex": "78745388",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "OP_OVER OP_DEPTH 3 OP_EQUALVERIFY",
-                "got": "OP_UNKNOWN[0x78] OP_UNKNOWN[0x74] OP_3 OP_EQUALVERIFY"
-              }
-            ]
-          },
-          {
-            "script_asm": "0 PICK 20 EQUALVERIFY DEPTH 3 EQUAL",
-            "script_hex": "0079011488745387",
-            "semantic_diffs": [
-              {
-                "field": "asm",
-                "expected": "0 OP_PICK 20 OP_EQUALVERIFY OP_DEPTH 3 OP_EQUAL",
-                "got": "0 OP_UNKNOWN[0x79] 14 OP_EQUALVERIFY OP_UNKNOWN[0x74] OP_3 OP_EQUAL"
-              }
-            ]
-          }
-        ]
-      },
       "blockbrew": {
         "pass_strict": 124,
         "fail_strict": 454,
@@ -1096,7 +732,7 @@
         "fail_strict": 193,
         "pass_semantic": 428,
         "fail_semantic": 150,
-        "rpc_errors": 0,
+        "rpc_errors": 2,
         "errors": [
           {
             "script_asm": "ADD 21 EQUAL",
@@ -1323,33 +959,28 @@
     }
   },
   "summary": {
-    "total_comparisons": 3168,
-    "total_pass": 1782,
-    "total_fail": 1386,
+    "total_comparisons": 2376,
+    "total_pass": 1455,
+    "total_fail": 921,
     "per_node": {
-      "rustoshi": {
-        "pass": 328,
-        "fail": 464
-      },
       "blockbrew": {
         "pass": 609,
         "fail": 183
       },
       "beamchain": {
-        "pass": 205,
-        "fail": 587
+        "pass": 206,
+        "fail": 586
       },
       "haskoin": {
         "pass": 640,
         "fail": 152
       }
     },
-    "timestamp": "2026-04-08T20:37:42Z",
+    "timestamp": "2026-05-05T23:19:03Z",
     "nodes_tested": [
       "beamchain",
       "blockbrew",
-      "haskoin",
-      "rustoshi"
+      "haskoin"
     ]
   }
 }
