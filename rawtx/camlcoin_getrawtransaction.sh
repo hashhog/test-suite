@@ -249,7 +249,36 @@ done
 cc_rpc getblockcount '[]' | grep -q '"result"' || fail "camlcoin RPC never responded within 120s"
 log "camlcoin RPC ready"
 
-# ── 4. Build a REAL spend tx with camlcoin's own wallet. ──────────────────
+# ── 4. CREATE the wallet, then build a REAL spend tx with it. ────────────
+# A freshly booted node has no wallet that can hand out an address, and that is
+# CORRECT on both sides:
+#   * Bitcoin Core auto-creates none at all — bitcoin-core/src/wallet/rpc/util.cpp:82
+#     "A default wallet is no longer automatically created" -> getnewaddress is
+#     RPC_WALLET_NOT_FOUND (-18, src/rpc/protocol.h:80).
+#   * camlcoin registers a BLANK, keyless boot wallet as the "" default
+#     (camlcoin/lib/cli.ml:1220-1223); it has no master key and no keys, so
+#     Wallet.can_get_addresses is false (camlcoin/lib/wallet.ml:785-787) and
+#     getnewaddress returns Core's own RPC_WALLET_ERROR (-4) "Error: This wallet
+#     has no available keys" (camlcoin/lib/rpc.ml:3152-3153; Core
+#     src/wallet/rpc/addresses.cpp:46-47).
+# This test used to call getnewaddress straight after the RPC-ready wait and
+# read the resulting JSON null back as an address ("did not return a bcrt1
+# address: 'None'"). It was green only until camlcoin adopted Core's
+# CanGetAddresses guard (camlcoin 936e984, 2026-06-10) and has been red every
+# night since 2026-06-11 on THIS harness defect, not a node one — it is the only
+# rawtx test that drives an uninitialised node wallet (camlcoin_spend.sh:190 and
+# camlcoin_history.sh:157 both initialise first; blockbrew's sibling
+# rawtx/blockbrew_getrawtransaction.sh:238 calls createwallet).
+# So do what a Core operator does first: createwallet. camlcoin promotes the new
+# keyed wallet to the base-"/" default (camlcoin/lib/rpc.ml:3880) the way Core's
+# GetWalletForJSONRPCRequest resolves a sole loaded wallet, so every later call
+# below keeps using the base endpoint unchanged.
+WALLET_NAME="grtw"
+CC_WC=$(cc_rpc createwallet "[\"$WALLET_NAME\"]")
+echo "$CC_WC" | grep -q "\"name\":\"$WALLET_NAME\"" \
+    || fail "camlcoin createwallet $WALLET_NAME failed: $(echo "$CC_WC" | head -c 200)"
+log "created wallet $WALLET_NAME (promoted to the base-\"/\" default)"
+
 # Mine 101 blocks to a wallet address (coinbase maturity), then sendtoaddress.
 ADDR=$(jget "$(cc_rpc getnewaddress '[]')" "d['result']")
 [[ "$ADDR" == bcrt1* ]] || fail "camlcoin getnewaddress did not return a bcrt1 address: '$ADDR'"
@@ -257,6 +286,17 @@ log "mining 101 blocks to $ADDR (coinbase maturity)"
 cc_rpc generatetoaddress "[101, \"$ADDR\"]" | grep -q '"result"' || fail "camlcoin generatetoaddress(101) failed"
 CC_BAL=$(jget "$(cc_rpc getbalance '[]')" "d['result']")
 log "camlcoin balance after mining: $CC_BAL"
+# ASSERT the value, not just its absence of error. At tip 101 exactly ONE
+# coinbase is mature (height 1, depth 101): Core's GetTxBlocksToMaturity needs
+# COINBASE_MATURITY+1 = 101 confirmations
+# (bitcoin-core/src/wallet/wallet.cpp:3333-3343, src/consensus/consensus.h:19),
+# so the spendable balance is exactly 50 BTC — never 100 (maturity ignored),
+# never 0 (block-connect credit lost), never null (no usable wallet). This is
+# the assertion that stops a harness wallet-setup fix from papering over a real
+# wallet-credit or maturity regression on the way to the getrawtransaction
+# checks below.
+python3 -c "import sys; sys.exit(0 if abs(float('$CC_BAL') - 50.0) < 1e-8 else 1)" 2>/dev/null \
+    || fail "camlcoin getbalance at tip 101 = '$CC_BAL', expected exactly 50 BTC (one mature coinbase; Core wallet.cpp:3342)"
 
 DEST=$(jget "$(cc_rpc getnewaddress '[]')" "d['result']")
 [[ "$DEST" == bcrt1* ]] || fail "camlcoin getnewaddress (dest) did not return a bcrt1 address: '$DEST'"
