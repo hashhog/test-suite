@@ -150,7 +150,12 @@ mkdir -p "$DATADIR" || fail "cannot create scratch datadir $DATADIR"
 
 # ── 2. Launch rustoshi on regtest. ─────────────────────────────────────────
 log "launching rustoshi regtest (rpc=$RPC_PORT p2p=$P2P_PORT datadir=$DATADIR)"
+# Core (-fallbackfee=0 since v0.21) and rustoshi both refuse sendtoaddress with
+# "Fee estimation failed. Fallbackfee is disabled" when there is no estimate, and a
+# fresh regtest chain never has one. Core's own regtest passes -fallbackfee, so do we.
+# RUSTOSHI_FALLBACKFEE=0 starts the node WITHOUT the fallback (negative control: must FAIL).
 "$BIN" --network=regtest --datadir="$DATADIR" \
+    --fallbackfee="${RUSTOSHI_FALLBACKFEE:-0.0002}" \
     --port="$P2P_PORT" --rpcbind="127.0.0.1:$RPC_PORT" \
     >"$LOG" 2>&1 &
 NODE_PID=$!
