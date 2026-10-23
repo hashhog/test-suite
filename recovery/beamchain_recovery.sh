@@ -48,6 +48,10 @@ MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abando
 # funds the test; we mine 101 to exercise a realistic, multi-block coinbase set.
 NBLOCKS=101
 
+# Negative-control hook: restoring w2 from a DIFFERENT mnemonic must make the
+# arm FAIL (re-derived address mismatch). Unset in normal runs.
+W2_MNEMONIC="${BEAMCHAIN_RECOVERY_W2_MNEMONIC:-$MNEMONIC}"
+
 # A foreign address NOT derived from our seed, for the negative control.
 # Fixed regtest bech32 address (not in our wallet) -> must scan to 0.
 FOREIGN_ADDR="bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
@@ -93,6 +97,17 @@ rpc() {
     curl -s --max-time 15 -u "$COOKIE" \
         --data-binary "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"$method\",\"params\":$params}" \
         "http://127.0.0.1:$RPC_PORT$path" 2>/dev/null
+}
+
+# restorewallet is Core-shaped on beamchain (name, backup_file; 8a40a06): it
+# cannot take a mnemonic. Build a backup file holding the fixed mnemonic's
+# BIP-39 seed, then restore from that file. usage: restore_from_mnemonic <name> <mnemonic>
+restore_from_mnemonic() {
+    local name="$1" words="$2" bk="$DATADIR/seed-backups/$1.json"
+    mkdir -p "$DATADIR/seed-backups"
+    python3 -I "$(dirname "${BASH_SOURCE[0]}")/../lib/beamchain_seed_backup.py" "$words" "$bk" \
+        || { echo '{"error":{"message":"seed backup helper failed"}}'; return 1; }
+    rpc restorewallet "[\"$name\",\"$bk\"]"
 }
 
 # Extract the integer total_amount from a scantxoutset response, in satoshis.
@@ -186,7 +201,7 @@ echo "$r" | grep -q '"result"' || fail "RPC never responded within 45s"
 
 # ── 4. Restore wallet w1 from the fixed mnemonic, derive A1. ───────────────
 log "restorewallet w1 from fixed mnemonic"
-r=$(rpc restorewallet "[\"w1\",\"$MNEMONIC\"]")
+r=$(restore_from_mnemonic w1 "$MNEMONIC")
 echo "$r" | grep -q '"error":null' || echo "$r" | grep -q '"result"' \
     || fail "restorewallet w1 failed: $(echo "$r" | head -c 200)"
 echo "$r" | grep -q '"error":{' && fail "restorewallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
@@ -226,7 +241,7 @@ rpc unloadwallet "[\"w1\"]" >/dev/null 2>&1 || true
 find "$DATADIR/regtest" -maxdepth 3 -iname '*wallet*' -exec rm -rf {} + 2>/dev/null || true
 
 log "restorewallet w2 from SAME fixed mnemonic"
-r=$(rpc restorewallet "[\"w2\",\"$MNEMONIC\"]")
+r=$(restore_from_mnemonic w2 "$W2_MNEMONIC")
 echo "$r" | grep -q '"error":{' && fail "restorewallet w2 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 
 log "getnewaddress on w2 (must byte-match A1)"
