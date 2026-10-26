@@ -221,7 +221,11 @@ nblk="$(printf '%s' "$resp" | py_field 'len(r)')"
 if [[ "$nblk" != "101" ]]; then finish FAIL "generatetoaddress did not mine 101 (got '${nblk}')"; fi
 
 # ── 6. Wallet-native send (proven by the spend cell) ────────────────────────
-RECV="$(rpc_call "$RPC" getnewaddress '[]' | py_field 'r')"
+# lunarblock auto-creates a default wallet, so with the arm's own wallet loaded
+# there are two and an unscoped wallet call is Core's -19 "Wallet file not
+# specified" (GetWalletForJSONRPCRequest). Address the recipient wallet by name.
+rpc_call "$RPC" createwallet '["recv"]' >/dev/null
+RECV="$(rpc_call "$RPC/wallet/recv" getnewaddress '[]' | py_field 'r')"
 if [[ -z "$RECV" || "$RECV" == "__ERR__" || "$RECV" != bcrt1* ]]; then
   finish FAIL "recipient getnewaddress bad addr: '${RECV}'"
 fi
