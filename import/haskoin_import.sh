@@ -190,18 +190,29 @@ h0=$(echo "$r" | grep -o '"result":[0-9]*' | grep -o '[0-9]*')
 # ══════════════════════════════════════════════════════════════════════════
 
 # w1 (own wallet) becomes the default; derive A1.
-log "restorewallet w1 from fixed mnemonic -> A1"
-r=$(rpc restorewallet "[\"w1\",\"$MNEMONIC\"]")
-has_error "$r" && fail "restorewallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
+# haskoin's restorewallet is Core-shaped (name, backup_file) and its wallet.dat is
+# sealed with a per-datadir key, so a seed cannot be handed to it and a backup
+# file cannot be authored outside the node. The seed is made by the node
+# (createwallet) and carried across wallets by backupwallet -> restorewallet.
+# The backup is taken BEFORE the first getnewaddress so the restored wallet's
+# first address is the original's first address.
+log "createwallet w1 + backupwallet (before any address) -> A1"
+r=$(rpc createwallet '["w1"]')
+has_error "$r" && fail "createwallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
+W1_BACKUP="$DATADIR/seed-backups/w1.dat"
+mkdir -p "$DATADIR/seed-backups"
+r=$(rpc backupwallet "[\"$W1_BACKUP\"]")
+has_error "$r" && fail "backupwallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
+[[ -s "$W1_BACKUP" ]] || fail "backupwallet w1 wrote no file at $W1_BACKUP"
 A1=$(result_str "$(rpc getnewaddress "[]")")
 [[ "$A1" == bcrt1q* ]] || fail "getnewaddress A1 not a regtest bech32 addr (got '${A1:0:40}')"
 log "A1=$A1"
 
 # Foreign wallet w3 (different seed); to act on it, make it the default by
 # unloading w1.  Derive A_ext + dump its private key K_ext.
-log "restorewallet w3 from a DIFFERENT mnemonic (foreign-key source)"
-r=$(rpc restorewallet "[\"w3\",\"$MNEMONIC_EXT\"]")
-has_error "$r" && fail "restorewallet w3 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
+log "createwallet w3 (a DIFFERENT, independent seed: foreign-key source)"
+r=$(rpc createwallet '["w3"]')
+has_error "$r" && fail "createwallet w3 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 log "unloadwallet w1 -> w3 becomes default (to derive + dump the foreign key)"
 r=$(rpc unloadwallet "[\"w1\"]")
 has_error "$r" && fail "unloadwallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
@@ -222,8 +233,8 @@ has_error "$r" && fail "fund A_ext error: $(echo "$r" | grep -o '"message":"[^"]
 
 # Bring back an OWN wallet (w1b, same seed => same A1) and make it default to
 # fund + scan A1.  Then unload w3 so only the own wallet sees the A1 blocks.
-log "restorewallet w1b from fixed mnemonic (re-derives A1 deterministically)"
-r=$(rpc restorewallet "[\"w1b\",\"$MNEMONIC\"]")
+log "restorewallet w1b from w1's backup (re-derives A1 deterministically)"
+r=$(rpc restorewallet "[\"w1b\",\"$W1_BACKUP\"]")
 has_error "$r" && fail "restorewallet w1b error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 log "unloadwallet w3 -> w1b becomes default"
 r=$(rpc unloadwallet "[\"w3\"]")
@@ -249,8 +260,8 @@ log "w1b mature balance M=$M sats"
 # ══════════════════════════════════════════════════════════════════════════
 
 # Restore w2 from the SAME seed — derives keys, does NOT scan.
-log "restorewallet w2 from the SAME mnemonic (fresh, unscanned)"
-r=$(rpc restorewallet "[\"w2\",\"$MNEMONIC\"]")
+log "restorewallet w2 from the SAME backup (fresh, unscanned)"
+r=$(rpc restorewallet "[\"w2\",\"$W1_BACKUP\"]")
 has_error "$r" && fail "restorewallet w2 (same seed) error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 log "unloadwallet w1b -> w2 becomes default"
 r=$(rpc unloadwallet "[\"w1b\"]")

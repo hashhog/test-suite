@@ -6,9 +6,9 @@
 # "scantxoutset (built from scratch) + restore-from-seed -> recovery GREEN").
 # Proves the seed-only recovery property end-to-end on a throwaway regtest node:
 #
-#   restore wallet from a FIXED BIP-39 mnemonic  ->  getnewaddress (A1)  ->
+#   createwallet w1 + backupwallet (before any address) -> getnewaddress (A1)  ->
 #   generatetoaddress to fund A1 (coinbase)      ->  scantxoutset BEFORE (total) ->
-#   unload, restore the SAME seed into a fresh wallet -> re-derive A1' (assert ==A1) ->
+#   unload, restorewallet w2 from that backup file -> re-derive A1' (assert ==A1) ->
 #   scantxoutset AFTER (assert ==BEFORE)         ->  negative control (foreign addr -> 0).
 #
 # STRICT UNIFORM INTERFACE (the assembled nightly runner greps the summary line):
@@ -134,9 +134,20 @@ h0=$(echo "$r" | grep -o '"result":[0-9]*' | grep -o '[0-9]*')
 [[ "$h0" == "0" ]] || fail "fresh regtest not at height 0 (got ${h0:-none})"
 
 # ── 1. Restore wallet from the FIXED seed, derive A1 ───────────────────────
-r=$(rpc restorewallet "[\"w1\",\"$MNEMONIC\"]")
-has_error "$r" && fail "restorewallet w1 errored: $(echo "$r" | head -c 160)"
-log "restored w1: $r"
+# haskoin's restorewallet is Core-shaped (name, backup_file) and its wallet.dat is
+# sealed with a per-datadir key, so a seed cannot be handed to it and a backup
+# file cannot be authored outside the node. The seed is made by the node
+# (createwallet) and carried across wallets by backupwallet -> restorewallet.
+# The backup is taken BEFORE the first getnewaddress so the restored wallet's
+# first address is the original's first address.
+r=$(rpc createwallet '["w1"]')
+has_error "$r" && fail "createwallet w1 errored: $(echo "$r" | head -c 160)"
+W1_BACKUP="$DATADIR/seed-backups/w1.dat"
+mkdir -p "$DATADIR/seed-backups"
+r=$(rpc backupwallet "[\"$W1_BACKUP\"]")
+has_error "$r" && fail "backupwallet w1 errored: $(echo "$r" | head -c 160)"
+[[ -s "$W1_BACKUP" ]] || fail "backupwallet w1 wrote no file at $W1_BACKUP"
+log "created w1, backed up to $W1_BACKUP"
 
 A1=$(res_str "$(rpc getnewaddress '[]')")
 [[ "$A1" == bcrt1q* ]] || fail "getnewaddress A1 not a regtest bech32 addr (got '${A1:0:40}')"
@@ -165,9 +176,21 @@ log "BEFORE total=$BEFORE unspents=$BEFORE_N"
 # ── 4. Seed-only recovery: unload, restore SAME seed into a FRESH wallet ───
 r=$(rpc unloadwallet '["w1"]')
 has_error "$r" && fail "unloadwallet w1 errored: $(echo "$r" | head -c 160)"
-r=$(rpc restorewallet "[\"w2\",\"$MNEMONIC\"]")
-has_error "$r" && fail "restorewallet w2 (same seed) errored: $(echo "$r" | head -c 160)"
-log "restored fresh w2 from same seed"
+W2_BACKUP="$W1_BACKUP"
+if [[ -n "${HASKOIN_RECOVERY_W2_DECOY_SEED:-}" ]]; then
+    # Negative-control hook: restore w2 from a DIFFERENT wallet's backup. The
+    # arm must then FAIL on the re-derived-address mismatch. Unset in normal runs.
+    r=$(rpc createwallet '["wdecoy"]')
+    has_error "$r" && fail "createwallet wdecoy errored: $(echo "$r" | head -c 160)"
+    W2_BACKUP="$DATADIR/seed-backups/wdecoy.dat"
+    r=$(rpc backupwallet "[\"$W2_BACKUP\"]")
+    has_error "$r" && fail "backupwallet wdecoy errored: $(echo "$r" | head -c 160)"
+    r=$(rpc unloadwallet '["wdecoy"]')
+    has_error "$r" && fail "unloadwallet wdecoy errored: $(echo "$r" | head -c 160)"
+fi
+r=$(rpc restorewallet "[\"w2\",\"$W2_BACKUP\"]")
+has_error "$r" && fail "restorewallet w2 (w1 backup) errored: $(echo "$r" | head -c 160)"
+log "restored fresh w2 from $W2_BACKUP"
 
 # First address from the freshly-restored wallet MUST be byte-identical to A1.
 A1B=$(res_str "$(rpc getnewaddress '[]')")
