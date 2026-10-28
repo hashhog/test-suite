@@ -248,7 +248,11 @@ log "listunspent spendable=$LU_SPENDABLE"
 # ── 7. Fresh recipient + confirming-miner addresses ─────────────────────────
 # RECV: a fresh address on the default (non-spend) wallet — clearly external
 # to the sender so scantxoutset on RECV proves the coin actually moved.
-RECV="$(rpc_call "$RPC" getnewaddress '[]' | py_field 'r')"
+# lunarblock auto-creates a default wallet, so with the arm's own wallet loaded
+# there are two and an unscoped wallet call is Core's -19 "Wallet file not
+# specified" (GetWalletForJSONRPCRequest). Address the recipient wallet by name.
+rpc_call "$RPC" createwallet '["recv"]' >/dev/null
+RECV="$(rpc_call "$RPC/wallet/recv" getnewaddress '[]' | py_field 'r')"
 if [[ -z "$RECV" || "$RECV" == "__ERR__" || "$RECV" != bcrt1* ]]; then
   finish FAIL "recipient getnewaddress bad addr: '${RECV}'"
 fi
@@ -331,7 +335,7 @@ fi
 log "listunspent post-spend count=$LU2"
 
 # ── 10. SECOND send+mine — proves BIP30 eviction is permanent, not a fluke ──
-RECV2="$(rpc_call "$RPC" getnewaddress '[]' | py_field 'r')"
+RECV2="$(rpc_call "$RPC/wallet/recv" getnewaddress '[]' | py_field 'r')"
 if [[ -z "$RECV2" || "$RECV2" == "__ERR__" ]]; then finish FAIL "recipient2 getnewaddress failed"; fi
 log "second send: sendtoaddress $RECV2 $SEND_AMT2"
 TXID2="$(rpc_call "$RPC/wallet/spend" sendtoaddress "[\"$RECV2\",$SEND_AMT2]" | py_field 'r')"
