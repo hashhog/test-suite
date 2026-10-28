@@ -4,25 +4,29 @@
 #
 # Codifies the "wallet rescan + raw-key import" cell for haskoin — the
 # successor to the recovery / spend / history cells.  Proves the REAL wallet
-# rescan (rescanblockchain) and raw-key import (importprivkey), distinct from
+# rescan (rescanblockchain) and foreign-key import (importdescriptors), distinct from
 # the chain-level scantxoutset which never touches the wallet ledger.
 #
 # CORE PROOF — RESCAN (required for green):
 #   restorewallet w1 <fixed mnemonic>  -> getnewaddress A1
 #   generatetoaddress -> A1            -> w1 mature balance M (block-connect scan)
-#   restorewallet w2 <SAME mnemonic>   -> derives the SAME keys, but does NOT
-#                                         scan the chain  => w2 balance == 0
-#   make w2 the default wallet         -> getbalance (w2) == 0
+#   restorewallet w2 <SAME mnemonic>   -> derives the SAME keys. Core's
+#                                         restorewallet rescans on load, so
+#                                         w2 balance is 0 (no scan) or M (Core)
+#   make w2 the default wallet         -> getbalance (w2) in {0, M}
 #   rescanblockchain                   -> w2 rediscovers its funds via a REAL
 #                                         wallet rescan (scanBlockForWallet over
 #                                         the height range), NOT scantxoutset
 #   ASSERT: getbalance (w2) == M  AND  listunspent shows A1's scriptPubKey.
 #
-# SECOND PROOF — IMPORTPRIVKEY (target):
-#   foreign wallet w3 <different seed> -> A_ext + dumpprivkey A_ext -> K_ext
+# SECOND PROOF — IMPORTDESCRIPTORS (target):
+#   foreign wallet w3 <different seed> -> A_ext + listdescriptors true -> its
+#                                         private wpkh receive descriptor D_ext
+#                                         (Core v31 has no dumpprivkey)
 #   mine a coinbase to A_ext (matured) -> A_ext holds 50 BTC the wallet w2 does
 #                                         not own
-#   importprivkey K_ext (rescan=true)  -> w2 ALSO credits A_ext's mature funds.
+#   importdescriptors D_ext, timestamp 0 (rescan from genesis, the counterpart
+#   of importprivkey rescan=true)      -> w2 ALSO credits A_ext's mature funds.
 #   ASSERT: w2 balance grows by exactly one mature coinbase.
 #
 # haskoin's wallet RPCs dispatch on the single DEFAULT wallet (no /wallet/<name>
@@ -34,14 +38,14 @@
 #
 # Field shapes follow bitcoin-core/src/wallet/rpc/transactions.cpp
 # (rescanblockchain -> {start_height, stop_height}) and wallet/rpc/backup.cpp
-# (importprivkey / dumpprivkey).
+# (importdescriptors / listdescriptors).
 #
 # STRICT UNIFORM INTERFACE (mirrors haskoin_history.sh exactly): no required
 # args, idempotent, trap cleanup, scratch datadir + unique ports, single clean
 # summary line on stdout.  All noise -> stderr / logfile.
 #
 # Summary line (stdout):
-#   PASS: IMPORT haskoin: PASS rescan=ok importprivkey=<ok|partial|absent> rediscovered=<M>
+#   PASS: IMPORT haskoin: PASS rescan=ok importdescriptors=<ok|partial|absent> rediscovered=<M>
 #   FAIL: IMPORT haskoin: FAIL <short reason>
 #
 # Touches ONLY /tmp/importfleet-haskoin/ and ports 21718 (RPC) / 21738 (P2P).
@@ -96,7 +100,7 @@ trap cleanup EXIT INT TERM
 
 # ── Emit the single summary line + exit. ──────────────────────────────────
 pass() {
-    echo "IMPORT haskoin: PASS rescan=ok importprivkey=$1 rediscovered=$2"
+    echo "IMPORT haskoin: PASS rescan=ok importdescriptors=$1 rediscovered=$2"
     exit 0
 }
 fail() {
@@ -209,21 +213,23 @@ A1=$(result_str "$(rpc getnewaddress "[]")")
 log "A1=$A1"
 
 # Foreign wallet w3 (different seed); to act on it, make it the default by
-# unloading w1.  Derive A_ext + dump its private key K_ext.
+# unloading w1.  Derive A_ext + export its private receive descriptor D_ext.
 log "createwallet w3 (a DIFFERENT, independent seed: foreign-key source)"
 r=$(rpc createwallet '["w3"]')
 has_error "$r" && fail "createwallet w3 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
-log "unloadwallet w1 -> w3 becomes default (to derive + dump the foreign key)"
+log "unloadwallet w1 -> w3 becomes default (to derive + export the foreign key)"
 r=$(rpc unloadwallet "[\"w1\"]")
 has_error "$r" && fail "unloadwallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 A_EXT=$(result_str "$(rpc getnewaddress "[]")")
 [[ "$A_EXT" == bcrt1q* ]] || fail "foreign getnewaddress not bech32 (got '${A_EXT:0:40}')"
 log "A_ext=$A_EXT (foreign, w3)"
-DP=$(rpc dumpprivkey "[\"$A_EXT\"]")
-has_error "$DP" && fail "dumpprivkey A_ext error: $(echo "$DP" | grep -o '"message":"[^"]*"' | head -1)"
-K_EXT=$(result_str "$DP")
-[[ -n "$K_EXT" ]] || fail "dumpprivkey returned empty WIF"
-log "K_ext WIF obtained (len ${#K_EXT})"
+# getnewaddress defaults to bech32, so A_ext comes from the active external
+# wpkh() descriptor; listdescriptors true returns it with its private key.
+LD=$(rpc listdescriptors "[true]")
+has_error "$LD" && fail "listdescriptors true error: $(echo "$LD" | grep -o '"message":"[^"]*"' | head -1)"
+D_EXT=$(echo "$LD" | jq -r '[.result.descriptors[] | select(.active and (.internal | not) and (.desc | startswith("wpkh(")))][0].desc // empty')
+[[ -n "$D_EXT" ]] || fail "listdescriptors true has no active external wpkh() descriptor: $(echo "$LD" | head -c 200)"
+log "D_ext obtained (${D_EXT:0:12}...)"
 
 # Mine the foreign coinbase to A_ext at height 1 (w3 is default; it credits w3,
 # which we discard).  Then mine A1_BLOCKS to A1 so the tip is 1+A1_BLOCKS=101.
@@ -267,18 +273,14 @@ log "unloadwallet w1b -> w2 becomes default"
 r=$(rpc unloadwallet "[\"w1b\"]")
 has_error "$r" && fail "unloadwallet w1b error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 
-# w2 must start at 0 — restore alone credits nothing (no chain scan yet).
+# Core's restorewallet rescans on load (wallet/rpc/backup.cpp RestoreWallet ->
+# LoadWallet -> AttachChain), so w2 may already hold M; a node whose restore does
+# not scan starts at 0. Anything else is wrong.
 W2_PRE=$(balance_sats)
 [[ -n "$W2_PRE" ]] || fail "getbalance (w2) returned no number pre-rescan"
-[[ "$W2_PRE" -eq 0 ]] \
-    || fail "w2 balance != 0 BEFORE rescan (got $W2_PRE; restore must not scan the chain)"
-log "w2 balance BEFORE rescan = 0, as expected (restore derives keys, no scan)"
-
-# listunspent must also be empty pre-rescan.
-LU_PRE=$(rpc listunspent "[1]")
-LU_PRE_N=$(echo "$LU_PRE" | grep -o '"txid"' | wc -l | tr -d ' ')
-[[ "${LU_PRE_N:-0}" -eq 0 ]] \
-    || fail "w2 listunspent non-empty BEFORE rescan (got $LU_PRE_N; restore must not scan)"
+[[ "$W2_PRE" -eq 0 || "$W2_PRE" -eq "$M" ]] \
+    || fail "w2 balance BEFORE rescan is $W2_PRE, neither 0 (no scan on restore) nor M=$M (scan on restore)"
+log "w2 balance BEFORE rescan = $W2_PRE (0 = restore did not scan, M = restore scanned like Core)"
 
 # rescanblockchain on w2 — the REAL wallet rescan.
 log "rescanblockchain (w2) -> rediscover funds via real wallet rescan"
@@ -310,29 +312,32 @@ echo "$LU_POST" | grep -q "$A1_SPK" \
 log "w2 listunspent AFTER rescan = $LU_POST_N UTXOs paying A1 (rescan-green PROVEN)"
 
 # ══════════════════════════════════════════════════════════════════════════
-# PART B — IMPORTPRIVKEY (target; PARTIAL/ABSENT acceptable)
+# PART B — IMPORTDESCRIPTORS (target; PARTIAL/ABSENT acceptable)
 #
-# w2 is the default wallet and does NOT own A_ext.  Import K_ext with
-# rescan=true and assert w2 now also credits the foreign mature coinbase.
+# w2 is the default wallet and does NOT own A_ext.  Import D_ext with
+# timestamp 0 (rescan from genesis) and assert w2 now also credits the foreign
+# mature coinbase.  ("now" is no no-scan control on regtest: Core rescans from
+# timestamp - TIMESTAMP_WINDOW (2h), which covers every block this test mines.)
 # ══════════════════════════════════════════════════════════════════════════
 IMPORTSTATE="absent"
 
 W2_BEFORE_IMPORT=$(balance_sats)
-log "w2 balance before importprivkey = $W2_BEFORE_IMPORT sats"
-IP=$(rpc importprivkey "[\"$K_EXT\",\"foreign\",true]")
-if has_error "$IP"; then
-    log "importprivkey RPC error ($(echo "$IP" | grep -o '"message":"[^"]*"' | head -1)); importprivkey=partial"
+log "w2 balance before importdescriptors = $W2_BEFORE_IMPORT sats"
+IMP_REQ=$(jq -cn --arg d "$D_EXT" '[{desc: $d, timestamp: 0, range: [0, 20], active: false, internal: false}]')
+IP=$(rpc importdescriptors "[$IMP_REQ]")
+if has_error "$IP" || ! echo "$IP" | jq -e '.result[0].success == true' >/dev/null 2>&1; then
+    log "importdescriptors failed ($(echo "$IP" | head -c 300)); importdescriptors=partial"
     IMPORTSTATE="partial"
 else
     W2_AFTER_IMPORT=$(balance_sats)
-    log "w2 balance after importprivkey = $W2_AFTER_IMPORT sats"
+    log "w2 balance after importdescriptors = $W2_AFTER_IMPORT sats"
     if [[ -n "$W2_AFTER_IMPORT" && "$W2_AFTER_IMPORT" -gt "${W2_BEFORE_IMPORT:-0}" ]]; then
         GAIN=$(( W2_AFTER_IMPORT - W2_BEFORE_IMPORT ))
         IMPORTSTATE="ok"
         if [[ "$GAIN" -eq "$COINBASE_SATS" ]]; then
-            log "importprivkey credited the foreign key's mature funds (+$GAIN sats == one coinbase) — importprivkey=ok"
+            log "importdescriptors credited the foreign key's mature funds (+$GAIN sats == one coinbase) — importdescriptors=ok"
         else
-            log "importprivkey credited +$GAIN sats (expected $COINBASE_SATS) — importprivkey=ok (nonzero credit)"
+            log "importdescriptors credited +$GAIN sats (expected $COINBASE_SATS) — importdescriptors=ok (nonzero credit)"
         fi
         A_EXT_SPK=$(addr_spk "$A_EXT")
         LU_IMP=$(rpc listunspent "[1]")
@@ -342,11 +347,11 @@ else
             log "note: imported balance grew but A_ext scriptPubKey not in listunspent (mature-filter?)"
         fi
     else
-        log "importprivkey did not increase w2 balance (before=$W2_BEFORE_IMPORT after=$W2_AFTER_IMPORT); importprivkey=partial"
+        log "importdescriptors did not increase w2 balance (before=$W2_BEFORE_IMPORT after=$W2_AFTER_IMPORT); importdescriptors=partial"
         IMPORTSTATE="partial"
     fi
 fi
 
-# ── Success.  rescan is GREEN; importprivkey state is reported. ───────────
-log "PASS: rescan=ok importprivkey=$IMPORTSTATE rediscovered=$M"
+# ── Success.  rescan is GREEN; importdescriptors state is reported. ───────
+log "PASS: rescan=ok importdescriptors=$IMPORTSTATE rediscovered=$M"
 pass "$IMPORTSTATE" "$M"
