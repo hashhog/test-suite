@@ -54,7 +54,9 @@ W2_MNEMONIC="${BEAMCHAIN_RECOVERY_W2_MNEMONIC:-$MNEMONIC}"
 
 # A foreign address NOT derived from our seed, for the negative control.
 # Fixed regtest bech32 address (not in our wallet) -> must scan to 0.
-FOREIGN_ADDR="bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+# Negative-control hook: pointing it at a funded address (e.g. A1) must make
+# the arm FAIL, proving the check sees a real balance. Unset in normal runs.
+FOREIGN_ADDR="${BEAMCHAIN_RECOVERY_FOREIGN_ADDR:-bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080}"
 
 NODE_PID=""
 COOKIE=""
@@ -133,9 +135,20 @@ scan_total_sats() {
     echo $(( whole * 100000000 + frac ))
 }
 
-# Count txouts from a scantxoutset response.
+# Count the matched coins in a scantxoutset response: the length of
+# result.unspents. NOT the "txouts" field — in Core (and beamchain master
+# edd0919) that is every coin the scan visited, i.e. the whole UTXO set, so a
+# foreign address with no coins still reports txouts=101 after 101 blocks.
+# Prints nothing if unspents is missing, so callers fail closed.
 scan_txouts() {
-    echo "$1" | grep -o '"txouts":[0-9]*' | head -1 | grep -o '[0-9]*'
+    echo "$1" | python3 -I -c '
+import json, sys
+try:
+    u = json.load(sys.stdin)["result"]["unspents"]
+except Exception:
+    sys.exit(0)
+if isinstance(u, list):
+    print(len(u))'
 }
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
@@ -228,9 +241,9 @@ echo "$r" | grep -q '"error":{' && fail "scantxoutset BEFORE error: $(echo "$r" 
 BEFORE_SATS=$(scan_total_sats "$r")
 BEFORE_OUTS=$(scan_txouts "$r")
 [[ -n "$BEFORE_SATS" ]] || fail "scantxoutset BEFORE returned no total_amount: $(echo "$r" | head -c 200)"
-[[ "${BEFORE_OUTS:-0}" -gt 0 ]] || fail "scantxoutset BEFORE found 0 txouts (funding failed)"
+[[ "${BEFORE_OUTS:-0}" -gt 0 ]] || fail "scantxoutset BEFORE found 0 unspents (funding failed)"
 [[ "$BEFORE_SATS" -gt 0 ]] || fail "scantxoutset BEFORE total is 0 (funding failed)"
-log "BEFORE: txouts=$BEFORE_OUTS total_sats=$BEFORE_SATS"
+log "BEFORE: unspents=$BEFORE_OUTS total_sats=$BEFORE_SATS"
 
 # ── 6. Wipe the wallet, restore the SAME seed into a fresh wallet w2. ──────
 # Unload w1 and delete wallet on-disk state so w2 is a genuinely fresh restore
@@ -258,9 +271,9 @@ echo "$r" | grep -q '"error":{' && fail "scantxoutset AFTER error: $(echo "$r" |
 AFTER_SATS=$(scan_total_sats "$r")
 AFTER_OUTS=$(scan_txouts "$r")
 [[ -n "$AFTER_SATS" ]] || fail "scantxoutset AFTER returned no total_amount: $(echo "$r" | head -c 200)"
-log "AFTER: txouts=$AFTER_OUTS total_sats=$AFTER_SATS"
+log "AFTER: unspents=$AFTER_OUTS total_sats=$AFTER_SATS"
 [[ "$AFTER_SATS" == "$BEFORE_SATS" ]] || fail "recovered total $AFTER_SATS != funded total $BEFORE_SATS"
-[[ "$AFTER_OUTS" == "$BEFORE_OUTS" ]] || fail "recovered txouts $AFTER_OUTS != funded txouts $BEFORE_OUTS"
+[[ "$AFTER_OUTS" == "$BEFORE_OUTS" ]] || fail "recovered unspents $AFTER_OUTS != funded unspents $BEFORE_OUTS"
 
 # ── 8. Negative control: a foreign address must scan to 0. ─────────────────
 log "scantxoutset NEGATIVE control [addr($FOREIGN_ADDR)]"
@@ -268,8 +281,9 @@ r=$(rpc scantxoutset "[\"start\",[\"addr($FOREIGN_ADDR)\"]]")
 echo "$r" | grep -q '"error":{' && fail "scantxoutset negative-control error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 NEG_OUTS=$(scan_txouts "$r")
 NEG_SATS=$(scan_total_sats "$r")
-log "NEG: txouts=${NEG_OUTS:-?} total_sats=${NEG_SATS:-?}"
-[[ "${NEG_OUTS:-0}" == "0" ]] || fail "negative control found ${NEG_OUTS} txouts for foreign addr (expected 0)"
+log "NEG: unspents=${NEG_OUTS:-?} total_sats=${NEG_SATS:-?}"
+[[ -n "$NEG_OUTS" ]] || fail "scantxoutset negative control returned no unspents list: $(echo "$r" | head -c 200)"
+[[ "$NEG_OUTS" == "0" ]] || fail "negative control found ${NEG_OUTS} unspents for foreign addr (expected 0)"
 [[ "${NEG_SATS:-0}" == "0" ]] || fail "negative control total ${NEG_SATS} != 0 for foreign addr"
 
 # ── 9. Success: emit BTC totals (whole BTC) in the summary. ────────────────
