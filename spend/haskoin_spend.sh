@@ -173,7 +173,7 @@ HB=$(find "$HASKOIN_REPO/dist-newstyle" -name haskoin -type f -executable 2>/dev
 log "launching $HB (regtest) -> $DATADIR/node.log"
 haskoin_datadir="$HASKOIN_REPO" \
     "$HB" --network Regtest --datadir "$DATADIR" \
-    node --port "$P2P_PORT" --rpcport "$RPC_PORT" \
+    node --port "$P2P_PORT" --rpcport "$RPC_PORT" --fallbackfee 0.0002 \
     >"$DATADIR/node.log" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID"
@@ -205,9 +205,9 @@ h0=$(echo "$r" | grep -o '"result":[0-9]*' | grep -o '[0-9]*')
 [[ "$h0" == "0" ]] || fail "fresh regtest not at height 0 (got ${h0:-none})"
 
 # ── 4. Restore wallet w1, derive A1. ───────────────────────────────────────
-log "restorewallet w1 from fixed mnemonic"
-r=$(rpc restorewallet "[\"w1\",\"$MNEMONIC\"]")
-has_error "$r" && fail "restorewallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
+log "createwallet w1 (node-made seed; restorewallet takes a backup file, not a mnemonic)"
+r=$(rpc createwallet '["w1"]')
+has_error "$r" && fail "createwallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 
 log "getnewaddress on w1 (bech32/p2wpkh) -> A1"
 A1=$(result_str "$(rpc getnewaddress "[]")")
