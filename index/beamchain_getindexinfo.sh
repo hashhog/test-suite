@@ -101,7 +101,7 @@ cleanup() {
             || break
         sleep 1
     done
-    [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
+    [[ -n "$CORE_BG" ]] && { kill "$CORE_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_BG" 2>/dev/null && kill -9 "$CORE_BG" 2>/dev/null; } || true
     # beamchain runs under its own process group (setsid -w); reap stragglers.
     pkill -f "giifleet-beamchain" 2>/dev/null || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
