@@ -273,14 +273,16 @@ log "w2 balance after rescan = $BAL_POST == M (funds rediscovered via REAL walle
 
 # ── 10. W2 listunspent shows A1's UTXOs after rescan. ──────────────────────
 # clearbit's listunspent reports {txid,vout,amount,confirmations,...} (no
-# address field). A1 received all $NBLOCKS coinbases, so the rescan must have
-# credited exactly $NBLOCKS owned UTXOs into w2 — and their TOTAL amount
-# (mature + immature) must be $NBLOCKS * 50 BTC. (getbalance == M above already
-# proves the MATURE subset; this proves the full set was rediscovered.)
+# address field). Like Core, listunspent omits immature coinbases (fewer than
+# COINBASE_MATURITY+1 = 101 confirmations), so at tip $NBLOCKS only the
+# height-1 coinbase is listed: NMATURE = NBLOCKS - 100 UTXOs of 50 BTC each,
+# i.e. exactly M. (Expecting all $NBLOCKS coinbases was the old, pre-fd73f89
+# behaviour and made this cell red every night.)
+NMATURE=$(( NBLOCKS - 100 ))
 LU=$(rpc "/wallet/w2" listunspent "[]")
 has_error "$LU" && fail "listunspent errored after rescan"
 NLU=$(echo "$LU" | grep -o '"txid"' | wc -l | tr -d ' ')
-[[ "${NLU:-0}" -eq "$NBLOCKS" ]] || fail "listunspent has $NLU UTXOs after rescan (expected $NBLOCKS — one per coinbase to A1)"
+[[ "${NLU:-0}" -eq "$NMATURE" ]] || fail "listunspent has $NLU UTXOs after rescan (expected $NMATURE mature coinbase(s) to A1)"
 LU_SUM=$(echo "$LU" | python3 -c '
 import sys, json
 try:
@@ -290,9 +292,9 @@ except Exception as e:
 print(f"{sum(float(u[chr(97)+chr(109)+chr(111)+chr(117)+chr(110)+chr(116)]) for u in res):.8f}")
 ')
 case "$LU_SUM" in ERR*) fail "listunspent parse: $LU_SUM" ;; esac
-EXPECT_TOTAL=$(python3 -c "print(f'{$NBLOCKS * 50.0:.8f}')")
+EXPECT_TOTAL=$(python3 -c "print(f'{$NMATURE * 50.0:.8f}')")
 floats_equal "$LU_SUM" "$EXPECT_TOTAL" || fail "listunspent total ($LU_SUM) != $EXPECT_TOTAL after rescan"
-log "w2 listunspent shows $NLU UTXO(s) totalling $LU_SUM (= $NBLOCKS coinbases to A1) after rescan -> RESCAN GREEN"
+log "w2 listunspent shows $NLU UTXO(s) totalling $LU_SUM (= $NMATURE mature coinbase(s) to A1) after rescan -> RESCAN GREEN"
 
 # ════════════════════════════════════════════════════════════════════════════
 # B. IMPORTPRIVKEY (TARGET) — foreign WIF import + rescan.
