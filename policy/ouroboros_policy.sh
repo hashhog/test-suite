@@ -62,8 +62,12 @@
 #   FAIL: POLICY ouroboros: FAIL <short reason> [dust=.. version=.. ...]
 #
 # Touches ONLY /tmp/policyfleet-ouroboros/ + /tmp/policyfleet-core-{strict,def}/
-#   and ports 21842/21862 (ouroboros RPC/P2P), 21843/21863 (strict Core),
-#   21844/21864 (default Core).
+#   and ports 22400/22402 (ouroboros RPC/P2P), 22404/22406 (strict Core, onion
+#   22407), 22408/22410 (default Core, onion 22411) -- inside 22400-22419, a
+#   block no other test-suite/ harness assigns. Both earlier blocks collided:
+#   218xx with the blockbrew/camlcoin/beamchain policy runs, 221xx with the
+#   scanblocks/blockfilter/proof/scan/wallet-diff harnesses.
+#   test_policy_port_collision.py scans every harness and fails on any overlap.
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
@@ -82,18 +86,18 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OURO_DIR="$REPO_ROOT/ouroboros"
 
 OU_DATADIR="/tmp/policyfleet-ouroboros"
-OU_RPC=21842
-OU_P2P=21862
+OU_RPC=22400
+OU_P2P=22402
 OU_LOG="$OU_DATADIR/node.log"
 
 CORE_DATADIR="/tmp/policyfleet-core-strict"
-CORE_RPC=21843
-CORE_P2P=21865    # Core auto-binds P2P+1 (onion listener); keep all P2P ports
-CORE_LOG="$CORE_DATADIR/core.log"   # >= 2 apart and clear of ouroboros 21862.
+CORE_RPC=22404
+CORE_P2P=22406    # Core auto-binds P2P+1 (onion listener); keep all P2P ports
+CORE_LOG="$CORE_DATADIR/core.log"   # >= 2 apart and clear of ouroboros 22402.
 
 CORE_DEF_DATADIR="/tmp/policyfleet-core-def"
-CORE_DEF_RPC=21844
-CORE_DEF_P2P=21867    # P2P+1 = 21868; no collision with strict's 21865/21866.
+CORE_DEF_RPC=22408
+CORE_DEF_P2P=22410    # P2P+1 = 22411; no collision with strict's 22406/22407.
 CORE_DEF_LOG="$CORE_DEF_DATADIR/core.log"
 
 # Strict-policy flags so EVERY corpus violation rejects on the primary oracle.
