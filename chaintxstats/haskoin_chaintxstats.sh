@@ -81,7 +81,7 @@ cleanup() {
         "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" getblockcount >/dev/null 2>&1 || break
         sleep 1
     done
-    [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
+    [[ -n "$CORE_BG" ]] && { kill "$CORE_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_BG" 2>/dev/null && kill -9 "$CORE_BG" 2>/dev/null; } || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -192,7 +192,7 @@ for attempt in 1 2 3; do
     log "launching Core regtest oracle rpc=:$CORE_RPC p2p=:$CORE_P2P (attempt $attempt)"
     if launch_core_once; then CORE_OK=1; break; fi
     log "Core oracle attempt $attempt failed (see $CORE_LOG); retrying after settle"
-    [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
+    [[ -n "$CORE_BG" ]] && { kill "$CORE_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_BG" 2>/dev/null && kill -9 "$CORE_BG" 2>/dev/null; } || true
     sleep 3
 done
 [[ "$CORE_OK" == "1" ]] || { tail -n 20 "$CORE_LOG" >&2 2>/dev/null || true; fail "Core oracle failed to start within 3 attempts (see $CORE_LOG)"; }
