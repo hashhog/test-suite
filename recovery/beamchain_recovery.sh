@@ -48,9 +48,15 @@ MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abando
 # funds the test; we mine 101 to exercise a realistic, multi-block coinbase set.
 NBLOCKS=101
 
+# Negative-control hook: restoring w2 from a DIFFERENT mnemonic must make the
+# arm FAIL (re-derived address mismatch). Unset in normal runs.
+W2_MNEMONIC="${BEAMCHAIN_RECOVERY_W2_MNEMONIC:-$MNEMONIC}"
+
 # A foreign address NOT derived from our seed, for the negative control.
 # Fixed regtest bech32 address (not in our wallet) -> must scan to 0.
-FOREIGN_ADDR="bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+# Negative-control hook: pointing it at a funded address (e.g. A1) must make
+# the arm FAIL, proving the check sees a real balance. Unset in normal runs.
+FOREIGN_ADDR="${BEAMCHAIN_RECOVERY_FOREIGN_ADDR:-bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080}"
 
 NODE_PID=""
 COOKIE=""
@@ -95,6 +101,17 @@ rpc() {
         "http://127.0.0.1:$RPC_PORT$path" 2>/dev/null
 }
 
+# restorewallet is Core-shaped on beamchain (name, backup_file; 8a40a06): it
+# cannot take a mnemonic. Build a backup file holding the fixed mnemonic's
+# BIP-39 seed, then restore from that file. usage: restore_from_mnemonic <name> <mnemonic>
+restore_from_mnemonic() {
+    local name="$1" words="$2" bk="$DATADIR/seed-backups/$1.json"
+    mkdir -p "$DATADIR/seed-backups"
+    python3 -I "$(dirname "${BASH_SOURCE[0]}")/../lib/beamchain_seed_backup.py" "$words" "$bk" \
+        || { echo '{"error":{"message":"seed backup helper failed"}}'; return 1; }
+    rpc restorewallet "[\"$name\",\"$bk\"]"
+}
+
 # Extract the integer total_amount from a scantxoutset response, in satoshis.
 # total_amount is a BTC decimal string (e.g. "5050.00000000"); convert to sats
 # by stripping the dot and taking the 8-decimal field. Robust to integer or
@@ -118,9 +135,20 @@ scan_total_sats() {
     echo $(( whole * 100000000 + frac ))
 }
 
-# Count txouts from a scantxoutset response.
+# Count the matched coins in a scantxoutset response: the length of
+# result.unspents. NOT the "txouts" field — in Core (and beamchain master
+# edd0919) that is every coin the scan visited, i.e. the whole UTXO set, so a
+# foreign address with no coins still reports txouts=101 after 101 blocks.
+# Prints nothing if unspents is missing, so callers fail closed.
 scan_txouts() {
-    echo "$1" | grep -o '"txouts":[0-9]*' | head -1 | grep -o '[0-9]*'
+    echo "$1" | python3 -I -c '
+import json, sys
+try:
+    u = json.load(sys.stdin)["result"]["unspents"]
+except Exception:
+    sys.exit(0)
+if isinstance(u, list):
+    print(len(u))'
 }
 
 # ── 0. Idempotent reset. ───────────────────────────────────────────────────
@@ -186,7 +214,7 @@ echo "$r" | grep -q '"result"' || fail "RPC never responded within 45s"
 
 # ── 4. Restore wallet w1 from the fixed mnemonic, derive A1. ───────────────
 log "restorewallet w1 from fixed mnemonic"
-r=$(rpc restorewallet "[\"w1\",\"$MNEMONIC\"]")
+r=$(restore_from_mnemonic w1 "$MNEMONIC")
 echo "$r" | grep -q '"error":null' || echo "$r" | grep -q '"result"' \
     || fail "restorewallet w1 failed: $(echo "$r" | head -c 200)"
 echo "$r" | grep -q '"error":{' && fail "restorewallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
@@ -213,9 +241,9 @@ echo "$r" | grep -q '"error":{' && fail "scantxoutset BEFORE error: $(echo "$r" 
 BEFORE_SATS=$(scan_total_sats "$r")
 BEFORE_OUTS=$(scan_txouts "$r")
 [[ -n "$BEFORE_SATS" ]] || fail "scantxoutset BEFORE returned no total_amount: $(echo "$r" | head -c 200)"
-[[ "${BEFORE_OUTS:-0}" -gt 0 ]] || fail "scantxoutset BEFORE found 0 txouts (funding failed)"
+[[ "${BEFORE_OUTS:-0}" -gt 0 ]] || fail "scantxoutset BEFORE found 0 unspents (funding failed)"
 [[ "$BEFORE_SATS" -gt 0 ]] || fail "scantxoutset BEFORE total is 0 (funding failed)"
-log "BEFORE: txouts=$BEFORE_OUTS total_sats=$BEFORE_SATS"
+log "BEFORE: unspents=$BEFORE_OUTS total_sats=$BEFORE_SATS"
 
 # ── 6. Wipe the wallet, restore the SAME seed into a fresh wallet w2. ──────
 # Unload w1 and delete wallet on-disk state so w2 is a genuinely fresh restore
@@ -226,7 +254,7 @@ rpc unloadwallet "[\"w1\"]" >/dev/null 2>&1 || true
 find "$DATADIR/regtest" -maxdepth 3 -iname '*wallet*' -exec rm -rf {} + 2>/dev/null || true
 
 log "restorewallet w2 from SAME fixed mnemonic"
-r=$(rpc restorewallet "[\"w2\",\"$MNEMONIC\"]")
+r=$(restore_from_mnemonic w2 "$W2_MNEMONIC")
 echo "$r" | grep -q '"error":{' && fail "restorewallet w2 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 
 log "getnewaddress on w2 (must byte-match A1)"
@@ -243,9 +271,9 @@ echo "$r" | grep -q '"error":{' && fail "scantxoutset AFTER error: $(echo "$r" |
 AFTER_SATS=$(scan_total_sats "$r")
 AFTER_OUTS=$(scan_txouts "$r")
 [[ -n "$AFTER_SATS" ]] || fail "scantxoutset AFTER returned no total_amount: $(echo "$r" | head -c 200)"
-log "AFTER: txouts=$AFTER_OUTS total_sats=$AFTER_SATS"
+log "AFTER: unspents=$AFTER_OUTS total_sats=$AFTER_SATS"
 [[ "$AFTER_SATS" == "$BEFORE_SATS" ]] || fail "recovered total $AFTER_SATS != funded total $BEFORE_SATS"
-[[ "$AFTER_OUTS" == "$BEFORE_OUTS" ]] || fail "recovered txouts $AFTER_OUTS != funded txouts $BEFORE_OUTS"
+[[ "$AFTER_OUTS" == "$BEFORE_OUTS" ]] || fail "recovered unspents $AFTER_OUTS != funded unspents $BEFORE_OUTS"
 
 # ── 8. Negative control: a foreign address must scan to 0. ─────────────────
 log "scantxoutset NEGATIVE control [addr($FOREIGN_ADDR)]"
@@ -253,8 +281,9 @@ r=$(rpc scantxoutset "[\"start\",[\"addr($FOREIGN_ADDR)\"]]")
 echo "$r" | grep -q '"error":{' && fail "scantxoutset negative-control error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 NEG_OUTS=$(scan_txouts "$r")
 NEG_SATS=$(scan_total_sats "$r")
-log "NEG: txouts=${NEG_OUTS:-?} total_sats=${NEG_SATS:-?}"
-[[ "${NEG_OUTS:-0}" == "0" ]] || fail "negative control found ${NEG_OUTS} txouts for foreign addr (expected 0)"
+log "NEG: unspents=${NEG_OUTS:-?} total_sats=${NEG_SATS:-?}"
+[[ -n "$NEG_OUTS" ]] || fail "scantxoutset negative control returned no unspents list: $(echo "$r" | head -c 200)"
+[[ "$NEG_OUTS" == "0" ]] || fail "negative control found ${NEG_OUTS} unspents for foreign addr (expected 0)"
 [[ "${NEG_SATS:-0}" == "0" ]] || fail "negative control total ${NEG_SATS} != 0 for foreign addr"
 
 # ── 9. Success: emit BTC totals (whole BTC) in the summary. ────────────────
