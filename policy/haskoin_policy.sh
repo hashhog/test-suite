@@ -97,8 +97,8 @@ cleanup() {
             || break
         sleep 1
     done
-    [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    [[ -n "$CORE_DEF_BG" ]] && kill "$CORE_DEF_BG" 2>/dev/null || true
+    [[ -n "$CORE_BG" ]] && { kill "$CORE_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_BG" 2>/dev/null && kill -9 "$CORE_BG" 2>/dev/null; } || true
+    [[ -n "$CORE_DEF_BG" ]] && { kill "$CORE_DEF_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_DEF_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_DEF_BG" 2>/dev/null && kill -9 "$CORE_DEF_BG" 2>/dev/null; } || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" "$CORE_DEF_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -129,8 +129,8 @@ classify() {
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-pkill -f "hk-policy" 2>/dev/null || true
-# Wait briefly for the pkill'd prior run to release its sockets, then
+# Wait briefly for a prior run's sockets to drain (its cleanup() reaps its own
+# PIDs; never kill by name/datadir -- 2026-06-10 rule), then
 # ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
 for _ in $(seq 1 30); do
     ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}|${CORE_DEF_RPC}|${CORE_DEF_P2P}) " || break
