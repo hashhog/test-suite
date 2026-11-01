@@ -89,6 +89,7 @@ OU_DATADIR="/tmp/policyfleet-ouroboros"
 OU_RPC=22400
 OU_P2P=22402
 OU_LOG="$OU_DATADIR/node.log"
+LANE_PIDS="$OU_DATADIR/lane.pids"   # "<pid> <datadir>" per launched process
 
 CORE_DATADIR="/tmp/policyfleet-core-strict"
 CORE_RPC=22404
@@ -170,9 +171,27 @@ classify() {
 }
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
+# A prior run that died without its trap left its processes recorded in
+# $LANE_PIDS. Stop only those PIDs, and only while /proc/<pid>/cmdline still
+# names the scratch datadir recorded with them (a reused PID is left alone).
+# No pattern- or port-kills: they reached mainnet nodes (2026-06-10 rule).
+stop_recorded_lane() {
+    local pf="$1" pid dd
+    [[ -f "$pf" ]] || return 0
+    while read -r pid dd; do
+        [[ "$pid" =~ ^[0-9]+$ && -n "$dd" ]] || continue
+        (( pid == $$ || pid == PPID )) && continue
+        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qF -- "$dd" || continue
+        log "stopping recorded pid $pid ($dd) from a prior run"
+        kill "$pid" 2>/dev/null || true
+    done <"$pf"
+    rm -f "$pf"
+}
+record_lane_pid() { echo "$1 $2" >>"$LANE_PIDS"; }
+
 log "resetting scratch state"
-pkill -f "policyfleet-ouroboros" 2>/dev/null || true
-# Wait briefly for the pkill'd prior run to release its sockets, then
+stop_recorded_lane "$LANE_PIDS"
+# Wait briefly for the stopped prior run to release its sockets, then
 # ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
 for _ in $(seq 1 30); do
     ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))|${CORE_DEF_RPC}|${CORE_DEF_P2P}|$((CORE_DEF_P2P + 1))) " || break
@@ -309,6 +328,7 @@ log "launching STRICT Core oracle rpc=:$CORE_RPC flags=${CORE_STRICT_FLAGS[*]}"
 CORE_BG=$(launch_core "$CORE_DATADIR" "$CORE_RPC" "$CORE_P2P" "$CORE_LOG" "${CORE_STRICT_FLAGS[@]}") \
     || fail "STRICT Core oracle failed to start within 60s (see $CORE_LOG)"
 log "STRICT Core oracle ready (pid=$CORE_BG)"
+record_lane_pid "$CORE_BG" "$CORE_DATADIR"
 CORE_COOKIE=$(cat "$CORE_DATADIR/regtest/.cookie" 2>/dev/null) || true
 [[ -n "$CORE_COOKIE" ]] || fail "STRICT Core cookie not found at $CORE_DATADIR/regtest/.cookie"
 
@@ -317,6 +337,7 @@ log "launching DEFAULT Core oracle rpc=:$CORE_DEF_RPC (no policy flags)"
 CORE_DEF_BG=$(launch_core "$CORE_DEF_DATADIR" "$CORE_DEF_RPC" "$CORE_DEF_P2P" "$CORE_DEF_LOG") \
     || fail "DEFAULT Core oracle failed to start within 60s (see $CORE_DEF_LOG)"
 log "DEFAULT Core oracle ready (pid=$CORE_DEF_BG)"
+record_lane_pid "$CORE_DEF_BG" "$CORE_DEF_DATADIR"
 CORE_DEF_COOKIE=$(cat "$CORE_DEF_DATADIR/regtest/.cookie" 2>/dev/null) || true
 [[ -n "$CORE_DEF_COOKIE" ]] || fail "DEFAULT Core cookie not found at $CORE_DEF_DATADIR/regtest/.cookie"
 
@@ -331,6 +352,7 @@ log "launching ouroboros (regtest) rpc=:$OU_RPC p2p=:$OU_P2P -> $OU_LOG"
         start --force --rpc-port "$OU_RPC" --p2p-port "$OU_P2P"
 ) >"$OU_LOG" 2>&1 &
 OU_PID=$!
+record_lane_pid "$OU_PID" "$OU_DATADIR"
 log "ouroboros pid=$OU_PID"
 ou_deadline=$(( $(date +%s) + 150 ))
 while (( $(date +%s) < ou_deadline )); do
