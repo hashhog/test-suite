@@ -156,7 +156,7 @@ log "launching blockbrew (regtest) -> $DATADIR/node.log"
 "$BIN" \
     -network=regtest -datadir="$DATADIR" \
     -listen="127.0.0.1:${P2P_PORT}" -rpcbind="127.0.0.1:${RPC_PORT}" \
-    -maxoutbound=0 -nolisten \
+    -maxoutbound=0 -nolisten -fallbackfee=0.0002 \
     >"$DATADIR/node.log" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID"
