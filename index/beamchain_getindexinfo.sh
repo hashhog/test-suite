@@ -91,9 +91,24 @@ fail() {
 cleanup() {
     local ec=$?
     if [[ -n "$BC_PID" ]] && kill -0 "$BC_PID" 2>/dev/null; then
-        kill "$BC_PID" 2>/dev/null || true
-        for _ in $(seq 1 15); do kill -0 "$BC_PID" 2>/dev/null || break; sleep 1; done
-        kill -9 "$BC_PID" 2>/dev/null || true
+        # The release launcher may leave beam.smp as a child of the pid we recorded;
+        # collect its descendants BEFORE signalling, and reap only those pids
+        # (never by name/datadir -- 2026-06-10 rule).
+        local bc_tree="" frontier="$BC_PID" kids
+        while [[ -n "$frontier" ]]; do
+            kids=$(ps -o pid= --ppid "$(echo $frontier | tr ' ' ',')" 2>/dev/null | tr -s ' \n' ' ')
+            frontier="${kids# }"; frontier="${frontier% }"
+            bc_tree="$bc_tree $frontier"
+        done
+        local p alive
+        kill "$BC_PID" $bc_tree 2>/dev/null || true
+        for _ in $(seq 1 15); do
+            alive=""
+            for p in $BC_PID $bc_tree; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done
+            [[ -z "$alive" ]] && break
+            sleep 1
+        done
+        [[ -n "$alive" ]] && kill -9 $alive 2>/dev/null || true
     fi
     "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" stop >/dev/null 2>&1 || true
     for _ in $(seq 1 15); do
@@ -101,9 +116,7 @@ cleanup() {
             || break
         sleep 1
     done
-    [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
-    # beamchain runs under its own process group (setsid -w); reap stragglers.
-    pkill -f "giifleet-beamchain" 2>/dev/null || true
+    [[ -n "$CORE_BG" ]] && { kill "$CORE_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_BG" 2>/dev/null && kill -9 "$CORE_BG" 2>/dev/null; } || true
     rm -rf "$BC_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -111,8 +124,8 @@ trap cleanup EXIT INT TERM
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-pkill -f "giifleet-beamchain" 2>/dev/null || true
-# Wait briefly for the pkill'd prior run to release its sockets, then
+# Wait briefly for a prior run's sockets to drain (its cleanup() reaps its own
+# PIDs; never kill by name/datadir -- 2026-06-10 rule), then
 # ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
 for _ in $(seq 1 30); do
     ss -tln 2>/dev/null | grep -qE ":(${BC_RPC}|${BC_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break

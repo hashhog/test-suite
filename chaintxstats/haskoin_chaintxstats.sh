@@ -81,7 +81,7 @@ cleanup() {
         "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" getblockcount >/dev/null 2>&1 || break
         sleep 1
     done
-    [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
+    [[ -n "$CORE_BG" ]] && { kill "$CORE_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_BG" 2>/dev/null && kill -9 "$CORE_BG" 2>/dev/null; } || true
     rm -rf "$HK_DATADIR" "$CORE_DATADIR" 2>/dev/null || true
     return $ec
 }
@@ -98,8 +98,8 @@ fail() {
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-pkill -f "hk-chaintxstats" 2>/dev/null || true
-# Wait briefly for the pkill'd prior run to release its sockets, then
+# Wait briefly for a prior run's sockets to drain (its cleanup() reaps its own
+# PIDs; never kill by name/datadir -- 2026-06-10 rule), then
 # ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
 for _ in $(seq 1 30); do
     ss -tln 2>/dev/null | grep -qE ":(${HK_RPC}|${HK_P2P}|${CORE_RPC}|${CORE_P2P}) " || break
@@ -192,7 +192,7 @@ for attempt in 1 2 3; do
     log "launching Core regtest oracle rpc=:$CORE_RPC p2p=:$CORE_P2P (attempt $attempt)"
     if launch_core_once; then CORE_OK=1; break; fi
     log "Core oracle attempt $attempt failed (see $CORE_LOG); retrying after settle"
-    [[ -n "$CORE_BG" ]] && kill "$CORE_BG" 2>/dev/null || true
+    [[ -n "$CORE_BG" ]] && { kill "$CORE_BG" 2>/dev/null; for _ in $(seq 1 30); do kill -0 "$CORE_BG" 2>/dev/null || break; sleep 1; done; kill -0 "$CORE_BG" 2>/dev/null && kill -9 "$CORE_BG" 2>/dev/null; } || true
     sleep 3
 done
 [[ "$CORE_OK" == "1" ]] || { tail -n 20 "$CORE_LOG" >&2 2>/dev/null || true; fail "Core oracle failed to start within 3 attempts (see $CORE_LOG)"; }
