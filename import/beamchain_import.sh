@@ -121,6 +121,17 @@ rpc() {
         "http://127.0.0.1:$RPC_PORT$path" 2>/dev/null
 }
 
+# restorewallet is Core-shaped on beamchain (name, backup_file; 8a40a06): it
+# cannot take a mnemonic. Build a backup file holding the fixed mnemonic's
+# BIP-39 seed, then restore from that file. usage: restore_from_mnemonic <name> <mnemonic>
+restore_from_mnemonic() {
+    local name="$1" words="$2" bk="$DATADIR/seed-backups/$1.json"
+    mkdir -p "$DATADIR/seed-backups"
+    python3 -I "$(dirname "${BASH_SOURCE[0]}")/../lib/beamchain_seed_backup.py" "$words" "$bk" \
+        || { echo '{"error":{"message":"seed backup helper failed"}}'; return 1; }
+    rpc restorewallet "[\"$name\",\"$bk\"]"
+}
+
 # Extract a numeric "result":N scalar from a JSON reply.
 result_num() {
     echo "$1" | grep -o '"result":[0-9.]*' | head -1 | sed 's/"result"://'
@@ -226,7 +237,7 @@ launch_node || fail "node failed to start / RPC never responded (see $DATADIR/no
 
 # ── 4. Restore wallet w1, derive A1. ───────────────────────────────────────
 log "restorewallet w1 from fixed mnemonic"
-r=$(rpc restorewallet "[\"w1\",\"$MNEMONIC\"]")
+r=$(restore_from_mnemonic w1 "$MNEMONIC")
 echo "$r" | grep -q '"error":{' && fail "restorewallet w1 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 
 log "getnewaddress on w1 -> A1"
@@ -273,7 +284,7 @@ log "post-restart height=$HEIGHT2 (chain intact)"
 
 # ── 8. Restore W2 from the SAME seed; it re-derives A1 but has NOT scanned. ─
 log "restorewallet w2 from the SAME mnemonic (fresh wallet identity)"
-r=$(rpc restorewallet "[\"w2\",\"$MNEMONIC\"]")
+r=$(restore_from_mnemonic w2 "$MNEMONIC")
 echo "$r" | grep -q '"error":{' && fail "restorewallet w2 error: $(echo "$r" | grep -o '"message":"[^"]*"' | head -1)"
 
 A1B=$(result_str "$(rpc getnewaddress "[]" "w2")")

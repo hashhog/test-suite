@@ -6,9 +6,10 @@
 # "scantxoutset (built from scratch) + restore-from-seed -> recovery GREEN").
 # Proves the seed-only recovery property end-to-end on a throwaway regtest node:
 #
-#   restore wallet from a FIXED BIP-39 mnemonic  ->  getnewaddress (A1)  ->
+#   createwallet w1 + backupwallet (before any address) -> getnewaddress (A1)  ->
 #   generatetoaddress to fund A1 (coinbase)      ->  scantxoutset BEFORE (total) ->
-#   unload, restore the SAME seed into a fresh wallet -> re-derive A1' (assert ==A1) ->
+#   unload, restorewallet w2 from that backup file -> rescanblockchain       ->
+#   w2's listunspent address set == w1's (no first-address assumption)       ->
 #   scantxoutset AFTER (assert ==BEFORE)         ->  negative control (foreign addr -> 0).
 #
 # STRICT UNIFORM INTERFACE (the assembled nightly runner greps the summary line):
@@ -114,6 +115,10 @@ total_amount() { echo "$1" | grep -o '"total_amount":[0-9.]*' | head -1 | sed 's
 # Count matched unspents (number of "txid" keys in a scantxoutset result).
 count_unspents() { echo "$1" | grep -o '"txid"' | wc -l | tr -d ' '; }
 has_error() { echo "$1" | grep -q '"error":null' && return 1 || return 0; }
+# Sorted, de-duplicated addresses the default wallet holds unspent coins on.
+wallet_addr_set() {
+    rpc listunspent '[0]' | grep -o '"address":"[^"]*"' | sed 's/"address":"//; s/"$//' | sort -u
+}
 
 # ── Wait up to 40s for RPC ─────────────────────────────────────────────────
 rpc_up=0
@@ -134,9 +139,20 @@ h0=$(echo "$r" | grep -o '"result":[0-9]*' | grep -o '[0-9]*')
 [[ "$h0" == "0" ]] || fail "fresh regtest not at height 0 (got ${h0:-none})"
 
 # ── 1. Restore wallet from the FIXED seed, derive A1 ───────────────────────
-r=$(rpc restorewallet "[\"w1\",\"$MNEMONIC\"]")
-has_error "$r" && fail "restorewallet w1 errored: $(echo "$r" | head -c 160)"
-log "restored w1: $r"
+# haskoin's restorewallet is Core-shaped (name, backup_file) and its wallet.dat is
+# sealed with a per-datadir key, so a seed cannot be handed to it and a backup
+# file cannot be authored outside the node. The seed is made by the node
+# (createwallet) and carried across wallets by backupwallet -> restorewallet.
+# The backup is taken BEFORE the first getnewaddress so the restored wallet
+# owns A1 even though it is derived after the backup.
+r=$(rpc createwallet '["w1"]')
+has_error "$r" && fail "createwallet w1 errored: $(echo "$r" | head -c 160)"
+W1_BACKUP="$DATADIR/seed-backups/w1.dat"
+mkdir -p "$DATADIR/seed-backups"
+r=$(rpc backupwallet "[\"$W1_BACKUP\"]")
+has_error "$r" && fail "backupwallet w1 errored: $(echo "$r" | head -c 160)"
+[[ -s "$W1_BACKUP" ]] || fail "backupwallet w1 wrote no file at $W1_BACKUP"
+log "created w1, backed up to $W1_BACKUP"
 
 A1=$(res_str "$(rpc getnewaddress '[]')")
 [[ "$A1" == bcrt1q* ]] || fail "getnewaddress A1 not a regtest bech32 addr (got '${A1:0:40}')"
@@ -162,20 +178,47 @@ if [[ "$BEFORE" == "0.00000000" || "$BEFORE" == "0" || "$BEFORE_N" == "0" ]]; th
 fi
 log "BEFORE total=$BEFORE unspents=$BEFORE_N"
 
+# The set of addresses w1 holds coins on. The restored wallet must hold coins on
+# exactly this set.
+W1_SET=$(wallet_addr_set)
+[[ -n "$W1_SET" ]] || fail "w1 listunspent holds no address after funding"
+grep -qx "$A1" <<<"$W1_SET" || fail "w1 listunspent does not hold A1 ($A1)"
+log "w1 address set: $(echo $W1_SET)"
+
 # ── 4. Seed-only recovery: unload, restore SAME seed into a FRESH wallet ───
 r=$(rpc unloadwallet '["w1"]')
 has_error "$r" && fail "unloadwallet w1 errored: $(echo "$r" | head -c 160)"
-r=$(rpc restorewallet "[\"w2\",\"$MNEMONIC\"]")
-has_error "$r" && fail "restorewallet w2 (same seed) errored: $(echo "$r" | head -c 160)"
-log "restored fresh w2 from same seed"
+W2_BACKUP="$W1_BACKUP"
+if [[ -n "${HASKOIN_RECOVERY_W2_DECOY_SEED:-}" ]]; then
+    # Negative-control hook: restore w2 from a DIFFERENT wallet's backup. The
+    # arm must then FAIL on the recovered-address-set mismatch. Unset in normal runs.
+    r=$(rpc createwallet '["wdecoy"]')
+    has_error "$r" && fail "createwallet wdecoy errored: $(echo "$r" | head -c 160)"
+    W2_BACKUP="$DATADIR/seed-backups/wdecoy.dat"
+    r=$(rpc backupwallet "[\"$W2_BACKUP\"]")
+    has_error "$r" && fail "backupwallet wdecoy errored: $(echo "$r" | head -c 160)"
+    r=$(rpc unloadwallet '["wdecoy"]')
+    has_error "$r" && fail "unloadwallet wdecoy errored: $(echo "$r" | head -c 160)"
+fi
+r=$(rpc restorewallet "[\"w2\",\"$W2_BACKUP\"]")
+has_error "$r" && fail "restorewallet w2 (w1 backup) errored: $(echo "$r" | head -c 160)"
+log "restored fresh w2 from $W2_BACKUP"
 
-# First address from the freshly-restored wallet MUST be byte-identical to A1.
-A1B=$(res_str "$(rpc getnewaddress '[]')")
-[[ "$A1B" == "$A1" ]] || fail "re-derived address mismatch: A1=$A1 A1'=$A1B"
-log "re-derived A1' == A1 (byte-identical)"
+# Do NOT assume the restored wallet's next getnewaddress is A1: Core's
+# restorewallet rescans on load, sees A1 used, and hands out the next unused
+# address. Rescan explicitly (a node whose restore does not scan needs it; on
+# Core it is a no-op re-scan), then the restored wallet must hold coins on
+# exactly w1's address set.
+r=$(rpc rescanblockchain '[]')
+has_error "$r" && fail "rescanblockchain w2 errored: $(echo "$r" | head -c 160)"
+W2_SET=$(wallet_addr_set)
+[[ "$W2_SET" == "$W1_SET" ]] \
+    || fail "recovered address set mismatch: w1={$(echo $W1_SET)} w2={$(echo $W2_SET)}"
+log "w2 address set == w1 address set: $(echo $W2_SET)"
 
-# ── 5. scantxoutset AFTER on the re-derived addr ───────────────────────────
-r=$(rpc scantxoutset "[\"start\",[\"addr($A1B)\"]]")
+# ── 5. scantxoutset AFTER on the recovered address set ─────────────────────
+scan_descs=$(sed 's/.*/"addr(&)"/' <<<"$W2_SET" | paste -sd, -)
+r=$(rpc scantxoutset "[\"start\",[$scan_descs]]")
 has_error "$r" && fail "scantxoutset AFTER errored: $(echo "$r" | head -c 160)"
 AFTER=$(total_amount "$r")
 AFTER_N=$(count_unspents "$r")
