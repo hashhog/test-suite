@@ -146,22 +146,14 @@ ou_rpc() {
 }
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
-# Kill any leftover nodes from a prior run (by datadir match) AND free every
-# port, then SETTLE — a back-to-back run can otherwise launch the new oracle
-# before the previous bitcoind has released its RPC/P2P sockets, which the
-# kernel reports as "exited during startup" on the new node. Killing by
-# datadir is the reliable handle (the port only frees once the holder
-# has actually exited).
+# Make sure every port is free, then SETTLE — a back-to-back run can otherwise
+# launch the new oracle before the previous bitcoind has released its RPC/P2P
+# sockets, which the kernel reports as "exited during startup" on the new node.
+# The previous run's cleanup() reaps its own recorded PIDs and waits for them to
+# exit; nothing here kills by name or datadir.
 log "resetting scratch state"
-pkill -f "ctxstats-ouroboros" 2>/dev/null || true
-pkill -f "ctxstats-core"      2>/dev/null || true
-for _ in $(seq 1 10); do
-    pgrep -f "ctxstats-core" >/dev/null 2>&1 || pgrep -f "ctxstats-ouroboros" >/dev/null 2>&1 || break
-    sleep 1
-done
-pkill -9 -f "ctxstats-ouroboros" 2>/dev/null || true
-pkill -9 -f "ctxstats-core"      2>/dev/null || true
-# Wait briefly for the pkill'd prior run to release its sockets, then
+# Wait briefly for a prior run's sockets to drain (its cleanup() reaps its own
+# PIDs; never kill by name/datadir -- 2026-06-10 rule), then
 # ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
 for _ in $(seq 1 30); do
     ss -tln 2>/dev/null | grep -qE ":(${OU_RPC}|${OU_P2P}|${CORE_RPC}|${CORE_P2P}|$((CORE_P2P + 1))) " || break

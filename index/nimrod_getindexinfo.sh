@@ -138,9 +138,8 @@ nm_rpc() {
 
 # ── 0. Idempotent reset. ──────────────────────────────────────────────────
 log "resetting scratch state"
-pkill -f "datadir=$NM_DATADIR"   2>/dev/null || true
-pkill -f "datadir=$CORE_DATADIR" 2>/dev/null || true
-# Wait briefly for the pkill'd prior run to release its sockets, then
+# Wait briefly for a prior run's sockets to drain (its cleanup() reaps its own
+# PIDs; never kill by name/datadir -- 2026-06-10 rule), then
 # ABORT if a listener persists (port-kills banned — 2026-06-10 incident).
 for _ in $(seq 1 30); do
     ss -tln 2>/dev/null | grep -qE ":(${NM_RPC}|${NM_P2P}|${CORE_RPC}|${CORE_P2P}) " || break

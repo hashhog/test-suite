@@ -101,5 +101,32 @@ class LaneCoreReap(unittest.TestCase):
             self.assertGreaterEqual(time.time() - t0, 1.5)
 
 
+    def test_beamchain_index_cleanup_reaps_launcher_children(self):
+        """index/beamchain used to name-kill "giifleet-beamchain" stragglers; it now reaps the
+        descendants of the recorded BC_PID. Run the real block against a launcher whose child
+        outlives it on SIGTERM."""
+        path = os.path.join(SUITE, "index", "beamchain_getindexinfo.sh")
+        with open(path, errors="replace") as f:
+            text = f.read()
+        block = re.search(r'^    if \[\[ -n "\$BC_PID" \]\] && kill -0.*?^    fi$', text, re.M | re.S).group(0)
+        with tempfile.TemporaryDirectory() as td:
+            script = os.path.join(td, "t.sh")
+            kidfile = os.path.join(td, "kid")
+            with open(script, "w") as f:
+                f.write(
+                    # launcher: a shell (not exec) whose child ignores nothing but is not a group
+                    # member we signal -- killing only the launcher would orphan it
+                    f"bash -c 'sleep 300 & echo $! > {kidfile}; trap \"exit 0\" TERM; wait' &\n"
+                    "BC_PID=$!\nsleep 0.5\n"
+                    "reap() {\n" + block + "\n}\nreap\n"
+                    f'KID=$(cat {kidfile}); sleep 0.2\n'
+                    'kill -0 "$BC_PID" 2>/dev/null && echo LAUNCHER_ALIVE\n'
+                    'kill -0 "$KID" 2>/dev/null && { echo CHILD_ALIVE; kill -9 "$KID"; }\n'
+                    "echo DONE\n"
+                )
+            out = subprocess.run(["bash", script], capture_output=True, text=True, timeout=60).stdout.split()
+            self.assertEqual(out, ["DONE"])
+
+
 if __name__ == "__main__":
     unittest.main()
