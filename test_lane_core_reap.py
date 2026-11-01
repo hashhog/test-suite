@@ -53,6 +53,33 @@ class LaneCoreReap(unittest.TestCase):
                     self.assertNotRegex(line, r"fuser|pkill|killall", "must reap by pid only")
         self.assertEqual(checked, 25)
 
+    def test_no_name_based_kills(self):
+        """Kill only the PID the lane recorded: no pkill/killall/fuser -k/pgrep (2026-06-10 rule).
+
+        A name or datadir pattern also matches processes the lane never started -- another lane's
+        Core oracle, the shell running the pattern, a production node -- so the reset path must rely
+        on the previous run's PID-scoped cleanup() plus the wait-and-refuse port check instead.
+        Comments and the refusal message ("refusing to kill it ... fuser incident") are allowed.
+        """
+        bad = re.compile(r"\b(pkill|killall|pgrep)\b|\bfuser\s+-k")
+        checked = 0
+        for path in LANES:
+            with open(path, errors="replace") as f:
+                text = f.read()
+            if not TEARDOWN.search(text):
+                continue
+            checked += 1
+            hits = [
+                f"{n}: {line.strip()}"
+                for n, line in enumerate(text.splitlines(), 1)
+                if bad.search(line)
+                and not line.lstrip().startswith("#")
+                and "refusing to kill" not in line
+            ]
+            with self.subTest(lane=os.path.relpath(path, SUITE)):
+                self.assertEqual(hits, [], "name-based kill in a lane script")
+        self.assertEqual(checked, 25)
+
     def test_teardown_blocks_until_core_exits(self):
         """Run the real teardown line from blockbrew_chaintxstats.sh against a slow-dying process."""
         path = os.path.join(SUITE, "chaintxstats", "blockbrew_chaintxstats.sh")
