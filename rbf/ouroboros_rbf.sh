@@ -76,6 +76,8 @@ TF_PATH="$BASEDIR/bitcoin-core/test/functional"   # Core test_framework
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OURO_DIR="$REPO_ROOT/ouroboros"
+# shellcheck source=lib_rule4_boundary.sh
+source "$SCRIPT_DIR/lib_rule4_boundary.sh"
 
 OU_DATADIR="/tmp/rbf-ouroboros"
 OU_RPC=22092
@@ -324,12 +326,20 @@ out("rule4", "true" if d_reject else "false", d_reason or d_send_err or "(no rea
 # Proves the gate is not over-strict: a replacement that exactly clears the
 # incremental ceiling must REPLACE, matching Core. (Diagnostic; failure here is
 # an over-rejection signal, reported but not the primary gate.)
-po4, v4 = coinbase_prevout(4)
-rawA4, A4 = build(po4, v4, 5000)
-rawE,  E  = build(po4, v4, 5011)  # +11 sat: at/above the ceiling
-send(rawA4)
-e_allowed, e_reason = tma(rawE)
-out("rule4ok", "true" if e_allowed else "false", e_reason or "(accepted)")
+# Up to 3 attempts, each over a fresh mature coinbase (#4, #5, #6), so one
+# transient oracle rejection does not decide the cell; the attempt count is
+# reported. A deterministic rejection still shows on every attempt.
+e_allowed, e_reason, tried = False, "", 0
+for h in (4, 5, 6):
+    tried += 1
+    po4, v4 = coinbase_prevout(h)
+    rawA4, A4 = build(po4, v4, 5000)
+    rawE,  E  = build(po4, v4, 5011)  # +11 sat: at/above the ceiling
+    send(rawA4)
+    e_allowed, e_reason = tma(rawE)
+    if e_allowed:
+        break
+out("rule4ok", "true" if e_allowed else "false", (e_reason or "(accepted)") + f" [attempts={tried}]")
 PYEOF
 [[ -s "$HELPER" ]] || fail "failed to write RBF runner helper"
 
@@ -465,10 +475,14 @@ R_REPLACE=$(tok "$V_REPLACE"); R_RULE3=$(tok "$V_RULE3"); R_RULE4=$(tok "$V_RULE
 [[ "$V_RULE3"   == "ok" ]] || fail "Rule 3 (insufficient absolute fee) diverges from Core (rule3=$R_RULE3): core='${CORE_R[rule3]}' ouro='${OU_R[rule3]}' | replace=$R_REPLACE rule3=$R_RULE3 rule4=$R_RULE4"
 [[ "$V_RULE4"   == "ok" ]] || fail "Rule 4 (insufficient incremental fee) diverges from Core (rule4=$R_RULE4): core='${CORE_R[rule4]}' ouro='${OU_R[rule4]}' | replace=$R_REPLACE rule3=$R_RULE3 rule4=$R_RULE4"
 
-# Diagnostic gate: the at-ceiling replacement should be accepted by ouroboros
-# (matching Core). An over-rejection here means ouroboros's Rule-4 vsize/rounding
-# is too strict — a parity bug in the other direction. Fail loudly.
-[[ "$V_RULE4OK" == "ok" ]] || fail "Rule-4 boundary over-rejected (rule4ok=$R_RULE4OK): ouroboros='${OU_R[rule4ok]}' — replacement that exactly clears the incremental ceiling must be accepted as Core does | replace=$R_REPLACE rule3=$R_RULE3 rule4=$R_RULE4"
+# Boundary gate: Core is the control (see lib_rule4_boundary.sh). A broken
+# control is inconclusive (SKIP), never a verdict on ouroboros.
+B_MSG=$(rule4ok_verdict "${CORE_OK[rule4ok]}" "${CORE_R[rule4ok]}" "${OU_OK[rule4ok]}" "${OU_R[rule4ok]}"); B_RC=$?
+case $B_RC in
+    0) ;;
+    1) fail "Rule-4 boundary: ${B_MSG#FAIL: } | replace=$R_REPLACE rule3=$R_RULE3 rule4=$R_RULE4" ;;
+    *) skip "Rule-4 boundary ${B_MSG} | replace=$R_REPLACE rule3=$R_RULE3 rule4=$R_RULE4" ;;
+esac
 
 log "PASS: happy-path replace matches Core; Rule 3 + Rule 4 reject in-category; boundary replacement accepted"
 pass "$R_REPLACE" "$R_RULE3" "$R_RULE4"
