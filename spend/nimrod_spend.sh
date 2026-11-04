@@ -239,7 +239,7 @@ mkdir -p "$DATADIR"
 
 log "launching nimrod regtest -> $LOGFILE"
 "$NIMROD_BIN" --network="$NETWORK" --datadir="$DATADIR" \
-    --port="$P2P_PORT" --rpcport="$RPC_PORT" start \
+    --port="$P2P_PORT" --rpcport="$RPC_PORT" --fallbackfee=0.0002 start \
     >"$LOGFILE" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID"

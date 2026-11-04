@@ -132,7 +132,7 @@ mkdir -p "$DATADIR"
 # ── 2. Launch camlcoin on regtest. ─────────────────────────────────────────
 log "launching $NODE_BIN on regtest (rpc=$RPC_PORT p2p=$P2P_PORT)"
 "$NODE_BIN" --network regtest --datadir "$DATADIR" \
-    --port "$P2P_PORT" --rpcport "$RPC_PORT" \
+    --port "$P2P_PORT" --rpcport "$RPC_PORT" --fallbackfee 0.0002 \
     >>"$LOGFILE" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID"

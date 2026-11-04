@@ -136,7 +136,7 @@ log "launching ouroboros: $OURO_PY -m ouroboros.cli (rpc=$RPC_PORT p2p=$P2P_PORT
     cd "$OURO_DIR" || exit 1
     exec "$OURO_PY" -m ouroboros.cli \
         --network regtest --data-dir "$DATADIR" \
-        start --force --rpc-port "$RPC_PORT" --p2p-port "$P2P_PORT"
+        start --force --rpc-port "$RPC_PORT" --p2p-port "$P2P_PORT" --fallbackfee 0.0002
 ) >"$LOGFILE" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID"

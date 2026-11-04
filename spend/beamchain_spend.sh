@@ -195,7 +195,7 @@ cat >"$DATADIR/vm.args" <<ERLVM
 ERLVM
 
 log "launching beamchain (regtest) -> $DATADIR/node.log"
-RELX_CONFIG_PATH="$DATADIR/sys.config" VMARGS_PATH="$DATADIR/vm.args" \
+BEAMCHAIN_FALLBACKFEE=0.0002 RELX_CONFIG_PATH="$DATADIR/sys.config" VMARGS_PATH="$DATADIR/vm.args" \
     "$NODE_BIN" foreground >"$DATADIR/node.log" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID"
