@@ -31,12 +31,32 @@
 # into the single chainMgr.SetOnBlockConnected hook so it fires on EVERY connect
 # path exactly once — mirroring Bitcoin Core's BlockConnected notification.
 #
-# blockbrew's wallet matures a coinbase when (tipHeight - height + 1) >=
-# COINBASE_MATURITY (100). At tip 101 that makes the height-1 AND height-2
-# coinbases spendable (101 and 100 "confirmations"), i.e. 100 BTC of the 5050
-# BTC mined — the other 99 coinbases are immature and excluded. So getbalance
-# MUST report exactly 100 BTC (proving maturity is enforced: an unfiltered sum
-# would be 5050 BTC). 100 BTC also comfortably funds a clean 10 BTC spend.
+# Bitcoin Core's WALLET matures a coinbase at COINBASE_MATURITY+1 = 101
+# confirmations — one MORE than the consensus spendability rule. See
+# bitcoin-core/src/wallet/wallet.cpp:3342 GetTxBlocksToMaturity:
+# max(0, (COINBASE_MATURITY+1) - chain_depth), where chain_depth is
+# GetTxDepthInMainChain = tip - height + 1 (wallet.cpp:3319-3325), and
+# src/consensus/consensus.h:19 COINBASE_MATURITY = 100. Immature coinbases are
+# routed to m_mine_immature and never counted in the m_mine_trusted total that
+# getbalance reports (src/wallet/receive.cpp:263-266).
+#
+# So at tip 101 EXACTLY ONE coinbase is mature: height 1 (depth 101). The
+# height-2 coinbase (depth 100) is NOT. getbalance MUST report exactly 50 BTC,
+# and the remaining 100 coinbases (5000 BTC) MUST show up as `immature` in
+# getbalances. 50 BTC comfortably funds the clean 10 BTC spend below.
+#
+# We assert BOTH halves on purpose. Asserting only "trusted == 50" would also
+# pass if the wallet credited just ONE coinbase and silently dropped the other
+# 100 — a real defect. Requiring trusted + immature == 5050 BTC (every one of
+# the 101 coinbases accounted for) is what separates "maturity correctly
+# enforced" from "coins missing", and holds the node to Core's boundary rather
+# than to whatever it happens to report.
+#
+# HISTORY: this test asserted 100 BTC until 2026-09-02, encoding the pre-fix
+# rule (confirmations >= 100). blockbrew moved to Core's rule on 2026-07-21
+# (b47a0ca; internal/wallet/wallet.go:296 coinbaseWalletMatureConfs =
+# CoinbaseMaturity + 1), so the arm went red against a CORRECT node and stayed
+# red for six weeks. The node was right and this file was wrong.
 #
 # Recipient is a FOREIGN regtest address (not in any blockbrew wallet) so the
 # recipient credit is proven purely on-chain via scantxoutset, and the single
@@ -69,14 +89,15 @@ URL="http://127.0.0.1:${RPC_PORT}"
 # Same FIXED seed as the recovery cell so the two tests share a wallet identity.
 MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
-# Coinbase maturity on regtest is 100 blocks. Mine 101 so the first two rewards
-# (heights 1+2) are mature/spendable at tip 101 under blockbrew's wallet rule
-# (tipHeight - height + 1 >= 100). getbalance must therefore report 100 BTC
-# (two mature coinbases) — proving maturity IS enforced (the other 99 coinbases
-# are immature and excluded; an unfiltered sum would be 5050 BTC).
+# Mine 101 blocks. Under Core's wallet rule (COINBASE_MATURITY+1 = 101
+# confirmations, wallet.cpp:3342) exactly ONE coinbase — height 1, depth 101 —
+# is mature at tip 101, so getbalance must report exactly 50 BTC. The other 100
+# coinbases (5000 BTC) must be reported as immature, not dropped.
 NBLOCKS=101
-FUNDED_BTC=100           # expected spendable balance after funding (mature coinbases)
-FUNDED_SATS=10000000000  # 100 BTC in satoshis
+FUNDED_BTC=50            # expected MATURE (spendable) balance at tip 101
+FUNDED_SATS=5000000000   # 50 BTC in satoshis  (1 mature coinbase)
+IMMATURE_SATS=500000000000  # 5000 BTC in satoshis (100 immature coinbases)
+TOTAL_MINED_SATS=505000000000  # 5050 BTC — all 101 coinbases must be accounted for
 SEND_BTC=10              # amount to send
 SEND_SATS=1000000000     # 10 BTC in satoshis
 
@@ -236,13 +257,33 @@ HEIGHT=$(result_num "$(rpc getblockcount)")
 log "height=$HEIGHT"
 
 # ── 6. getbalance reflects spendable (MATURE) coins. ───────────────────────
-# At tip 101 the height-1 and height-2 coinbases are mature -> exactly 100 BTC.
+# At tip 101 exactly the height-1 coinbase is mature (depth 101) -> 50 BTC.
 BAL_BEFORE_BTC=$(result_num "$(rpc getbalance "[]" "w1")")
 [[ -n "$BAL_BEFORE_BTC" ]] || fail "getbalance returned no result: $(rpc getbalance "[]" "w1" | head -c 200)"
 BAL_BEFORE_SATS=$(btc_to_sats "$BAL_BEFORE_BTC")
 log "getbalance BEFORE = $BAL_BEFORE_BTC BTC ($BAL_BEFORE_SATS sats)"
-[[ "$BAL_BEFORE_SATS" -eq "$FUNDED_SATS" ]] \
-    || fail "getbalance $BAL_BEFORE_SATS sats != expected mature $FUNDED_SATS sats (coinbase maturity not enforced?)"
+if [[ "$BAL_BEFORE_SATS" -lt "$FUNDED_SATS" ]]; then
+    fail "getbalance $BAL_BEFORE_SATS sats < expected mature $FUNDED_SATS sats at tip $HEIGHT (UNDER-counting: mature coinbase(s) missing or wallet did not credit them)"
+elif [[ "$BAL_BEFORE_SATS" -gt "$FUNDED_SATS" ]]; then
+    fail "getbalance $BAL_BEFORE_SATS sats > expected mature $FUNDED_SATS sats at tip $HEIGHT (OVER-counting: coinbase maturity not enforced at Core's COINBASE_MATURITY+1 boundary)"
+fi
+
+# ── 6b. The immature remainder must be ACCOUNTED FOR, not dropped. ───────
+# Without this, step 6 alone would also pass on a wallet that credited a single
+# coinbase and lost the other 100. trusted + immature must equal every satoshi
+# mined (5050 BTC), with the split landing exactly on Core's 101-conf boundary.
+GB=$(rpc getbalances "[]" "w1")
+echo "$GB" | grep -q '"error":{' && fail "getbalances error: $(echo "$GB" | grep -o '"message":"[^"]*"' | head -1)"
+IMM_BTC=$(echo "$GB" | grep -o '"immature":[0-9.]*' | head -1 | sed 's/"immature"://')
+[[ -n "$IMM_BTC" ]] || fail "getbalances returned no mine.immature field: $(echo "$GB" | head -c 300)"
+IMM_SATS=$(btc_to_sats "$IMM_BTC")
+log "getbalances immature = $IMM_BTC BTC ($IMM_SATS sats)"
+[[ "$IMM_SATS" -eq "$IMMATURE_SATS" ]] \
+    || fail "getbalances immature $IMM_SATS sats != expected $IMMATURE_SATS sats at tip $HEIGHT (the 100 immature coinbases are not all being tracked)"
+ACCOUNTED=$(( BAL_BEFORE_SATS + IMM_SATS ))
+[[ "$ACCOUNTED" -eq "$TOTAL_MINED_SATS" ]] \
+    || fail "trusted+immature = $ACCOUNTED sats != $TOTAL_MINED_SATS sats mined in $NBLOCKS blocks (coins unaccounted for)"
+log "maturity boundary OK: 1 mature ($BAL_BEFORE_SATS) + 100 immature ($IMM_SATS) = all $NBLOCKS coinbases"
 
 # ── 7. listunspent lists the owned UTXOs. ──────────────────────────────────
 LU_BEFORE=$(rpc listunspent "[]" "w1")
