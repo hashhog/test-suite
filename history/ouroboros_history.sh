@@ -8,7 +8,10 @@
 # the wallet's own receive / send / coinbase transactions, Core-shaped, on
 # regtest using only wallet-native RPCs:
 #
-#   sethdseed <fixed seed>             -> deterministic key pool on "default"
+#   createwallet w1                    -> Core auto-creates no wallet (-18
+#                                        until one exists; util.cpp:82)
+#   sethdseed <fixed seed>             -> deterministic key pool on w1, which
+#                                        the base "/" endpoint resolves to
 #   getnewaddress bech32 -> A1
 #   generatetoaddress 101 -> A1        -> 101 coinbase txs paying the wallet
 #   sendtoaddress <foreign> 10         -> a wallet-native send (the spend cell)
@@ -166,8 +169,34 @@ done
 r=$(rpc getblockcount)
 echo "$r" | grep -q '"result"' || fail "RPC never responded within 150s"
 
-# ── 4. Restore the fixed seed on the default wallet, derive A1. ────────────
-log "sethdseed (fixed) on default wallet"
+# ── 4. Create the wallet, restore the fixed seed on it, derive A1. ─────────
+# Core auto-creates NO default wallet (bitcoin-core/src/wallet/rpc/util.cpp:82
+# — "No wallet is loaded. Load a wallet using loadwallet or create a new one
+# with createwallet. (Note: A default wallet is no longer automatically
+# created)", RPC_WALLET_NOT_FOUND = -18, src/rpc/protocol.h:80). ouroboros is
+# faithful to that: a freshly booted node has zero loaded wallets, so every
+# wallet RPC on the base "/" endpoint answers -18 until a wallet exists.
+# Assert that Core-shaped precondition FIRST (a node that silently auto-creates
+# a keyed default wallet is diverging from Core, and this arm must not hide
+# it), then create the wallet explicitly. With exactly one wallet loaded the
+# base "/" endpoint resolves to it (GetWalletForJSONRPCRequest ->
+# GetDefaultWallet), so the rest of this test keeps using "/" unchanged.
+log "precondition: no wallet loaded on a fresh node"
+r=$(rpc listwallets)
+echo "$r" | grep -q '"result":\[\]' \
+    || fail "fresh node should have zero loaded wallets (Core auto-creates none), got: $(echo "$r" | head -c 200)"
+r=$(rpc sethdseed "[\"$SEED\"]")
+echo "$r" | grep -q '"code":-18' \
+    || fail "wallet RPC with no wallet loaded should be -18 (Core util.cpp:82), got: $(echo "$r" | head -c 200)"
+
+log "createwallet w1"
+r=$(rpc createwallet '["w1"]')
+echo "$r" | grep -q '"name":"w1"' || fail "createwallet w1 failed: $(echo "$r" | head -c 200)"
+r=$(rpc listwallets)
+echo "$r" | grep -q '"w1"' \
+    || fail "listwallets does not report w1 after createwallet: $(echo "$r" | head -c 200)"
+
+log "sethdseed (fixed) on the default (single loaded) wallet"
 r=$(rpc sethdseed "[\"$SEED\"]")
 echo "$r" | grep -q "$SEED" || fail "sethdseed failed: $(echo "$r" | head -c 200)"
 
