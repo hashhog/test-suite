@@ -80,7 +80,7 @@ CORE_LOG="$CORE_DATADIR/core.log"
 
 NBLOCKS=120            # mine this many EMPTY blocks on BOTH nodes
 
-# lunarblock defaults to an EMPTY rpcpassword on regtest -> RPC auth disabled.
+# lunarblock requires auth: the arm passes a fixed --rpcpassword (see LB_RPCAUTH).
 LB_PID=""
 CORE_BG=""
 

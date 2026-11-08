@@ -9,7 +9,7 @@
 # Full ground-truth citations + check semantics: watchonly/wo_lib.py.
 #
 # lunarblock divergences honoured (from lunarblock_import.sh): LuaJIT launch
-# via setsid + cd with LUA_PATH and --rpcuser lunarblock --rpcpassword lbtest --nov2transport; importmnemonic wallet
+# via setsid + cd with LUA_PATH and --nov2transport (auth: --rpcuser lunarblock --rpcpassword lbtest); importmnemonic wallet
 # model (no createwallet — the checker's attempts will record
 # dpk=unavailable and fall back to the importmnemonic'd w1); RPC has no
 # cookie auth on regtest.

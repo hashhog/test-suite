@@ -87,7 +87,7 @@ SECRET="2222222222222222222222222222222222222222222222222222222222222223"
 
 NBLOCKS=101            # mine to maturity: height-1 coinbase spendable at tip 101
 
-# lunarblock defaults to an EMPTY rpcpassword on regtest -> RPC auth disabled.
+# lunarblock requires auth: the arm passes a fixed --rpcpassword (see LB_RPCAUTH).
 LB_COOKIE_SENTINEL="lunarblock:lbtest"
 
 LB_PID=""
