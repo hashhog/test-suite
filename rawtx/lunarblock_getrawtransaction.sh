@@ -79,6 +79,8 @@
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
@@ -241,7 +243,7 @@ PY
 core_cli() { "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" "$@"; }
 # lb_rpc <method> <json-params-array> -> raw JSON-RPC envelope on stdout
 lb_rpc() {
-    curl -s --max-time 60 \
+    curl -s -u "$LB_RPCAUTH" --max-time 60 \
         --data-binary "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" \
         "http://127.0.0.1:$LB_RPC/" 2>/dev/null
 }
@@ -320,7 +322,7 @@ log "launching lunarblock (regtest, --txindex) rpc=:$LB_RPC p2p=:$LB_P2P -> $LB_
 export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$LB_DATADIR' \
-    --port '$LB_P2P' --rpcport '$LB_RPC' --nov2transport --txindex" \
+    --port '$LB_P2P' --rpcport '$LB_RPC' --rpcuser lunarblock --rpcpassword lbtest --fallbackfee 0.0002 --nov2transport --txindex" \
     >"$LB_LOG" 2>&1 &
 LB_PID=$!
 log "lunarblock pid=$LB_PID"
