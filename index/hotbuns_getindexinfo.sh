@@ -17,9 +17,8 @@
 #
 # DIFFERENTIAL ORACLE: a REAL bitcoind regtest started with
 #   -txindex=1 -blockfilterindex=basic.
-#   hotbuns runs txindex UNCONDITIONALLY (it writes a (txid -> block) entry for
-#   every tx of every connected block, ungated — sync/blocks.ts +
-#   chain/state.ts), so the "txindex" key is ALWAYS present. hotbuns also ships
+#   hotbuns lists the "txindex" key only when launched with --txindex=1 (like
+#   Core's -txindex; default off), so we pass it. hotbuns also ships
 #   a BIP-157/158 "basic block filter index" enabled via --blockfilterindex=1
 #   (cli.ts constructs the BlockFilterIndex, wires it into BlockSync AND
 #   ChainStateManager; the connect-side indexBlock advances its height on the
@@ -194,15 +193,15 @@ done
 log "Core oracle ready (pid=$CORE_BG)"
 
 # ── 4. Launch hotbuns on regtest with the basic block filter index on. ────
-# txindex is always on in hotbuns (no flag); --blockfilterindex=1 turns on the
-# BIP-157/158 basic block filter index so getindexinfo reports both keys.
+# --txindex=1 makes getindexinfo list "txindex"; --blockfilterindex=1 turns on
+# the BIP-157/158 basic block filter index so getindexinfo reports both keys.
 log "launching hotbuns (regtest) rpc=:$HB_RPC p2p=:$HB_P2P --blockfilterindex=1 -> $HB_LOG"
 (
     cd "$NODE_DIR" || exit 1
     exec bun run src/index.ts \
         --network=regtest --datadir="$HB_DATADIR" \
         --port="$HB_P2P" --rpcport="$HB_RPC" --metrics-port="$HB_METRICS" \
-        --blockfilterindex=1
+        --txindex=1 --blockfilterindex=1
 ) >"$HB_LOG" 2>&1 &
 HB_PID=$!
 log "hotbuns pid=$HB_PID"

@@ -59,9 +59,8 @@
 # PRESENT-NOT-BYTE-EQUAL (legitimately differ): scriptPubKey.asm, scriptSig.asm,
 #   scriptPubKey.desc (InferDescriptor vs raw + asm whitespace can differ).
 #
-# txindex (sub-check 4): hotbuns ALWAYS writes a txindex entry for tip-connected
-#   blocks (sync/blocks.ts Pattern C0; no user-facing --txindex flag is needed),
-#   so getrawtransaction <txid> 1 with NO blockhash on a confirmed tx must
+# txindex (sub-check 4): hotbuns is launched with --txindex=1 (like Core's
+#   -txindex; default off), so getrawtransaction <txid> 1 with NO blockhash on a confirmed tx must
 #   succeed and resolve the right blockhash.
 #
 # STRICT UNIFORM INTERFACE (mirrors test-suite/chaintxstats/hotbuns_chaintxstats.sh):
@@ -346,7 +345,7 @@ log "launching hotbuns (regtest) rpc=:$HB_RPC p2p=:$HB_P2P -> $HB_LOG"
     cd "$NODE_DIR" || exit 1
     exec bun run src/index.ts \
         --network=regtest --datadir="$HB_DATADIR" \
-        --port="$HB_P2P" --rpcport="$HB_RPC"
+        --port="$HB_P2P" --rpcport="$HB_RPC" --txindex=1
 ) >"$HB_LOG" 2>&1 &
 HB_PID=$!
 log "hotbuns pid=$HB_PID"
@@ -537,8 +536,8 @@ C_IAC=$(jpy "$CORE_CONF_V1" "d.get('in_active_chain')")
 
 [[ "$CONFIRMED_T" == "ok" ]] || fail "confirmed-via-blockhash parity failed (see log)"
 
-# ── Sub-check 4: txindex (no blockhash) on a confirmed tx. hotbuns ALWAYS ──
-# writes a txindex entry on tip-connect (Pattern C0), so this must succeed.
+# ── Sub-check 4: txindex (no blockhash) on a confirmed tx. hotbuns runs ──
+# with --txindex=1 (the flag is required, default off), so this must succeed.
 HB_TXI=$(hb_rpc getrawtransaction "[\"$TXID\", 1]")
 if echo "$HB_TXI" | grep -q '"result"'; then
     HB_TXI_BH=$(jpy "$HB_TXI" "d['result'].get('blockhash')")
@@ -548,7 +547,7 @@ if echo "$HB_TXI" | grep -q '"result"'; then
     [[ "$HB_TXI_IAC" == "false" ]] || { CONFIRMED_T="bad"; log "txindex path (no blockhash arg) must OMIT in_active_chain"; }
     log "txindex sub-check: getrawtransaction <txid> 1 (no blockhash) resolved via txindex -> $HB_TXI_BH"
 else
-    fail "hotbuns txindex enabled-by-default but getrawtransaction <txid> 1 (no blockhash) failed on a confirmed tx: $HB_TXI"
+    fail "hotbuns launched with --txindex=1 but getrawtransaction <txid> 1 (no blockhash) failed on a confirmed tx: $HB_TXI"
 fi
 [[ "$CONFIRMED_T" == "ok" ]] || fail "confirmed/txindex parity failed (see log)"
 

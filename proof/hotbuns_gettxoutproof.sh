@@ -361,7 +361,7 @@ log "launching hotbuns (regtest) rpc=:$HB_RPC p2p=:$HB_P2P -> $HB_LOG"
     cd "$NODE_DIR" || exit 1
     exec bun run src/index.ts \
         --network=regtest --datadir="$HB_DATADIR" \
-        --port="$HB_P2P" --rpcport="$HB_RPC"
+        --port="$HB_P2P" --rpcport="$HB_RPC" --txindex=1
 ) >"$HB_LOG" 2>&1 &
 HB_PID=$!
 log "hotbuns pid=$HB_PID"
