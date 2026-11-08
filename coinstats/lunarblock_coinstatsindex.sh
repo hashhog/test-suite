@@ -44,6 +44,8 @@
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -197,7 +199,7 @@ core_cli_retry() {
 
 # lb_rpc: lunarblock has no RPC auth on regtest.
 lb_rpc() {
-    curl -s --max-time 90 \
+    curl -s -u "$LB_RPCAUTH" --max-time 90 \
         --data-binary "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" \
         "http://127.0.0.1:$LB_RPC/" 2>/dev/null
 }
@@ -254,7 +256,7 @@ log "launching lunarblock (regtest${CSI_FLAG:+ --coinstatsindex} --txindex) rpc=
 export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$LB_DATADIR' \
-    --port '$LB_P2P' --rpcport '$LB_RPC' --nov2transport \
+    --port '$LB_P2P' --rpcport '$LB_RPC' --rpcuser lunarblock --rpcpassword lbtest --nov2transport \
     $CSI_FLAG --txindex" \
     >"$LB_LOG" 2>&1 &
 LB_PID=$!
@@ -461,13 +463,13 @@ LB2_LOG="$LB2_DATADIR/node.log"
 rm -rf "$LB2_DATADIR"; mkdir -p "$LB2_DATADIR"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$LB2_DATADIR' \
-    --port '$LB2_P2P' --rpcport '$LB2_RPC' --nov2transport" \
+    --port '$LB2_P2P' --rpcport '$LB2_RPC' --rpcuser lunarblock --rpcpassword lbtest --nov2transport" \
     >"$LB2_LOG" 2>&1 &
 LB2_PID=$!
 LB2_UP=0
 lb2_deadline=$(( $(date +%s) + 60 ))
 while (( $(date +%s) < lb2_deadline )); do
-    r2=$(curl -s --max-time 5 --data-binary '{"jsonrpc":"1.0","id":1,"method":"getblockchaininfo","params":[]}' \
+    r2=$(curl -s -u "$LB_RPCAUTH" --max-time 5 --data-binary '{"jsonrpc":"1.0","id":1,"method":"getblockchaininfo","params":[]}' \
         "http://127.0.0.1:$LB2_RPC/" 2>/dev/null)
     if echo "$r2" | grep -q '"regtest"'; then LB2_UP=1; break; fi
     kill -0 "$LB2_PID" 2>/dev/null || break
@@ -480,11 +482,11 @@ if [[ "$LB2_UP" == "1" ]]; then
         [[ -n "$bh2" ]] || break
         raw2=$(core_cli_retry getblock "$bh2" 0 2>/dev/null) || true
         [[ -n "$raw2" ]] || break
-        curl -s --max-time 30 --data-binary \
+        curl -s -u "$LB_RPCAUTH" --max-time 30 --data-binary \
             "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"submitblock\",\"params\":[\"$raw2\"]}" \
             "http://127.0.0.1:$LB2_RPC/" >/dev/null 2>&1 || true
     done
-    NOIDX_RESP=$(curl -s --max-time 30 \
+    NOIDX_RESP=$(curl -s -u "$LB_RPCAUTH" --max-time 30 \
         --data-binary '{"jsonrpc":"1.0","id":1,"method":"gettxoutsetinfo","params":["muhash",2]}' \
         "http://127.0.0.1:$LB2_RPC/" 2>/dev/null)
     NOIDX_CODE=$(jpy "$NOIDX_RESP" "d.get('error',{}).get('code') if isinstance(d.get('error'),dict) else None")
@@ -495,7 +497,7 @@ if [[ "$LB2_UP" == "1" ]]; then
     else
         log "NOTE: disabled coinstatsindex returned code=$NOIDX_CODE (expected -8); resp=$NOIDX_RESP"
     fi
-    NOIDX_GI=$(curl -s --max-time 10 \
+    NOIDX_GI=$(curl -s -u "$LB_RPCAUTH" --max-time 10 \
         --data-binary '{"jsonrpc":"1.0","id":1,"method":"getindexinfo","params":[]}' \
         "http://127.0.0.1:$LB2_RPC/" 2>/dev/null)
     if echo "$NOIDX_GI" | grep -q '"coinstatsindex"'; then

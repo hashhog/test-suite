@@ -25,7 +25,7 @@
 #   9. negative control: scantxoutset of a foreign addr     -> assert 0
 #
 # Launch recipe mirrors tools/smoke-harness.sh (lunarblock arm, ~line 330):
-#   luajit src/main.lua --network regtest --datadir <dd> --port <p2p> --rpcport <rpc> --nov2transport
+#   luajit src/main.lua --network regtest --datadir <dd> --port <p2p> --rpcport <rpc> --rpcuser lunarblock --rpcpassword lbtest --nov2transport
 #
 # STRICT: scratch datadir /tmp/recreg-lunarblock/ + ports 21508 (RPC) / 21538
 # (P2P) ONLY. NEVER touches /data/nvme1/, testnet4-data/, or any live node.
@@ -36,6 +36,8 @@
 # All other (noisy) output goes to stderr / the node log.
 # ============================================================================
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Fixed configuration ─────────────────────────────────────────────────────
@@ -118,7 +120,7 @@ trap cleanup EXIT INT TERM
 # Echoes the raw HTTP body on stdout. Caller parses with rpc_result / asserts.
 rpc_call() {
   local url="$1" method="$2" params="$3"
-  curl -s --max-time 90 -X POST "$url" \
+  curl -s -u "$LB_RPCAUTH" --max-time 90 -X POST "$url" \
     -H 'content-type: application/json' \
     --data "{\"jsonrpc\":\"1.0\",\"id\":\"rec\",\"method\":\"${method}\",\"params\":${params}}"
 }
@@ -174,7 +176,7 @@ export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 # group with `kill -- -PID`.
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$SCRATCH' \
-    --port '$P2P_PORT' --rpcport '$RPC_PORT' --nov2transport" \
+    --port '$P2P_PORT' --rpcport '$RPC_PORT' --rpcuser lunarblock --rpcpassword lbtest --nov2transport" \
     >"$NODE_LOG" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID (log: $NODE_LOG)"

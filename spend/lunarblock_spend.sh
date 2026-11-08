@@ -41,7 +41,7 @@
 #
 # Launch recipe mirrors tools/smoke-harness.sh (lunarblock arm):
 #   luajit src/main.lua --network regtest --datadir <dd> --port <p2p> \
-#       --rpcport <rpc> --nov2transport
+#       --rpcport <rpc> --rpcuser lunarblock --rpcpassword lbtest --fallbackfee 0.0002 --nov2transport
 #
 # STRICT: scratch datadir /tmp/spendref-lunarblock/ + ports 21601 (RPC) /
 # 21621 (P2P) ONLY. NEVER touches /data/nvme1/, testnet4-data/, or any live
@@ -53,6 +53,8 @@
 # All other (noisy) output goes to stderr / the node log.
 # ============================================================================
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Fixed configuration ─────────────────────────────────────────────────────
@@ -119,7 +121,7 @@ trap cleanup EXIT INT TERM
 # JSON-RPC call. $1=url (RPC base or /wallet/<name>), $2=method, $3=params-json.
 rpc_call() {
   local url="$1" method="$2" params="$3"
-  curl -s --max-time 120 -X POST "$url" \
+  curl -s -u "$LB_RPCAUTH" --max-time 120 -X POST "$url" \
     -H 'content-type: application/json' \
     --data "{\"jsonrpc\":\"1.0\",\"id\":\"spend\",\"method\":\"${method}\",\"params\":${params}}"
 }
@@ -179,7 +181,7 @@ log "launching lunarblock regtest node"
 export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$SCRATCH' \
-    --port '$P2P_PORT' --rpcport '$RPC_PORT' --nov2transport" \
+    --port '$P2P_PORT' --rpcport '$RPC_PORT' --rpcuser lunarblock --rpcpassword lbtest --fallbackfee 0.0002 --nov2transport" \
     >"$NODE_LOG" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID (log: $NODE_LOG)"

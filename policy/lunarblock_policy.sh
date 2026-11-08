@@ -77,6 +77,8 @@
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
@@ -110,9 +112,9 @@ SECRET="1111111111111111111111111111111111111111111111111111111111111112"
 
 NBLOCKS=101            # mine to maturity: height-1 coinbase (50 BTC) spendable at tip 101
 
-# lunarblock defaults to an EMPTY rpcpassword on regtest -> RPC auth disabled.
+# lunarblock requires auth: the arm passes a fixed --rpcpassword (see LB_RPCAUTH).
 # The helper sends NO Authorization header when the cookie sentinel is "NONE".
-LB_COOKIE_SENTINEL="NONE"
+LB_COOKIE_SENTINEL="lunarblock:lbtest"
 
 LB_PID=""
 CORE_BG=""
@@ -332,7 +334,7 @@ log "launching lunarblock (regtest) rpc=:$LB_RPC p2p=:$LB_P2P -> $LB_LOG"
 export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$LB_DATADIR' \
-    --port '$LB_P2P' --rpcport '$LB_RPC' --nov2transport" \
+    --port '$LB_P2P' --rpcport '$LB_RPC' --rpcuser lunarblock --rpcpassword lbtest --nov2transport" \
     >"$LB_LOG" 2>&1 &
 LB_PID=$!
 log "lunarblock pid=$LB_PID"
@@ -343,7 +345,7 @@ while (( $(date +%s) < lb_deadline )); do
         tail -n 20 "$LB_LOG" >&2 2>/dev/null || true
         fail "lunarblock exited during startup (see $LB_LOG)"
     fi
-    r=$(curl -s --max-time 5 \
+    r=$(curl -s -u "$LB_RPCAUTH" --max-time 5 \
         --data-binary '{"jsonrpc":"1.0","id":1,"method":"getblockchaininfo","params":[]}' \
         "http://127.0.0.1:$LB_RPC/" 2>/dev/null)
     if echo "$r" | grep -q '"regtest"'; then lb_up=1; break; fi

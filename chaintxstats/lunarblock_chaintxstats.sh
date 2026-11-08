@@ -66,6 +66,8 @@
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # ── Config ───────────────────────────────────────────────────────────────
@@ -87,7 +89,7 @@ CORE_LOG="$CORE_DATADIR/core.log"
 NBLOCKS=120          # mine the SAME number of empty blocks on both nodes
 WIN=10               # a concrete window size 0<WIN<height for the window checks
 
-# lunarblock defaults to an EMPTY rpcpassword on regtest -> RPC auth disabled.
+# lunarblock requires auth: the arm passes a fixed --rpcpassword (see LB_RPCAUTH).
 LB_PID=""
 CORE_BG=""
 
@@ -217,7 +219,7 @@ core_cli() { "$CORE_CLI" -regtest -datadir="$CORE_DATADIR" -rpcport="$CORE_RPC" 
 # ── lunarblock RPC over HTTP (empty rpcpassword -> no auth header). ────────
 # lb_rpc <method> <json-params-array>  -> raw JSON-RPC envelope on stdout
 lb_rpc() {
-    curl -s --max-time 60 \
+    curl -s -u "$LB_RPCAUTH" --max-time 60 \
         --data-binary "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" \
         "http://127.0.0.1:$LB_RPC/" 2>/dev/null
 }
@@ -254,7 +256,7 @@ log "launching lunarblock (regtest) rpc=:$LB_RPC p2p=:$LB_P2P -> $LB_LOG"
 export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$LB_DATADIR' \
-    --port '$LB_P2P' --rpcport '$LB_RPC' --nov2transport" \
+    --port '$LB_P2P' --rpcport '$LB_RPC' --rpcuser lunarblock --rpcpassword lbtest --nov2transport" \
     >"$LB_LOG" 2>&1 &
 LB_PID=$!
 log "lunarblock pid=$LB_PID"

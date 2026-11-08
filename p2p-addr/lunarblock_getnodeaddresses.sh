@@ -57,6 +57,8 @@
 #   NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 set +m   # disable job-control monitor mode so backgrounded-process kills in
          # cleanup don't leak an async "Killed <pid>" notice onto stdout.
@@ -136,7 +138,7 @@ fail() {
 # ── JSON probe helpers. ───────────────────────────────────────────────────
 # lb_call <method> <params-json>  -> raw JSON-RPC response on stdout.
 lb_call() {
-    curl -s --max-time 15 \
+    curl -s -u "$LB_RPCAUTH" --max-time 15 \
         --data-binary "{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" \
         "http://127.0.0.1:$LB_RPC/" 2>/dev/null
 }
@@ -345,7 +347,7 @@ for attempt in 1 2; do
     sleep 1
     setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
         --network regtest --datadir '$LB_DATADIR' \
-        --port '$LB_P2P' --rpcport '$LB_RPC' --metricsport 0 --nov2transport" \
+        --port '$LB_P2P' --rpcport '$LB_RPC' --metricsport 0 --rpcuser lunarblock --rpcpassword lbtest --nov2transport" \
         >"$LB_LOG" 2>&1 &
     LB_PID=$!
     disown "$LB_PID" 2>/dev/null || true
@@ -354,7 +356,7 @@ for attempt in 1 2; do
     lb_exited=0
     while (( $(date +%s) < lb_deadline )); do
         if ! kill -0 "$LB_PID" 2>/dev/null; then lb_exited=1; break; fi
-        r=$(curl -s --max-time 5 \
+        r=$(curl -s -u "$LB_RPCAUTH" --max-time 5 \
             --data-binary '{"jsonrpc":"1.0","id":1,"method":"getblockchaininfo","params":[]}' \
             "http://127.0.0.1:$LB_RPC/" 2>/dev/null)
         if echo "$r" | grep -q '"regtest"'; then lb_up=1; break; fi

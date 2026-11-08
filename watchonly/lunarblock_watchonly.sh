@@ -9,7 +9,7 @@
 # Full ground-truth citations + check semantics: watchonly/wo_lib.py.
 #
 # lunarblock divergences honoured (from lunarblock_import.sh): LuaJIT launch
-# via setsid + cd with LUA_PATH and --nov2transport; importmnemonic wallet
+# via setsid + cd with LUA_PATH and --nov2transport (auth: --rpcuser lunarblock --rpcpassword lbtest); importmnemonic wallet
 # model (no createwallet — the checker's attempts will record
 # dpk=unavailable and fall back to the importmnemonic'd w1); RPC has no
 # cookie auth on regtest.
@@ -27,6 +27,8 @@
 # 21429 (P2P). NEVER touches /data/nvme1/ or testnet4-data/ or any live node.
 
 set -uo pipefail
+# lunarblock requires RPC auth on every request (lunarblock#35): fixed test credentials.
+LB_RPCAUTH="lunarblock:lbtest"
 HASHHOG_ROOT="${HASHHOG_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 BASEDIR="${HASHHOG_ROOT}"
@@ -65,7 +67,7 @@ trap cleanup EXIT INT TERM
 # usage: rpc <url> <method> <params-json>
 rpc() {
     local url="$1" method="$2" params="${3:-[]}"
-    curl -s --max-time 120 -X POST "$url" \
+    curl -s -u "$LB_RPCAUTH" --max-time 120 -X POST "$url" \
         -H 'content-type: application/json' \
         --data "{\"jsonrpc\":\"1.0\",\"id\":\"wo\",\"method\":\"${method}\",\"params\":${params}}" 2>/dev/null
 }
@@ -102,7 +104,7 @@ log "launching lunarblock regtest node -> $LOG"
 export LUA_PATH="$LB_DIR/src/?.lua;$LB_DIR/src/?/init.lua;;"
 setsid bash -c "cd '$LB_DIR' && exec luajit src/main.lua \
     --network regtest --datadir '$DATADIR' \
-    --port '$P2P_PORT' --rpcport '$RPC_PORT' --nov2transport" \
+    --port '$P2P_PORT' --rpcport '$RPC_PORT' --rpcuser lunarblock --rpcpassword lbtest --nov2transport" \
     >"$LOG" 2>&1 &
 NODE_PID=$!
 log "node pid=$NODE_PID"
